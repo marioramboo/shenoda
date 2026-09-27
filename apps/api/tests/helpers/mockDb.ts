@@ -203,6 +203,136 @@ export interface MockSpiritualLifeEntry {
   updatedAt: Date;
 }
 
+export interface MockYearPlan {
+  id: string;
+  organizationId: string;
+  title: string;
+  academicYear: string;
+  scopeType: any;
+  sectorId: string | null;
+  stageId: string | null;
+  publishedById: string;
+  isPublished: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface MockCalendarEvent {
+  id: string;
+  yearPlanId: string | null;
+  stageId: string | null;
+  sectorId: string | null;
+  title: string;
+  description: string | null;
+  category: any;
+  startDate: Date;
+  endDate: Date;
+  location: string | null;
+  maxVolunteers: number | null;
+  createdById: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface MockEventVolunteer {
+  id: string;
+  eventId: string;
+  userId: string;
+  roleInEvent: string | null;
+  createdAt: Date;
+}
+
+export interface MockYearPlanServantPost {
+  id: string;
+  yearPlanId: string;
+  stageId: string;
+  authorId: string;
+  title: string;
+  content: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface MockEventAttendanceConfirmation {
+  id: string;
+  eventId: string;
+  userId: string;
+  confirmedById: string;
+  confirmedAt: Date;
+}
+
+// Phase 7 interfaces
+export interface MockAnnouncement {
+  id: string;
+  authorUserId: string;
+  title: string;
+  content: string;
+  targetScopeType: any;
+  targetStageId: string | null;
+  targetSectorId: string | null;
+  isPinned: boolean;
+  expiresAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface MockAnnouncementRecipient {
+  id: string;
+  announcementId: string;
+  userId: string;
+  isRead: boolean;
+  readAt: Date | null;
+}
+
+export interface MockPoll {
+  id: string;
+  createdById: string;
+  stageId: string | null;
+  sectorId: string | null;
+  question: string;
+  allowMultiple: boolean;
+  closesAt: Date;
+  isClosed: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface MockPollOption {
+  id: string;
+  pollId: string;
+  text: string;
+  order: number;
+}
+
+export interface MockPollVote {
+  id: string;
+  pollId: string;
+  optionId: string;
+  userId: string;
+  createdAt: Date;
+}
+
+export interface MockNotificationLog {
+  id: string;
+  userId: string;
+  type: any;
+  channel: any;
+  title: string;
+  body: string;
+  dataPayload: any;
+  isDelivered: boolean;
+  sentAt: Date;
+}
+
+export interface MockUserNotificationPreference {
+  id: string;
+  userId: string;
+  enablePush: boolean;
+  enableSms: boolean;
+  enableEmail: boolean;
+  pushSubscription: any;
+}
+
 export function createMockPrisma() {
   const users: MockUser[] = [];
   const roles: MockRole[] = [];
@@ -228,6 +358,22 @@ export function createMockPrisma() {
   // Phase 5 collections
   const lessonPreparations: MockLessonPreparation[] = [];
   const spiritualLifeEntries: MockSpiritualLifeEntry[] = [];
+
+  // Phase 6 collections
+  const yearPlans: MockYearPlan[] = [];
+  const calendarEvents: MockCalendarEvent[] = [];
+  const eventVolunteers: MockEventVolunteer[] = [];
+  const yearPlanServantPosts: MockYearPlanServantPost[] = [];
+  const eventAttendanceConfirmations: MockEventAttendanceConfirmation[] = [];
+
+  // Phase 7 collections
+  const announcements: MockAnnouncement[] = [];
+  const announcementRecipients: MockAnnouncementRecipient[] = [];
+  const polls: MockPoll[] = [];
+  const pollOptions: MockPollOption[] = [];
+  const pollVotes: MockPollVote[] = [];
+  const notificationLogs: MockNotificationLog[] = [];
+  const userNotificationPreferences: MockUserNotificationPreference[] = [];
 
   let idCounter = 1;
   const nextId = (prefix: string) => `${prefix}-${idCounter++}`;
@@ -287,6 +433,18 @@ export function createMockPrisma() {
       absenceAlerts,
       lessonPreparations,
       spiritualLifeEntries,
+      yearPlans,
+      calendarEvents,
+      eventVolunteers,
+      yearPlanServantPosts,
+      eventAttendanceConfirmations,
+      announcements,
+      announcementRecipients,
+      polls,
+      pollOptions,
+      pollVotes,
+      notificationLogs,
+      userNotificationPreferences,
     },
 
     user: {
@@ -321,8 +479,13 @@ export function createMockPrisma() {
         return args?.include ? attachRelationsToUser(found) : { ...found };
       },
 
-      findMany: async (_args?: any) => {
-        return users.map((u) => attachRelationsToUser(u));
+      findMany: async (args?: any) => {
+        const where = args?.where || {};
+        let result = users;
+        if (where.id?.in) {
+          result = result.filter((u) => where.id.in.includes(u.id));
+        }
+        return result.map((u) => attachRelationsToUser(u));
       },
 
       create: async (args: any) => {
@@ -373,7 +536,17 @@ export function createMockPrisma() {
         const where = args?.where || {};
         return stages.find((s) => s.id === where.id || s.code === where.code) || null;
       },
-      findMany: async () => stages,
+      findMany: async (args?: any) => {
+        const where = args?.where || {};
+        return stages.filter((s) => {
+          if (where.sectorId && s.sectorId !== where.sectorId) return false;
+          if (where.id) {
+            if (typeof where.id === 'string' && s.id !== where.id) return false;
+            if (where.id.in && Array.isArray(where.id.in) && !where.id.in.includes(s.id)) return false;
+          }
+          return true;
+        });
+      },
     },
 
     sector: {
@@ -382,34 +555,6 @@ export function createMockPrisma() {
         return sectors.find((s) => s.id === where.id || s.code === where.code) || null;
       },
       findMany: async () => sectors,
-    },
-
-    scopeAssignment: {
-      create: async (args: any) => {
-        const assignment = {
-          id: nextId('scope'),
-          userId: args.data.userId,
-          stageId: args.data.stageId || null,
-          sectorId: args.data.sectorId || null,
-        };
-        scopeAssignments.push(assignment);
-        return assignment;
-      },
-      deleteMany: async (args: any) => {
-        const where = args?.where || {};
-        let count = 0;
-        for (let i = scopeAssignments.length - 1; i >= 0; i--) {
-          if (where.userId && scopeAssignments[i].userId === where.userId) {
-            scopeAssignments.splice(i, 1);
-            count++;
-          }
-        }
-        return { count };
-      },
-      findMany: async (args: any) => {
-        const where = args?.where || {};
-        return scopeAssignments.filter((s) => !where.userId || s.userId === where.userId);
-      },
     },
 
     refreshToken: {
@@ -624,6 +769,19 @@ export function createMockPrisma() {
         return result.map((m) => attachRelationsToMember(m));
       },
 
+      count: async (args?: any) => {
+        const where = args?.where || {};
+        return servedMembers.filter((m) => {
+          if (where.stageId) {
+            if (typeof where.stageId === 'string' && m.stageId !== where.stageId) return false;
+            if (where.stageId.in && Array.isArray(where.stageId.in) && !where.stageId.in.includes(m.stageId)) {
+              return false;
+            }
+          }
+          return true;
+        }).length;
+      },
+
       update: async (args: any) => {
         const { where, data } = args;
         const index = servedMembers.findIndex((m) => m.id === where.id);
@@ -779,12 +937,25 @@ export function createMockPrisma() {
       },
       findMany: async (args?: any) => {
         const where = args?.where || {};
-        return scopeAssignments.filter((sa) => {
+        const filtered = scopeAssignments.filter((sa) => {
           if (where.stageId && sa.stageId !== where.stageId) return false;
           if (where.sectorId && sa.sectorId !== where.sectorId) return false;
           if (where.userId && sa.userId !== where.userId) return false;
           return true;
         });
+
+        if (args?.include?.user) {
+          return filtered.map((s) => {
+            const u = users.find((usr) => usr.id === s.userId);
+            const userWithRelations = u ? attachRelationsToUser(u) : null;
+            return {
+              ...s,
+              user: userWithRelations,
+            };
+          });
+        }
+
+        return filtered;
       },
       deleteMany: async (args: any) => {
         const where = args?.where || {};
@@ -991,6 +1162,25 @@ export function createMockPrisma() {
         memberAttendances.push(newRecord);
         return newRecord;
       },
+
+      create: async (args: any) => {
+        const data = args.data;
+        const newRecord: MockMemberAttendance = {
+          id: nextId('matt'),
+          memberId: data.memberId,
+          stageId: data.stageId,
+          sessionType: data.sessionType,
+          sessionDate: new Date(data.sessionDate),
+          status: data.status,
+          notes: data.notes || null,
+          recordedById: data.recordedById,
+          idempotencyKey: data.idempotencyKey || null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        memberAttendances.push(newRecord);
+        return newRecord;
+      },
     },
 
     servantAttendance: {
@@ -1117,6 +1307,19 @@ export function createMockPrisma() {
         }
 
         return list;
+      },
+
+      count: async (args?: any) => {
+        const where = args?.where || {};
+        return absenceAlerts.filter((a) => {
+          if (where.targetType && a.targetType !== where.targetType) return false;
+          if (where.alertStatus && a.alertStatus !== where.alertStatus) return false;
+          if (where.stageId) {
+            if (typeof where.stageId === 'string' && a.stageId !== where.stageId) return false;
+            if (where.stageId.in && !where.stageId.in.includes(a.stageId)) return false;
+          }
+          return true;
+        }).length;
       },
 
       findFirst: async (args?: any) => {
@@ -1272,6 +1475,18 @@ export function createMockPrisma() {
         };
       },
 
+      findFirst: async (args: any) => {
+        const where = args?.where || {};
+        return (
+          lessonPreparations.find((p) => {
+            if (where.servantId && p.authorUserId !== where.servantId) return false;
+            if (where.authorUserId && p.authorUserId !== where.authorUserId) return false;
+            if (where.status?.in && !where.status.in.includes(p.status)) return false;
+            return true;
+          }) || null
+        );
+      },
+
       update: async (args: any) => {
         const { where, data } = args;
         const p = lessonPreparations.find((item) => item.id === where.id);
@@ -1360,6 +1575,848 @@ export function createMockPrisma() {
         const index = spiritualLifeEntries.findIndex((e) => e.id === where.id);
         if (index === -1) throw new Error('Spiritual entry not found');
         return spiritualLifeEntries.splice(index, 1)[0];
+      },
+    },
+
+    yearPlan: {
+      create: async (args: any) => {
+        const d = args.data;
+        const plan: MockYearPlan = {
+          id: nextId('yp'),
+          organizationId: d.organizationId,
+          title: d.title,
+          academicYear: d.academicYear,
+          scopeType: d.scopeType,
+          sectorId: d.sectorId || null,
+          stageId: d.stageId || null,
+          publishedById: d.publishedById,
+          isPublished: d.isPublished ?? false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        yearPlans.push(plan);
+        const stage = stages.find((s) => s.id === plan.stageId);
+        const sector = sectors.find((s) => s.id === plan.sectorId);
+        const pub = users.find((u) => u.id === plan.publishedById);
+        return {
+          ...plan,
+          stage: stage ? { id: stage.id, name: stage.name } : null,
+          sector: sector ? { id: sector.id, name: sector.name } : null,
+          publishedBy: pub ? { id: pub.id, fullName: pub.fullName } : null,
+        };
+      },
+
+      findMany: async (args?: any) => {
+        const where = args?.where || {};
+        let list = yearPlans.filter((p) => {
+          if (where.academicYear && p.academicYear !== where.academicYear) return false;
+          if (where.stageId && p.stageId !== where.stageId) return false;
+          if (where.sectorId && p.sectorId !== where.sectorId) return false;
+          if (where.isPublished !== undefined && p.isPublished !== where.isPublished) return false;
+          if (where.OR && Array.isArray(where.OR)) {
+            const matchesOr = where.OR.some((orClause: any) => {
+              if (orClause.scopeType && p.scopeType === orClause.scopeType) {
+                if (orClause.isPublished !== undefined && p.isPublished !== orClause.isPublished) return false;
+                if (orClause.sectorId?.in && !orClause.sectorId.in.includes(p.sectorId)) return false;
+                if (orClause.stageId?.in && !orClause.stageId.in.includes(p.stageId)) return false;
+                if (orClause.OR && Array.isArray(orClause.OR)) {
+                  return orClause.OR.some((sub: any) => {
+                    if (sub.isPublished !== undefined && p.isPublished === sub.isPublished) return true;
+                    if (sub.publishedById && p.publishedById === sub.publishedById) return true;
+                    return false;
+                  });
+                }
+                return true;
+              }
+              return false;
+            });
+            if (!matchesOr) return false;
+          }
+          return true;
+        });
+
+        if (args?.include) {
+          return list.map((p) => {
+            const stage = stages.find((s) => s.id === p.stageId);
+            const sector = sectors.find((s) => s.id === p.sectorId);
+            const pub = users.find((u) => u.id === p.publishedById);
+            const evCount = calendarEvents.filter((e) => e.yearPlanId === p.id).length;
+            const postCount = yearPlanServantPosts.filter((sp) => sp.yearPlanId === p.id).length;
+            return {
+              ...p,
+              stage: stage ? { id: stage.id, name: stage.name } : null,
+              sector: sector ? { id: sector.id, name: sector.name } : null,
+              publishedBy: pub ? { id: pub.id, fullName: pub.fullName } : null,
+              _count: { events: evCount, servantPosts: postCount },
+            };
+          });
+        }
+        return list;
+      },
+
+      findUnique: async (args: any) => {
+        const where = args?.where || {};
+        const p = yearPlans.find((item) => item.id === where.id);
+        if (!p) return null;
+        const stage = stages.find((s) => s.id === p.stageId);
+        const sector = sectors.find((s) => s.id === p.sectorId);
+        const pub = users.find((u) => u.id === p.publishedById);
+        const evs = calendarEvents
+          .filter((e) => e.yearPlanId === p.id)
+          .map((e) => {
+            const vols = eventVolunteers
+              .filter((v) => v.eventId === e.id)
+              .map((v) => {
+                const u = users.find((usr) => usr.id === v.userId);
+                return {
+                  ...v,
+                  user: u ? { id: u.id, fullName: u.fullName, phoneNumber: u.phoneNumber } : null,
+                };
+              });
+            return { ...e, volunteers: vols };
+          });
+
+        return {
+          ...p,
+          stage: stage ? { id: stage.id, name: stage.name } : null,
+          sector: sector ? { id: sector.id, name: sector.name } : null,
+          publishedBy: pub ? { id: pub.id, fullName: pub.fullName } : null,
+          events: evs,
+        };
+      },
+
+      update: async (args: any) => {
+        const { where, data } = args;
+        const p = yearPlans.find((item) => item.id === where.id);
+        if (!p) throw new Error('YearPlan not found');
+        Object.assign(p, data, { updatedAt: new Date() });
+        return p;
+      },
+    },
+
+    calendarEvent: {
+      create: async (args: any) => {
+        const d = args.data;
+        const ev: MockCalendarEvent = {
+          id: nextId('event'),
+          yearPlanId: d.yearPlanId || null,
+          stageId: d.stageId || null,
+          sectorId: d.sectorId || null,
+          title: d.title,
+          description: d.description || null,
+          category: d.category,
+          startDate: new Date(d.startDate),
+          endDate: new Date(d.endDate),
+          location: d.location || null,
+          maxVolunteers: d.maxVolunteers || null,
+          createdById: d.createdById,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        calendarEvents.push(ev);
+        const stage = stages.find((s) => s.id === ev.stageId);
+        return {
+          ...ev,
+          stage: stage ? { id: stage.id, name: stage.name } : null,
+        };
+      },
+
+      findMany: async (args?: any) => {
+        const where = args?.where || {};
+        let list = calendarEvents.filter((e) => {
+          if (where.yearPlanId && e.yearPlanId !== where.yearPlanId) return false;
+          if (where.category && e.category !== where.category) return false;
+          if (where.stageId && e.stageId !== where.stageId) return false;
+          if (where.startDate) {
+            const st = new Date(e.startDate).getTime();
+            if (where.startDate.gte && st < new Date(where.startDate.gte).getTime()) return false;
+            if (where.startDate.lte && st > new Date(where.startDate.lte).getTime()) return false;
+          }
+          if (where.OR && Array.isArray(where.OR)) {
+            const matchesOr = where.OR.some((orClause: any) => {
+              if (orClause.stageId === null && orClause.sectorId === null && e.stageId === null && e.sectorId === null) {
+                return true;
+              }
+              if (orClause.stageId?.in && e.stageId && orClause.stageId.in.includes(e.stageId)) {
+                return true;
+              }
+              if (orClause.sectorId?.in && e.sectorId && orClause.sectorId.in.includes(e.sectorId)) {
+                return true;
+              }
+              if (orClause.volunteers?.some) {
+                const isVol = eventVolunteers.some(
+                  (v) => v.eventId === e.id && v.userId === orClause.volunteers.some.userId
+                );
+                if (isVol) return true;
+              }
+              return false;
+            });
+            if (!matchesOr) return false;
+          }
+          return true;
+        });
+
+        list.sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+
+        if (args?.include) {
+          return list.map((e) => {
+            const stage = stages.find((s) => s.id === e.stageId);
+            const sector = sectors.find((s) => s.id === e.sectorId);
+            const vols = eventVolunteers
+              .filter((v) => v.eventId === e.id)
+              .map((v) => {
+                const u = users.find((usr) => usr.id === v.userId);
+                return {
+                  ...v,
+                  user: u ? { id: u.id, fullName: u.fullName, phoneNumber: u.phoneNumber } : null,
+                };
+              });
+            const atts = eventAttendanceConfirmations
+              .filter((a) => a.eventId === e.id)
+              .map((a) => ({ id: a.id, userId: a.userId, confirmedAt: a.confirmedAt }));
+            return {
+              ...e,
+              stage: stage ? { id: stage.id, name: stage.name } : null,
+              sector: sector ? { id: sector.id, name: sector.name } : null,
+              volunteers: vols,
+              eventAttendances: atts,
+            };
+          });
+        }
+        return list;
+      },
+
+      findUnique: async (args: any) => {
+        const where = args?.where || {};
+        const e = calendarEvents.find((item) => item.id === where.id);
+        if (!e) return null;
+        const stage = stages.find((s) => s.id === e.stageId);
+        const sector = sectors.find((s) => s.id === e.sectorId);
+        const creator = users.find((u) => u.id === e.createdById);
+        const vols = eventVolunteers
+          .filter((v) => v.eventId === e.id)
+          .map((v) => {
+            const u = users.find((usr) => usr.id === v.userId);
+            return {
+              ...v,
+              user: u ? { id: u.id, fullName: u.fullName, phoneNumber: u.phoneNumber } : null,
+            };
+          });
+        const atts = eventAttendanceConfirmations
+          .filter((a) => a.eventId === e.id)
+          .map((a) => {
+            const u = users.find((usr) => usr.id === a.userId);
+            const conf = users.find((usr) => usr.id === a.confirmedById);
+            return {
+              ...a,
+              user: u ? { id: u.id, fullName: u.fullName } : null,
+              confirmedBy: conf ? { id: conf.id, fullName: conf.fullName } : null,
+            };
+          });
+
+        return {
+          ...e,
+          stage: stage ? { id: stage.id, name: stage.name } : null,
+          sector: sector ? { id: sector.id, name: sector.name } : null,
+          createdBy: creator ? { id: creator.id, fullName: creator.fullName } : null,
+          volunteers: vols,
+          eventAttendances: atts,
+        };
+      },
+
+      update: async (args: any) => {
+        const { where, data } = args;
+        const e = calendarEvents.find((item) => item.id === where.id);
+        if (!e) throw new Error('CalendarEvent not found');
+        Object.assign(e, data, { updatedAt: new Date() });
+        return e;
+      },
+
+      delete: async (args: any) => {
+        const { where } = args;
+        const index = calendarEvents.findIndex((item) => item.id === where.id);
+        if (index === -1) throw new Error('CalendarEvent not found');
+        return calendarEvents.splice(index, 1)[0];
+      },
+    },
+
+    eventVolunteer: {
+      create: async (args: any) => {
+        const d = args.data;
+        const vol: MockEventVolunteer = {
+          id: nextId('vol'),
+          eventId: d.eventId,
+          userId: d.userId,
+          roleInEvent: d.roleInEvent || null,
+          createdAt: new Date(),
+        };
+        eventVolunteers.push(vol);
+        const u = users.find((usr) => usr.id === vol.userId);
+        return {
+          ...vol,
+          user: u ? { id: u.id, fullName: u.fullName, phoneNumber: u.phoneNumber } : null,
+        };
+      },
+
+      findUnique: async (args: any) => {
+        const where = args?.where || {};
+        if (where.eventId_userId) {
+          return (
+            eventVolunteers.find(
+              (v) =>
+                v.eventId === where.eventId_userId.eventId &&
+                v.userId === where.eventId_userId.userId
+            ) || null
+          );
+        }
+        return eventVolunteers.find((v) => v.id === where.id) || null;
+      },
+
+      findMany: async (args?: any) => {
+        const where = args?.where || {};
+        return eventVolunteers.filter((v) => {
+          if (where.eventId && v.eventId !== where.eventId) return false;
+          if (where.userId && v.userId !== where.userId) return false;
+          return true;
+        });
+      },
+
+      count: async (args?: any) => {
+        const where = args?.where || {};
+        return eventVolunteers.filter((v) => {
+          if (where.eventId && v.eventId !== where.eventId) return false;
+          return true;
+        }).length;
+      },
+
+      delete: async (args: any) => {
+        const where = args?.where || {};
+        let index = -1;
+        if (where.eventId_userId) {
+          index = eventVolunteers.findIndex(
+            (v) =>
+              v.eventId === where.eventId_userId.eventId &&
+              v.userId === where.eventId_userId.userId
+          );
+        } else if (where.id) {
+          index = eventVolunteers.findIndex((v) => v.id === where.id);
+        }
+        if (index === -1) throw new Error('Volunteer record not found');
+        return eventVolunteers.splice(index, 1)[0];
+      },
+    },
+
+    yearPlanServantPost: {
+      create: async (args: any) => {
+        const d = args.data;
+        const post: MockYearPlanServantPost = {
+          id: nextId('sp'),
+          yearPlanId: d.yearPlanId,
+          stageId: d.stageId,
+          authorId: d.authorId,
+          title: d.title,
+          content: d.content,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        yearPlanServantPosts.push(post);
+        const author = users.find((u) => u.id === post.authorId);
+        const stage = stages.find((s) => s.id === post.stageId);
+        return {
+          ...post,
+          author: author ? { id: author.id, fullName: author.fullName } : null,
+          stage: stage ? { id: stage.id, name: stage.name } : null,
+        };
+      },
+
+      findMany: async (args?: any) => {
+        const where = args?.where || {};
+        let list = yearPlanServantPosts.filter((sp) => {
+          if (where.yearPlanId && sp.yearPlanId !== where.yearPlanId) return false;
+          if (where.stageId) {
+            if (typeof where.stageId === 'string' && sp.stageId !== where.stageId) return false;
+            if (where.stageId.in && !where.stageId.in.includes(sp.stageId)) return false;
+          }
+          return true;
+        });
+
+        list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+        if (args?.include) {
+          return list.map((sp) => {
+            const author = users.find((u) => u.id === sp.authorId);
+            const stage = stages.find((s) => s.id === sp.stageId);
+            return {
+              ...sp,
+              author: author ? { id: author.id, fullName: author.fullName } : null,
+              stage: stage ? { id: stage.id, name: stage.name } : null,
+            };
+          });
+        }
+        return list;
+      },
+
+      findUnique: async (args: any) => {
+        const where = args?.where || {};
+        return yearPlanServantPosts.find((sp) => sp.id === where.id) || null;
+      },
+    },
+
+    eventAttendanceConfirmation: {
+      upsert: async (args: any) => {
+        const { where, update, create } = args;
+        const target = where.eventId_userId;
+        let existing = eventAttendanceConfirmations.find(
+          (a) => a.eventId === target.eventId && a.userId === target.userId
+        );
+
+        if (existing) {
+          existing.confirmedById = update.confirmedById;
+          existing.confirmedAt = new Date();
+          return existing;
+        }
+
+        const newRec: MockEventAttendanceConfirmation = {
+          id: nextId('eatt'),
+          eventId: create.eventId,
+          userId: create.userId,
+          confirmedById: create.confirmedById,
+          confirmedAt: new Date(),
+        };
+        eventAttendanceConfirmations.push(newRec);
+        return newRec;
+      },
+
+      findMany: async (args?: any) => {
+        const where = args?.where || {};
+        return eventAttendanceConfirmations.filter((a) => {
+          if (where.eventId && a.eventId !== where.eventId) return false;
+          if (where.userId && a.userId !== where.userId) return false;
+          return true;
+        });
+      },
+    },
+
+    announcement: {
+      create: async (args: any) => {
+        const data = args.data;
+        const newAnn: MockAnnouncement = {
+          id: nextId('ann'),
+          authorUserId: data.authorUserId,
+          title: data.title,
+          content: data.content,
+          targetScopeType: data.targetScopeType,
+          targetStageId: data.targetStageId || null,
+          targetSectorId: data.targetSectorId || null,
+          isPinned: data.isPinned ?? false,
+          expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        announcements.push(newAnn);
+
+        if (data.recipients?.create) {
+          for (const r of data.recipients.create) {
+            announcementRecipients.push({
+              id: nextId('ann-rec'),
+              announcementId: newAnn.id,
+              userId: r.userId,
+              isRead: r.isRead ?? false,
+              readAt: r.readAt ?? null,
+            });
+          }
+        }
+
+        const author = users.find((u) => u.id === newAnn.authorUserId);
+        const stage = stages.find((s) => s.id === newAnn.targetStageId);
+        const sector = sectors.find((sec) => sec.id === newAnn.targetSectorId);
+
+        return {
+          ...newAnn,
+          author: author
+            ? {
+                id: author.id,
+                fullName: author.fullName,
+                role: roles.find((r) => r.id === author.roleId)
+                  ? { name: roles.find((r) => r.id === author.roleId)!.name, level: roles.find((r) => r.id === author.roleId)!.level }
+                  : { name: 'خادم', level: 1 },
+              }
+            : null,
+          targetStage: stage ? { id: stage.id, name: stage.name } : null,
+          targetSector: sector ? { id: sector.id, name: sector.name } : null,
+          recipients: announcementRecipients.filter((r) => r.announcementId === newAnn.id),
+        };
+      },
+
+      findMany: async (args?: any) => {
+        const where = args?.where || {};
+        let list = announcements.filter((a) => {
+          if (where.OR) {
+            return where.OR.some((cond: any) => {
+              if (cond.authorUserId && a.authorUserId === cond.authorUserId) return true;
+              if (cond.recipients?.some?.userId) {
+                return announcementRecipients.some(
+                  (r) => r.announcementId === a.id && r.userId === cond.recipients.some.userId
+                );
+              }
+              if (cond.targetScopeType && a.targetScopeType === cond.targetScopeType) return true;
+              if (cond.targetStageId?.in && a.targetStageId && cond.targetStageId.in.includes(a.targetStageId)) return true;
+              if (cond.targetSectorId?.in && a.targetSectorId && cond.targetSectorId.in.includes(a.targetSectorId)) return true;
+              return false;
+            });
+          }
+          if (where.targetStageId && a.targetStageId !== where.targetStageId) return false;
+          return true;
+        });
+
+        // Sort by isPinned: desc, createdAt: desc
+        list.sort((a, b) => {
+          if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        });
+
+        return list.map((a) => {
+          const author = users.find((u) => u.id === a.authorUserId);
+          const stage = stages.find((s) => s.id === a.targetStageId);
+          const sector = sectors.find((sec) => sec.id === a.targetSectorId);
+          let recipientsForUser = announcementRecipients.filter((r) => r.announcementId === a.id);
+          if (args?.include?.recipients?.where?.userId) {
+            recipientsForUser = recipientsForUser.filter((r) => r.userId === args.include.recipients.where.userId);
+          }
+
+          return {
+            ...a,
+            author: author
+              ? {
+                  id: author.id,
+                  fullName: author.fullName,
+                  role: roles.find((r) => r.id === author.roleId)
+                    ? { name: roles.find((r) => r.id === author.roleId)!.name, level: roles.find((r) => r.id === author.roleId)!.level }
+                    : { name: 'خادم', level: 1 },
+                }
+              : null,
+            targetStage: stage ? { id: stage.id, name: stage.name } : null,
+            targetSector: sector ? { id: sector.id, name: sector.name } : null,
+            recipients: recipientsForUser,
+          };
+        });
+      },
+
+      findUnique: async (args: any) => {
+        const where = args?.where || {};
+        const a = announcements.find((ann) => ann.id === where.id);
+        if (!a) return null;
+        const author = users.find((u) => u.id === a.authorUserId);
+        const stage = stages.find((s) => s.id === a.targetStageId);
+        return {
+          ...a,
+          author: author ? { id: author.id, fullName: author.fullName, role: roles.find((r) => r.id === author.roleId) } : null,
+          targetStage: stage ? { id: stage.id, name: stage.name } : null,
+        };
+      },
+    },
+
+    announcementRecipient: {
+      createMany: async (args: any) => {
+        const items = args.data || [];
+        for (const item of items) {
+          const exists = announcementRecipients.some(
+            (r) => r.announcementId === item.announcementId && r.userId === item.userId
+          );
+          if (!exists) {
+            announcementRecipients.push({
+              id: nextId('ann-rec'),
+              announcementId: item.announcementId,
+              userId: item.userId,
+              isRead: item.isRead ?? false,
+              readAt: item.readAt ?? null,
+            });
+          }
+        }
+        return { count: items.length };
+      },
+
+      findUnique: async (args: any) => {
+        const where = args?.where || {};
+        if (where.announcementId_userId) {
+          return (
+            announcementRecipients.find(
+              (r) =>
+                r.announcementId === where.announcementId_userId.announcementId &&
+                r.userId === where.announcementId_userId.userId
+            ) || null
+          );
+        }
+        return announcementRecipients.find((r) => r.id === where.id) || null;
+      },
+
+      update: async (args: any) => {
+        const { where, data } = args;
+        const index = announcementRecipients.findIndex((r) => r.id === where.id);
+        if (index === -1) throw new Error('AnnouncementRecipient not found');
+        announcementRecipients[index] = {
+          ...announcementRecipients[index],
+          ...data,
+        };
+        return announcementRecipients[index];
+      },
+
+      upsert: async (args: any) => {
+        const { where, update, create } = args;
+        const key = where.announcementId_userId;
+        let existing = key
+          ? announcementRecipients.find(
+              (r) => r.announcementId === key.announcementId && r.userId === key.userId
+            )
+          : null;
+        if (existing) {
+          Object.assign(existing, update);
+          return existing;
+        }
+        const newRec = {
+          id: nextId('ann-rec'),
+          announcementId: create.announcementId,
+          userId: create.userId,
+          isRead: create.isRead ?? false,
+          readAt: create.readAt ?? null,
+        };
+        announcementRecipients.push(newRec);
+        return newRec;
+      },
+
+      findMany: async (args?: any) => {
+        const where = args?.where || {};
+        return announcementRecipients.filter((r) => {
+          if (where.announcementId && r.announcementId !== where.announcementId) return false;
+          if (where.userId && r.userId !== where.userId) return false;
+          if (typeof where.isRead === 'boolean' && r.isRead !== where.isRead) return false;
+          return true;
+        });
+      },
+    },
+
+    poll: {
+      create: async (args: any) => {
+        const data = args.data;
+        const newPoll: MockPoll = {
+          id: nextId('poll'),
+          createdById: data.createdById,
+          stageId: data.stageId || null,
+          sectorId: data.sectorId || null,
+          question: data.question,
+          allowMultiple: data.allowMultiple ?? false,
+          closesAt: new Date(data.closesAt),
+          isClosed: data.isClosed ?? false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        polls.push(newPoll);
+
+        if (data.options?.create) {
+          data.options.create.forEach((opt: any, idx: number) => {
+            pollOptions.push({
+              id: nextId('popt'),
+              pollId: newPoll.id,
+              text: opt.text,
+              order: opt.order ?? idx,
+            });
+          });
+        }
+
+        const createdBy = users.find((u) => u.id === newPoll.createdById);
+        const stage = stages.find((s) => s.id === newPoll.stageId);
+        const opts = pollOptions.filter((o) => o.pollId === newPoll.id).sort((a, b) => a.order - b.order);
+
+        return {
+          ...newPoll,
+          createdBy: createdBy ? { id: createdBy.id, fullName: createdBy.fullName } : null,
+          stage: stage ? { id: stage.id, name: stage.name } : null,
+          options: opts.map((opt) => ({
+            ...opt,
+            _count: { votes: pollVotes.filter((v) => v.optionId === opt.id).length },
+          })),
+        };
+      },
+
+      findMany: async (args?: any) => {
+        const where = args?.where || {};
+        let list = polls.filter((p) => {
+          if (where.OR) {
+            return where.OR.some((cond: any) => {
+              if (cond.stageId === null && cond.sectorId === null && !p.stageId && !p.sectorId) return true;
+              if (cond.stageId?.in && p.stageId && cond.stageId.in.includes(p.stageId)) return true;
+              if (cond.sectorId?.in && p.sectorId && cond.sectorId.in.includes(p.sectorId)) return true;
+              return false;
+            });
+          }
+          if (where.stageId && p.stageId !== where.stageId) return false;
+          return true;
+        });
+
+        list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+        return list.map((p) => {
+          const createdBy = users.find((u) => u.id === p.createdById);
+          const stage = stages.find((s) => s.id === p.stageId);
+          const opts = pollOptions.filter((o) => o.pollId === p.id).sort((a, b) => a.order - b.order);
+          let userVotes = pollVotes.filter((v) => v.pollId === p.id);
+          if (args?.include?.votes?.where?.userId) {
+            userVotes = userVotes.filter((v) => v.userId === args.include.votes.where.userId);
+          }
+
+          return {
+            ...p,
+            createdBy: createdBy ? { id: createdBy.id, fullName: createdBy.fullName } : null,
+            stage: stage ? { id: stage.id, name: stage.name } : null,
+            options: opts.map((opt) => ({
+              ...opt,
+              _count: { votes: pollVotes.filter((v) => v.optionId === opt.id).length },
+            })),
+            votes: userVotes,
+          };
+        });
+      },
+
+      findUnique: async (args: any) => {
+        const where = args?.where || {};
+        const p = polls.find((pol) => pol.id === where.id);
+        if (!p) return null;
+        const createdBy = users.find((u) => u.id === p.createdById);
+        const stage = stages.find((s) => s.id === p.stageId);
+        const opts = pollOptions.filter((o) => o.pollId === p.id).sort((a, b) => a.order - b.order);
+
+        return {
+          ...p,
+          createdBy: createdBy ? { id: createdBy.id, fullName: createdBy.fullName } : null,
+          stage: stage ? { id: stage.id, name: stage.name } : null,
+          options: opts.map((opt) => ({
+            ...opt,
+            _count: { votes: pollVotes.filter((v) => v.optionId === opt.id).length },
+          })),
+          votes: pollVotes.filter((v) => v.pollId === p.id),
+          _count: { votes: pollVotes.filter((v) => v.pollId === p.id).length },
+        };
+      },
+
+      update: async (args: any) => {
+        const { where, data } = args;
+        const index = polls.findIndex((p) => p.id === where.id);
+        if (index === -1) throw new Error('Poll not found');
+        polls[index] = { ...polls[index], ...data, updatedAt: new Date() };
+        return polls[index];
+      },
+    },
+
+    pollOption: {
+      findUnique: async (args: any) => {
+        const where = args?.where || {};
+        return pollOptions.find((o) => o.id === where.id) || null;
+      },
+      findMany: async (args?: any) => {
+        const where = args?.where || {};
+        return pollOptions.filter((o) => !where.pollId || o.pollId === where.pollId);
+      },
+    },
+
+    pollVote: {
+      create: async (args: any) => {
+        const data = args.data;
+        const newVote: MockPollVote = {
+          id: nextId('vote'),
+          pollId: data.pollId,
+          optionId: data.optionId,
+          userId: data.userId,
+          createdAt: new Date(),
+        };
+        pollVotes.push(newVote);
+        return newVote;
+      },
+
+      findMany: async (args?: any) => {
+        const where = args?.where || {};
+        return pollVotes.filter((v) => {
+          if (where.pollId && v.pollId !== where.pollId) return false;
+          if (where.userId && v.userId !== where.userId) return false;
+          if (where.optionId && v.optionId !== where.optionId) return false;
+          return true;
+        });
+      },
+
+      findUnique: async (args: any) => {
+        const where = args?.where || {};
+        if (where.pollId_userId_optionId) {
+          const t = where.pollId_userId_optionId;
+          return (
+            pollVotes.find(
+              (v) => v.pollId === t.pollId && v.userId === t.userId && v.optionId === t.optionId
+            ) || null
+          );
+        }
+        return pollVotes.find((v) => v.id === where.id) || null;
+      },
+    },
+
+    notificationLog: {
+      create: async (args: any) => {
+        const data = args.data;
+        const newLog: MockNotificationLog = {
+          id: nextId('nlog'),
+          userId: data.userId,
+          type: data.type,
+          channel: data.channel,
+          title: data.title,
+          body: data.body,
+          dataPayload: data.dataPayload || null,
+          isDelivered: data.isDelivered ?? true,
+          sentAt: data.sentAt ? new Date(data.sentAt) : new Date(),
+        };
+        notificationLogs.push(newLog);
+        return newLog;
+      },
+
+      findMany: async (args?: any) => {
+        const where = args?.where || {};
+        let list = notificationLogs.filter((l) => {
+          if (where.userId && l.userId !== where.userId) return false;
+          if (where.channel && l.channel !== where.channel) return false;
+          if (where.type && l.type !== where.type) return false;
+          return true;
+        });
+        list.sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
+        if (args?.take) {
+          list = list.slice(0, args.take);
+        }
+        return list;
+      },
+    },
+
+    userNotificationPreference: {
+      findUnique: async (args: any) => {
+        const where = args?.where || {};
+        return userNotificationPreferences.find((p) => p.userId === where.userId) || null;
+      },
+
+      upsert: async (args: any) => {
+        const { where, update, create } = args;
+        let existing = userNotificationPreferences.find((p) => p.userId === where.userId);
+        if (existing) {
+          if (typeof update.enablePush === 'boolean') existing.enablePush = update.enablePush;
+          if (typeof update.enableSms === 'boolean') existing.enableSms = update.enableSms;
+          if (typeof update.enableEmail === 'boolean') existing.enableEmail = update.enableEmail;
+          if (update.pushSubscription !== undefined) existing.pushSubscription = update.pushSubscription;
+          return existing;
+        }
+
+        const newPref: MockUserNotificationPreference = {
+          id: nextId('pref'),
+          userId: create.userId,
+          enablePush: create.enablePush ?? true,
+          enableSms: create.enableSms ?? true,
+          enableEmail: create.enableEmail ?? false,
+          pushSubscription: create.pushSubscription ?? null,
+        };
+        userNotificationPreferences.push(newPref);
+        return newPref;
       },
     },
 

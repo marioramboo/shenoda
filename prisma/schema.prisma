@@ -27,8 +27,9 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  sectors Sector[]
-  users   User[]
+  sectors   Sector[]
+  users     User[]
+  yearPlans YearPlan[]
 
   @@map("organizations")
 }
@@ -43,8 +44,12 @@ model Sector {
   updatedAt      DateTime @updatedAt
 
   organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  stages       Stage[]
-  assignments  ScopeAssignment[]
+  stages         Stage[]
+  assignments    ScopeAssignment[]
+  yearPlans      YearPlan[]
+  calendarEvents CalendarEvent[]
+  announcements  Announcement[]
+  polls          Poll[]
 
   @@unique([organizationId, code])
   @@map("sectors")
@@ -70,9 +75,14 @@ model Stage {
   assignments ScopeAssignment[]
   members     ServedMember[]
   supervisoryNotes SupervisoryNote[]
-  memberAttendances MemberAttendance[]
-  absenceAlerts AbsenceAlert[]
-  lessonPreparations LessonPreparation[]
+  memberAttendances   MemberAttendance[]
+  absenceAlerts       AbsenceAlert[]
+  lessonPreparations  LessonPreparation[]
+  yearPlans           YearPlan[]
+  calendarEvents      CalendarEvent[]
+  yearPlanServantPosts YearPlanServantPost[]
+  announcements       Announcement[]
+  polls               Poll[]
 
   @@unique([sectorId, code])
   @@map("stages")
@@ -210,6 +220,22 @@ model User {
   lessonPrepsReviewed        LessonPreparation[]  @relation("PrepReviewer")
   spiritualLifeEntries       SpiritualLifeEntry[]
 
+  // Phase 6: Year Plan & Calendar
+  yearPlansPublished         YearPlan[]                    @relation("PublishedYearPlans")
+  calendarEventsCreated      CalendarEvent[]               @relation("EventCreator")
+  eventVolunteers            EventVolunteer[]
+  yearPlanServantPosts       YearPlanServantPost[]         @relation("ServantPlanPosts")
+  eventAttendancesConfirmed  EventAttendanceConfirmation[] @relation("ConfirmedEventUser")
+  eventAttendancesVerified   EventAttendanceConfirmation[] @relation("EventAttendanceVerifier")
+
+  // Phase 7: Announcements, Polls & Notifications
+  authoredAnnouncements      Announcement[]                @relation("AuthoredAnnouncements")
+  announcementRecipients     AnnouncementRecipient[]
+  createdPolls               Poll[]                        @relation("CreatedPolls")
+  pollVotes                  PollVote[]
+  notificationLogs           NotificationLog[]
+  notificationPreferences    UserNotificationPreference?
+
   @@index([organizationId, roleId])
   @@map("users")
 }
@@ -342,6 +368,7 @@ model ServedMember {
   absenceAlerts       AbsenceAlert[]
 
   @@index([stageId])
+  @@index([stageId, fullName])
   @@map("served_members")
 }
 
@@ -482,6 +509,7 @@ model MemberAttendance {
 
   @@unique([memberId, sessionType, sessionDate])
   @@index([stageId, sessionDate])
+  @@index([stageId, sessionDate, sessionType])
   @@index([memberId, sessionDate])
   @@map("member_attendance")
 }
@@ -601,3 +629,267 @@ model SpiritualLifeEntry {
   @@index([userId, entryDate])
   @@map("spiritual_life_entries")
 }
+
+// -------------------------------------------------------------
+// Phase 6: YEAR PLAN (تدبير السنة) & CALENDAR
+// -------------------------------------------------------------
+
+enum EventCategory {
+  LITURGY_FEAST       // أعياد ومناسبات كنسية
+  SPIRITUAL_LESSON    // درس روحي / موضوع دراسي
+  SERVICE_MEETING     // اجتماع الخدمة الأسبوعي
+  SECRETARIES_COUNCIL // اجتماع الأمناء
+  TRIP_OR_OUTING      // رحلة
+  CONFERENCE_RETREAT  // مؤتمر روحي
+  COMMUNITY_ACTIVITY  // نشاط اجتماعي / يوم رياضي
+}
+
+enum PlanScopeType {
+  STAGE               // خاص بمرحلة معينة
+  SECTOR              // خاص بقطاع
+  ORGANIZATION        // عام للكنيسة بأكملها
+}
+
+model YearPlan {
+  id             String         @id @default(uuid())
+  organizationId String
+  title          String         // e.g. "تدبير سنة 2026 / 2027 - قطاع الشباب"
+  academicYear   String         // e.g. "2026-2027"
+  scopeType      PlanScopeType
+  sectorId       String?
+  stageId        String?
+  publishedById  String
+  isPublished    Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  sector         Sector?        @relation(fields: [sectorId], references: [id], onDelete: Cascade)
+  stage          Stage?         @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  publishedBy    User           @relation("PublishedYearPlans", fields: [publishedById], references: [id])
+  events         CalendarEvent[]
+  servantPosts   YearPlanServantPost[]
+
+  @@index([stageId])
+  @@index([sectorId])
+  @@map("year_plans")
+}
+
+model CalendarEvent {
+  id               String            @id @default(uuid())
+  yearPlanId       String?
+  stageId          String?           // Nullable for church-wide events
+  sectorId         String?
+  title            String            // e.g. "مؤتمر العقيدة الأرثوذكسية"
+  description      String?
+  category         EventCategory
+  startDate        DateTime
+  endDate          DateTime
+  location         String?           // e.g. "بيت مارمرقس بالعجمي"
+  maxVolunteers    Int?              // Maximum servants that can opt-in
+  createdById      String
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  yearPlan         YearPlan?         @relation(fields: [yearPlanId], references: [id], onDelete: Cascade)
+  stage            Stage?            @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  sector           Sector?           @relation(fields: [sectorId], references: [id], onDelete: Cascade)
+  createdBy        User              @relation("EventCreator", fields: [createdById], references: [id])
+  volunteers       EventVolunteer[]
+  eventAttendances EventAttendanceConfirmation[]
+
+  @@index([startDate, endDate])
+  @@index([stageId])
+  @@map("calendar_events")
+}
+
+model EventVolunteer {
+  id          String        @id @default(uuid())
+  eventId     String
+  userId      String        // Servant who opted in
+  roleInEvent String?       // e.g. "مسؤول التنظيم", "إلقاء الكلمة"
+  createdAt   DateTime      @default(now())
+
+  event       CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@map("event_volunteers")
+}
+
+model YearPlanServantPost {
+  id          String   @id @default(uuid())
+  yearPlanId  String
+  stageId     String   // Must match servant's assigned stage (FR-7.4)
+  authorId    String   // خادم author
+  title       String
+  content     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  yearPlan    YearPlan @relation(fields: [yearPlanId], references: [id], onDelete: Cascade)
+  stage       Stage    @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  author      User     @relation("ServantPlanPosts", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([stageId])
+  @@map("year_plan_servant_posts")
+}
+
+model EventAttendanceConfirmation {
+  id            String        @id @default(uuid())
+  eventId       String
+  userId        String        // Servant who attended
+  confirmedById String        // Secretary who verified
+  confirmedAt   DateTime      @default(now())
+
+  event         CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user          User          @relation("ConfirmedEventUser", fields: [userId], references: [id], onDelete: Cascade)
+  confirmedBy   User          @relation("EventAttendanceVerifier", fields: [confirmedById], references: [id])
+
+  @@unique([eventId, userId])
+  @@map("event_attendance_confirmations")
+}
+
+// -------------------------------------------------------------
+// Phase 7: ANNOUNCEMENTS, POLLS & NOTIFICATIONS
+// -------------------------------------------------------------
+
+enum TargetScopeLevel {
+  STAGE_SUBSET   // خدام محددين بالمرحلة
+  STAGE_ALL      // كل خدام المرحلة
+  SECTOR_ALL     // كل خدام وأمناء القطاع
+  ORG_ALL        // الكنيسة بالكامل
+}
+
+model Announcement {
+  id              String           @id @default(uuid())
+  authorUserId    String           // Must have roleLevel >= 3 (امين الخدمة+)
+  title           String
+  content         String           // Rich text / Markdown
+  targetScopeType TargetScopeLevel
+  targetStageId   String?
+  targetSectorId  String?
+  isPinned        Boolean          @default(false)
+  expiresAt       DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  author          User             @relation("AuthoredAnnouncements", fields: [authorUserId], references: [id])
+  targetStage     Stage?           @relation(fields: [targetStageId], references: [id], onDelete: Cascade)
+  targetSector    Sector?          @relation(fields: [targetSectorId], references: [id], onDelete: Cascade)
+  recipients      AnnouncementRecipient[]
+
+  @@index([createdAt])
+  @@index([targetStageId])
+  @@map("announcements")
+}
+
+model AnnouncementRecipient {
+  id              String       @id @default(uuid())
+  announcementId  String
+  userId          String
+  isRead          Boolean      @default(false)
+  readAt          DateTime?
+
+  announcement    Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([announcementId, userId])
+  @@index([userId, isRead])
+  @@map("announcement_recipients")
+}
+
+model Poll {
+  id             String       @id @default(uuid())
+  createdById    String       // Must have roleLevel >= 3
+  stageId        String?      // Scope of the poll
+  sectorId       String?
+  question       String       // e.g. "ما هو الموعد الأنسب لليوم الرياضي؟"
+  allowMultiple  Boolean      @default(false)
+  closesAt       DateTime
+  isClosed       Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  createdBy      User         @relation("CreatedPolls", fields: [createdById], references: [id])
+  stage          Stage?       @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  sector         Sector?      @relation(fields: [sectorId], references: [id], onDelete: Cascade)
+  options        PollOption[]
+  votes          PollVote[]
+
+  @@index([stageId])
+  @@map("polls")
+}
+
+model PollOption {
+  id        String     @id @default(uuid())
+  pollId    String
+  text      String     // e.g. "الجمعة القادمة بعد القداس"
+  order     Int        @default(0)
+
+  poll      Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  votes     PollVote[]
+
+  @@map("poll_options")
+}
+
+model PollVote {
+  id           String     @id @default(uuid())
+  pollId       String
+  optionId     String
+  userId       String     // Voter
+  createdAt    DateTime   @default(now())
+
+  poll         Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  option       PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, userId, optionId])
+  @@map("poll_votes")
+}
+
+enum NotificationChannel {
+  PUSH
+  SMS
+  EMAIL
+}
+
+enum NotificationType {
+  ABSENCE_ALERT       // تنبيه غياب متكرر لمخدوم
+  NEW_ANNOUNCEMENT    // إعلان جديد
+  PREP_DEADLINE       // تذكير بتحضير الدرس
+  SERVICE_MEETING     // تذكير باجتماع الخدمة
+  POLL_CREATED        // استطلاع رأي جديد
+}
+
+model NotificationLog {
+  id             String              @id @default(uuid())
+  userId         String              // Recipient
+  type           NotificationType
+  channel        NotificationChannel
+  title          String
+  body           String
+  dataPayload    Json?               // Deep-link metadata
+  isDelivered    Boolean             @default(false)
+  sentAt         DateTime            @default(now())
+
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, sentAt])
+  @@map("notification_logs")
+}
+
+model UserNotificationPreference {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  enablePush     Boolean  @default(true)
+  enableSms      Boolean  @default(true)
+  enableEmail    Boolean  @default(false)
+  pushSubscription Json?  // Web Push VAPID subscription object
+
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_notification_preferences")
+}
+
+

@@ -1,5 +1,6 @@
 import { prisma } from '../config/prisma';
 import { MemberSessionType } from '@shenoda/shared';
+import { NotificationQueueService } from './notificationQueue.service';
 
 export interface AbsenceScanOptions {
   stageId: string;
@@ -142,6 +143,22 @@ export async function scanMemberAbsencesAfterAttendance({
             assignedFollowUpId,
           },
         });
+
+        if (assignedFollowUpId) {
+          try {
+            const member = await prisma.servedMember.findUnique({
+              where: { id: memberId },
+              select: { fullName: true },
+            });
+            await NotificationQueueService.notifyAbsenceAlert(
+              assignedFollowUpId,
+              member?.fullName || 'المخدوم',
+              consecutiveAbsences
+            );
+          } catch (notifErr) {
+            console.error('Failed to dispatch absence alert notification:', notifErr);
+          }
+        }
 
         generatedAlerts.push(newAlert);
       }

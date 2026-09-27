@@ -31,6 +31,8 @@ import {
   Sparkles,
   ExternalLink,
   ClipboardList,
+  Megaphone,
+  BarChart3,
 } from 'lucide-react';
 
 interface ServantDashboardData {
@@ -160,6 +162,15 @@ export default function DashboardPage() {
     }
   };
 
+<<<<<<< HEAD
+=======
+  const handleTabChange = (tab: string) => {
+    if (tab === 'members') router.push('/members');
+    else if (tab === 'attendance') router.push('/attendance');
+    else if (tab === 'plan') router.push('/year-plan');
+  };
+
+>>>>>>> 786f3b6d59485dbea08c685da9fbe8d1573990e3
   return (
     <ProtectedRoute>
       <div dir="rtl" className="min-h-screen bg-bg-app flex flex-col items-center p-4 sm:p-6 pb-28">
@@ -434,6 +445,40 @@ export default function DashboardPage() {
                   رصد الغياب وبطاقات الافتقاد
                 </p>
               </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => router.push('/announcements')}
+              className="p-4 bg-bg-surface border border-border-default rounded-card shadow-card flex items-center gap-3 hover:border-brand-accent transition-all text-right group"
+            >
+              <div className="w-10 h-10 rounded-lg bg-brand-accent-soft text-brand-accent flex items-center justify-center group-hover:scale-105 transition-transform shrink-0">
+                <Megaphone className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <h4 className="text-body-default font-bold text-text-primary">الإعلانات والاستطلاعات</h4>
+                <p className="text-[11px] text-text-secondary mt-0.5">
+                  البيانات الرسمية والتصويت
+                </p>
+              </div>
+              <ChevronLeft className="w-4 h-4 text-text-secondary group-hover:text-brand-accent transition-colors" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => router.push('/analytics')}
+              className="p-4 bg-bg-surface border border-border-default rounded-card shadow-card flex items-center gap-3 hover:border-brand-primary transition-all text-right group"
+            >
+              <div className="w-10 h-10 rounded-lg bg-brand-primary-soft text-brand-primary flex items-center justify-center group-hover:scale-105 transition-transform shrink-0">
+                <BarChart3 className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <h4 className="text-body-default font-bold text-text-primary">التحليلات والتقارير</h4>
+                <p className="text-[11px] text-text-secondary mt-0.5">
+                  مؤشرات الحضور وتصدير PDF/Excel
+                </p>
+              </div>
+              <ChevronLeft className="w-4 h-4 text-text-secondary group-hover:text-brand-primary transition-colors" />
             </button>
           </section>
 

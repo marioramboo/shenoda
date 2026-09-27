@@ -5,3 +5,5 @@ export * from './constants/sessions';
 export * from './constants/prepAndSpiritual';
 export * from './permissions';
 export * from './utils/copticDate';
+export * from './constants/yearPlanAndCalendar';
+export * from './constants/announcementsAndPolls';

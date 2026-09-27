@@ -14,7 +14,15 @@ import { attendanceRouter } from './routes/attendance.routes';
 import { preparationRouter } from './routes/preparation.routes';
 import { spiritualLifeRouter } from './routes/spiritualLife.routes';
 import { dashboardRouter } from './routes/dashboard.routes';
+import yearPlanRouter from './routes/yearPlan.routes';
+import calendarRouter from './routes/calendar.routes';
+import { announcementRouter } from './routes/announcement.routes';
+import { pollRouter } from './routes/poll.routes';
+import { notificationRouter } from './routes/notification.routes';
+import { analyticsRouter } from './routes/analytics.routes';
+import { reportRouter } from './routes/report.routes';
 import { authenticateJwt } from './middleware/auth';
+import { enforceIdempotency } from './middleware/idempotency';
 
 export const createApp = (beforeRoutesMiddleware?: RequestHandler): Application => {
   const app = express();
@@ -42,6 +50,9 @@ export const createApp = (beforeRoutesMiddleware?: RequestHandler): Application 
 
   // Global JWT authentication middleware (populates req.user if Bearer token present)
   app.use(authenticateJwt);
+
+  // Phase 9: Network resilience & retry-safe idempotency (NFR-4.2)
+  app.use(enforceIdempotency());
 
   // Health check routes
   app.use(healthRouter);
@@ -77,6 +88,28 @@ export const createApp = (beforeRoutesMiddleware?: RequestHandler): Application 
   app.use('/api/spiritual-life', spiritualLifeRouter);
   app.use('/api/v1/dashboard', dashboardRouter);
   app.use('/api/dashboard', dashboardRouter);
+
+  // Phase 6: Year Plan & Calendar routes (FR-7.1, FR-7.2, FR-7.4, FR-12.1, FR-12.2)
+  app.use('/api/v1/year-plans', yearPlanRouter);
+  app.use('/api/year-plans', yearPlanRouter);
+  app.use('/api/v1/calendar', calendarRouter);
+  app.use('/api/calendar', calendarRouter);
+  app.use('/api/v1/events', calendarRouter);
+  app.use('/api/events', calendarRouter);
+
+  // Phase 7: Announcements, Polls & Notifications (FR-9.1, FR-9.2, FR-10.1, FR-10.2, FR-10.3, FR-11.1–11.4)
+  app.use('/api/v1/announcements', announcementRouter);
+  app.use('/api/announcements', announcementRouter);
+  app.use('/api/v1/polls', pollRouter);
+  app.use('/api/polls', pollRouter);
+  app.use('/api/v1/notifications', notificationRouter);
+  app.use('/api/notifications', notificationRouter);
+
+  // Phase 8: Analytics & Export routes (FR-13.1, FR-14.1, FR-14.2, NFR-3.4)
+  app.use('/api/v1/analytics', analyticsRouter);
+  app.use('/api/analytics', analyticsRouter);
+  app.use('/api/v1/reports', reportRouter);
+  app.use('/api/reports', reportRouter);
 
   // Root welcome route
   app.get('/', (_req: Request, res: Response) => {
