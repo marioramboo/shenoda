@@ -1,0 +1,416 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Baseline system check model
+model SystemHealth {
+  id        String   @id @default(uuid())
+  version   String
+  createdAt DateTime @default(now())
+}
+
+// -------------------------------------------------------------
+// 1. ORGANIZATIONAL HIERARCHY
+// -------------------------------------------------------------
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String   // e.g. "كنيسة القديس العظيم أنبا شنودة رئيس المتوحدين"
+  code      String   @unique // e.g. "SHENODA_MAIN"
+  address   String?
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sectors Sector[]
+  users   User[]
+
+  @@map("organizations")
+}
+
+model Sector {
+  id             String   @id @default(uuid())
+  organizationId String
+  name           String   // e.g. "قطاع الطفولة" or "قطاع الشباب"
+  code           String   // e.g. "SECTOR_CHILDREN"
+  description    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  stages       Stage[]
+  assignments  ScopeAssignment[]
+
+  @@unique([organizationId, code])
+  @@map("sectors")
+}
+
+enum StageGender {
+  COED   // مختلط (حضانة، ابتدائي، جامعة)
+  MALE   // بنين (إعدادي بنين، ثانوي بنين)
+  FEMALE // بنات (إعدادي بنات، ثانوي بنات)
+}
+
+model Stage {
+  id         String      @id @default(uuid())
+  sectorId   String
+  name       String      // e.g. "إعدادي بنين"
+  code       String      // Canonical taxonomy code: NURSERY, PRIMARY_1_2, PREP_BOYS, etc.
+  gender     StageGender @default(COED)
+  orderIndex Int         // Display order
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  sector      Sector            @relation(fields: [sectorId], references: [id], onDelete: Cascade)
+  assignments ScopeAssignment[]
+  members     ServedMember[]
+  supervisoryNotes SupervisoryNote[]
+
+  @@unique([sectorId, code])
+  @@map("stages")
+}
+
+// -------------------------------------------------------------
+// 2. ROLES & DATA-DRIVEN PERMISSIONS (NFR-6.1)
+// -------------------------------------------------------------
+
+model Role {
+  id          String  @id @default(uuid())
+  name        String  // Arabic display name: "خادم", "مساعد امين الخدمة", etc.
+  code        String  @unique // SERVANT, ASSISTANT_SECRETARY, STAGE_SECRETARY, SECTOR_SECRETARY, GENERAL_SECRETARY
+  level       Int     @unique // 1 = خادم, 2 = مساعد, 3 = امين الخدمة, 4 = امين قطاع, 5 = امين عام
+  description String?
+
+  users       User[]
+  permissions RolePermissionRule[]
+
+  @@map("roles")
+}
+
+enum PermissionAction {
+  LOGIN
+  VIEW_OWN_PROFILE
+  EDIT_OWN_PROFILE
+  VIEW_OWN_FOLLOWUP
+  SUBMIT_LESSON_PREP
+  EDIT_OWN_SPIRITUAL_LIFE
+  VIEW_YEAR_PLAN
+  OPT_IN_YEAR_PLAN
+  POST_STAGE_YEAR_PLAN_UPDATE // خادم limited post (FR-7.4)
+  MANAGE_YEAR_PLAN_FULL       // امين الخدمة+
+  EDIT_ASSIGNED_MEMBER_EVAL   // خادم 3 fields (FR-3.1, A2)
+  MANAGE_MEMBER_FULL          // مساعد+ full member CRUD
+  VIEW_ANNOUNCEMENT
+  CREATE_ANNOUNCEMENT         // امين الخدمة+ with audience cap (FR-10.1, A5)
+  ADD_PRIVATE_NOTES           // امين الخدمة+ up reporting chain (FR-8.1)
+  CREATE_POLL                 // امين الخدمة+
+  MANAGE_SERVANT_ACCOUNTS     // امين الخدمة+ scoped account creation (FR-1.2, A7)
+  EDIT_SERVANT_PROFILE_EVAL   // Evaluator logic (A1, A3)
+  EDIT_SERVANT_FOLLOWUP       // Supervising secretary (FR-4.1)
+  VIEW_SERVANT_LESSON_PREP    // امين الخدمة+
+  EDIT_SECRETARY_DATA         // امين قطاع+
+  TRANSFER_SUSPEND_SERVANT    // امين عام only (FR-1.4)
+  VIEW_ANALYTICS_STAGE        // مساعد & امين الخدمة
+  VIEW_ANALYTICS_SECTOR       // امين قطاع
+  VIEW_ANALYTICS_ORG          // امين عام
+  EXPORT_REPORTS              // امين الخدمة+
+}
+
+enum ScopeRule {
+  SELF             // Restricted to own record
+  ASSIGNED_MEMBERS // Restricted to directly assigned members
+  STAGE            // Restricted to assigned مرحلة
+  SECTOR           // Restricted to all مراحل within assigned قطاع
+  ORGANIZATION     // Organization-wide
+}
+
+model RolePermissionRule {
+  id        String           @id @default(uuid())
+  roleId    String
+  action    PermissionAction
+  scopeRule ScopeRule
+  createdAt DateTime         @default(now())
+
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, action])
+  @@map("role_permission_rules")
+}
+
+// -------------------------------------------------------------
+// 3. USER & SCOPE ASSIGNMENT
+// -------------------------------------------------------------
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  TRANSFERRED
+}
+
+model User {
+  id             String     @id @default(uuid())
+  organizationId String
+  roleId         String
+  fullName       String
+  phoneNumber    String     @unique
+  email          String?    @unique
+  passwordHash   String
+  status         UserStatus @default(ACTIVE)
+
+  // Basic Non-Evaluative Profile Fields (Editable by Self per §4.1)
+  fatherConfessor   String?   // اب الاعتراف
+  dateOfBirth       DateTime?
+  address           String?
+  maritalStatus     String?   // Single / Married
+  spouseName        String?
+  educationOrCareer String?   // Studying / Military / Graduated
+  childrenInfo      Json?     // Array of { name, age }
+
+  // System & Audit
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization        Organization        @relation(fields: [organizationId], references: [id])
+  role                Role                @relation(fields: [roleId], references: [id])
+  scopeAssignments    ScopeAssignment[]
+  evaluationsReceived ServantEvaluation[] @relation("SubjectEvaluations")
+  evaluationsWritten  ServantEvaluation[] @relation("EvaluatorEvaluations")
+
+  // Phase 2: Auth & Account Status Relations
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  statusLogsReceived  AccountStatusLog[]  @relation("TargetStatusLogs")
+  statusLogsCreated   AccountStatusLog[]  @relation("OperatorStatusLogs")
+
+  // Phase 3: Member Records, Audit & Supervisory Notes
+  memberAssignments        MemberServantAssignment[] @relation("AssignedMembers")
+  memberAssignmentsCreated MemberServantAssignment[] @relation("AssignmentCreators")
+  memberAuditLogs          MemberAuditLog[]
+  sensitiveAccessLogs      SensitiveAccessLog[]
+  subjectNotes             SupervisoryNote[]         @relation("SubjectNotes")
+  authoredNotes            SupervisoryNote[]         @relation("AuthorNotes")
+
+  @@index([organizationId, roleId])
+  @@map("users")
+}
+
+model ScopeAssignment {
+  id        String   @id @default(uuid())
+  userId    String
+  sectorId  String?  // Set if user is scoped to a sector (امين قطاع)
+  stageId   String?  // Set if user is scoped to a stage (خادم, مساعد, امين الخدمة)
+  createdAt DateTime @default(now())
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sector Sector? @relation(fields: [sectorId], references: [id], onDelete: Cascade)
+  stage  Stage?  @relation(fields: [stageId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, stageId, sectorId])
+  @@map("scope_assignments")
+}
+
+// Evaluative Fields Model (Separated for Audit & Strict Access Control)
+model ServantEvaluation {
+  id                   String   @id @default(uuid())
+  subjectUserId        String   // The servant/secretary being evaluated
+  evaluatorUserId      String   // The supervisor setting the marks
+  financialStatus      String?  // الحالة المادية
+  behaviorWithMembers  String?  // السلوك مع المخدومين
+  behaviorWithServants String?  // السلوك مع الزملاء الخدام
+  cooperation          String?  // التعاون
+  individualInitiative String?  // العمل الفردي والمبادرة
+  notes                String?
+  updatedAt            DateTime @updatedAt
+  createdAt            DateTime @default(now())
+
+  subject   User @relation("SubjectEvaluations", fields: [subjectUserId], references: [id], onDelete: Cascade)
+  evaluator User @relation("EvaluatorEvaluations", fields: [evaluatorUserId], references: [id], onDelete: Cascade)
+
+  @@unique([subjectUserId])
+  @@map("servant_evaluations")
+}
+
+// -------------------------------------------------------------
+// REFRESH TOKENS & AUDIT LOGS (PHASE 2)
+// -------------------------------------------------------------
+
+model RefreshToken {
+  id          String   @id @default(uuid())
+  userId      String
+  tokenHash   String   @unique
+  userAgent   String?
+  ipAddress   String?
+  isRevoked   Boolean  @default(false)
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id          String   @id @default(uuid())
+  userId      String
+  tokenHash   String   @unique
+  otpCode     String   // 6-digit verification code
+  expiresAt   DateTime
+  isUsed      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+// Audit trail for servant transfer and account suspension (FR-1.4)
+model AccountStatusLog {
+  id             String      @id @default(uuid())
+  targetUserId   String
+  changedById    String      // Must be امين عام for transfer/suspend
+  previousStatus UserStatus
+  newStatus      UserStatus
+  previousStage  String?     // Previous مرحلة ID if transferred
+  newStage       String?     // New مرحلة ID if transferred
+  reason         String?
+  createdAt      DateTime    @default(now())
+
+  targetUser     User        @relation("TargetStatusLogs", fields: [targetUserId], references: [id], onDelete: Cascade)
+  changedBy      User        @relation("OperatorStatusLogs", fields: [changedById], references: [id], onDelete: Cascade)
+
+  @@index([targetUserId])
+  @@map("account_status_logs")
+}
+
+// -------------------------------------------------------------
+// PHASE 3: SERVED MEMBERS (المخدومين) — RECORDS ONLY (FR-3.4)
+// -------------------------------------------------------------
+
+model ServedMember {
+  id                  String       @id @default(uuid())
+  stageId             String
+  fullName            String
+  dateOfBirth         DateTime
+  address             String
+  phoneNumber         String?      // Minor or primary guardian phone
+  fatherConfessor     String?      // Optional for younger stages
+
+  // Family & Academic Background
+  fatherName          String?
+  fatherAge           Int?
+  motherName          String?
+  motherAge           Int?
+  schoolOrUniversity  String?
+  educationalGrade    String?      // e.g. "الصف الثاني الإعدادي"
+  siblingsInfo        Json?        // Array of { name, age }
+
+  // Evaluative Fields (Editable by assigned servant per A2)
+  financialStatus     String?      // الحالة المادية
+  behaviorInService   String?      // سلوكه في الخدمة
+  peerIntegration     String?      // اندماجه مع زملائه
+
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  stage               Stage        @relation(fields: [stageId], references: [id])
+  servantAssignments MemberServantAssignment[]
+  auditLogs           MemberAuditLog[]
+  sensitiveAccessLogs SensitiveAccessLog[]
+
+  @@index([stageId])
+  @@map("served_members")
+}
+
+model MemberServantAssignment {
+  id             String       @id @default(uuid())
+  memberId       String
+  servantUserId  String       // Must have role خادم or above
+  assignedAt     DateTime     @default(now())
+  assignedById   String       // Assistant Secretary or above who made the assignment
+
+  member         ServedMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  servant        User         @relation("AssignedMembers", fields: [servantUserId], references: [id], onDelete: Cascade)
+  assignedBy     User         @relation("AssignmentCreators", fields: [assignedById], references: [id])
+
+  @@unique([memberId, servantUserId])
+  @@index([servantUserId])
+  @@map("member_servant_assignments")
+}
+
+// -------------------------------------------------------------
+// AUDIT LOGS & SENSITIVE ACCESS (NFR-3.3 & FR-2.3)
+// -------------------------------------------------------------
+
+enum SensitiveField {
+  FINANCIAL_STATUS
+  PHONE_NUMBER
+  HOME_ADDRESS
+  GUARDIAN_INFO
+}
+
+enum AccessType {
+  VIEW
+  UPDATE
+  EXPORT
+}
+
+model SensitiveAccessLog {
+  id             String         @id @default(uuid())
+  userId         String         // Who accessed the data
+  memberId       String?        // If member data accessed
+  targetUserId   String?        // If servant data accessed
+  field          SensitiveField
+  accessType     AccessType
+  ipAddress      String?
+  createdAt      DateTime       @default(now())
+
+  user           User           @relation(fields: [userId], references: [id])
+  member         ServedMember?  @relation(fields: [memberId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@map("sensitive_access_logs")
+}
+
+model MemberAuditLog {
+  id          String       @id @default(uuid())
+  memberId    String
+  changedById String
+  fieldName   String
+  oldValue    String?
+  newValue    String?
+  createdAt   DateTime     @default(now())
+
+  member      ServedMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  changedBy   User         @relation(fields: [changedById], references: [id])
+
+  @@index([memberId])
+  @@map("member_audit_logs")
+}
+
+// -------------------------------------------------------------
+// PRIVATE SUPERVISORY NOTES (FR-8.1 & FR-8.2)
+// -------------------------------------------------------------
+
+model SupervisoryNote {
+  id             String   @id @default(uuid())
+  targetUserId   String   // The servant or secretary this note is about
+  authorUserId   String   // Must be امين الخدمة or above
+  stageId        String   // Scope of the note
+  content        String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  targetUser     User     @relation("SubjectNotes", fields: [targetUserId], references: [id], onDelete: Cascade)
+  authorUser     User     @relation("AuthorNotes", fields: [authorUserId], references: [id], onDelete: Cascade)
+  stage          Stage    @relation(fields: [stageId], references: [id], onDelete: Cascade)
+
+  @@index([targetUserId])
+  @@map("supervisory_notes")
+}

@@ -1,0 +1,101 @@
+import express, { Application, Request, Response, NextFunction, RequestHandler } from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import morgan from 'morgan';
+import cookieParser from 'cookie-parser';
+import { env } from './config/env';
+import { healthRouter } from './routes/health.routes';
+import { permissionsRouter } from './routes/permissions.routes';
+import { authRouter } from './routes/auth.routes';
+import { accountRouter } from './routes/account.routes';
+import { memberRouter } from './routes/member.routes';
+import { noteRouter } from './routes/note.routes';
+import { authenticateJwt } from './middleware/auth';
+
+export const createApp = (beforeRoutesMiddleware?: RequestHandler): Application => {
+  const app = express();
+
+  // Security & standard middlewares
+  app.use(helmet());
+  app.use(
+    cors({
+      origin: env.CORS_ORIGIN,
+      credentials: true,
+    })
+  );
+  app.use(cookieParser(env.COOKIE_SECRET));
+  app.use(express.json({ limit: '2mb' }));
+  app.use(express.urlencoded({ extended: true }));
+
+  if (env.NODE_ENV !== 'test') {
+    app.use(morgan('dev'));
+  }
+
+  // Pre-route middleware (e.g. auth context in tests or production auth)
+  if (beforeRoutesMiddleware) {
+    app.use(beforeRoutesMiddleware);
+  }
+
+  // Global JWT authentication middleware (populates req.user if Bearer token present)
+  app.use(authenticateJwt);
+
+  // Health check routes
+  app.use(healthRouter);
+  app.use('/api', healthRouter);
+
+  // Permission routes
+  app.use('/api', permissionsRouter);
+
+  // Auth routes (FR-1.1, FR-1.3, NFR-3.2)
+  app.use('/api/v1/auth', authRouter);
+  app.use('/api/auth', authRouter);
+
+  // Account provisioning & management routes (FR-1.2, FR-1.4, Assumption A7)
+  app.use('/api/v1/accounts', accountRouter);
+  app.use('/api/accounts', accountRouter);
+
+  // Served Member routes (FR-3.1, FR-3.2, FR-3.3, Assumption A2)
+  app.use('/api/v1/members', memberRouter);
+  app.use('/api/members', memberRouter);
+
+  // Supervisory Notes routes (FR-8.1, FR-8.2)
+  app.use('/api/v1/notes', noteRouter);
+  app.use('/api/notes', noteRouter);
+
+  // Root welcome route
+  app.get('/', (_req: Request, res: Response) => {
+    res.json({
+      name: 'Church Service Management API (نظام إدارة الخدمة الكنسية)',
+      version: '0.1.0-phase0',
+      docs: '/api/docs',
+      health: '/health',
+    });
+  });
+
+  // 404 handler
+  app.use((req: Request, res: Response) => {
+    res.status(404).json({
+      success: false,
+      error: {
+        code: 'NOT_FOUND',
+        message: `Route ${req.method} ${req.originalUrl} not found`,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  // Global Error Handler
+  app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+    console.error('Unhandled Server Error:', err);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_SERVER_ERROR',
+        message: err.message || 'An unexpected error occurred',
+      },
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  return app;
+};

@@ -1,0 +1,58 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+jobs:
+  validate:
+    name: Lint, Typecheck and Build
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgrespassword
+          POSTGRES_DB: shenoda_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Monorepo Dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate --schema=prisma/schema.prisma
+
+      - name: Shared Package Build
+        run: npm run build --workspace=@shenoda/shared
+
+      - name: Run Typechecks
+        run: npm run typecheck
+
+      - name: Run Unit & Integration Tests
+        run: npm test
+
+      - name: Build Web & API
+        run: npm run build
+        env:
+          DATABASE_URL: "postgresql://postgres:postgrespassword@localhost:5432/shenoda_test?schema=public"
+          NEXT_PUBLIC_API_URL: "http://localhost:5000"
