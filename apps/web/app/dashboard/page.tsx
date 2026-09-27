@@ -160,12 +160,6 @@ export default function DashboardPage() {
     }
   };
 
-  const handleTabChange = (tab: string) => {
-    if (tab === 'members') router.push('/members');
-    else if (tab === 'attendance') router.push('/attendance');
-    else if (tab === 'plan') router.push('/preparations');
-  };
-
   return (
     <ProtectedRoute>
       <div dir="rtl" className="min-h-screen bg-bg-app flex flex-col items-center p-4 sm:p-6 pb-28">
@@ -594,7 +588,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Bottom Tab Bar Navigation */}
-        <TabBar activeTab="dashboard" onTabChange={handleTabChange} />
+        <TabBar activeTab="dashboard" />
       </div>
     </ProtectedRoute>
   );

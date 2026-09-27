@@ -208,7 +208,7 @@ export const SpiritualJournal: React.FC<SpiritualJournalProps> = ({
                   الممارسة الروحية:
                 </label>
                 <div className="grid grid-cols-2 gap-2">
-                  {Object.values(SpiritualSacrament).map((s) => (
+                  {(Object.values(SpiritualSacrament) as SpiritualSacrament[]).map((s) => (
                     <button
                       key={s}
                       type="button"

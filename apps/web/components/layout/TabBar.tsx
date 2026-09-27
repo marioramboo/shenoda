@@ -1,4 +1,7 @@
+'use client';
+
 import React from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard,
@@ -11,47 +14,78 @@ import {
 export type TabKey = 'dashboard' | 'members' | 'attendance' | 'plan' | 'profile';
 
 export interface TabBarProps {
-  activeTab: TabKey;
-  onTabChange: (tab: TabKey) => void;
+  activeTab?: TabKey;
+  onTabChange?: (tab: TabKey) => void;
   className?: string;
 }
+
+const TABS: {
+  key: TabKey;
+  label: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+}[] = [
+  {
+    key: 'dashboard',
+    label: 'الرئيسية',
+    href: '/dashboard',
+    icon: LayoutDashboard,
+  },
+  {
+    key: 'members',
+    label: 'المخدومين',
+    href: '/members',
+    icon: Users,
+  },
+  {
+    key: 'attendance',
+    label: 'الحضور',
+    href: '/attendance',
+    icon: ClipboardCheck,
+  },
+  {
+    key: 'plan',
+    label: 'الخطة',
+    href: '/plan',
+    icon: CalendarCheck2,
+  },
+  {
+    key: 'profile',
+    label: 'حسابي',
+    href: '/profile',
+    icon: UserCheck,
+  },
+];
 
 export const TabBar: React.FC<TabBarProps> = ({
   activeTab,
   onTabChange,
   className,
 }) => {
-  const tabs: {
-    key: TabKey;
-    label: string;
-    icon: React.ComponentType<{ className?: string }>;
-  }[] = [
-    {
-      key: 'dashboard',
-      label: 'الرئيسية',
-      icon: LayoutDashboard,
-    },
-    {
-      key: 'members',
-      label: 'المخدومين',
-      icon: Users,
-    },
-    {
-      key: 'attendance',
-      label: 'الحضور',
-      icon: ClipboardCheck,
-    },
-    {
-      key: 'plan',
-      label: 'الخطة',
-      icon: CalendarCheck2,
-    },
-    {
-      key: 'profile',
-      label: 'حسابي',
-      icon: UserCheck,
-    },
-  ];
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // Inferred tab from current pathname if activeTab is not explicitly specified
+  const currentTab: TabKey =
+    activeTab ||
+    (pathname?.startsWith('/members')
+      ? 'members'
+      : pathname?.startsWith('/attendance')
+      ? 'attendance'
+      : pathname?.startsWith('/plan')
+      ? 'plan'
+      : pathname?.startsWith('/profile')
+      ? 'profile'
+      : 'dashboard');
+
+  const handleTabClick = (tab: (typeof TABS)[number]) => {
+    if (onTabChange) {
+      onTabChange(tab.key);
+    }
+    if (pathname !== tab.href) {
+      router.push(tab.href);
+    }
+  };
 
   return (
     <nav
@@ -62,17 +96,17 @@ export const TabBar: React.FC<TabBarProps> = ({
       )}
     >
       <div className="max-w-md mx-auto h-16 px-2 flex items-center justify-around">
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.key;
+        {TABS.map((tab) => {
+          const isActive = currentTab === tab.key;
           const Icon = tab.icon;
 
           return (
             <button
               key={tab.key}
               type="button"
-              onClick={() => onTabChange(tab.key)}
+              onClick={() => handleTabClick(tab)}
               className={cn(
-                'flex flex-col items-center justify-center flex-1 h-full py-1 text-caption transition-colors duration-150 select-none relative',
+                'flex flex-col items-center justify-center flex-1 h-full py-1 text-caption transition-colors duration-150 select-none relative cursor-pointer',
                 isActive
                   ? 'text-brand-primary font-bold'
                   : 'text-text-secondary hover:text-text-primary'

@@ -853,13 +853,7 @@ export default function AttendancePage() {
         )}
 
         {/* Global Bottom Tab Bar */}
-        <TabBar
-          activeTab="attendance"
-          onTabChange={(tab) => {
-            if (tab === 'dashboard') router.push('/dashboard');
-            else if (tab === 'members') router.push('/members');
-          }}
-        />
+        <TabBar activeTab="attendance" />
       </div>
     </ProtectedRoute>
   );

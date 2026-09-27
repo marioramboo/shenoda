@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
 import { MobileShell } from '@/components/layout/MobileShell';
 import { AppBar } from '@/components/layout/AppBar';
 import { TabBar, TabKey } from '@/components/layout/TabBar';
@@ -27,6 +29,9 @@ import {
 } from 'lucide-react';
 
 export default function DesignSystemCatalogPage() {
+  const router = useRouter();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+
   const [activeTab, setActiveTab] = useState<TabKey>('dashboard');
   const [selectedStage, setSelectedStage] = useState<string>('stage_prep_boys');
   const [attendanceValue, setAttendanceValue] = useState<AttendanceStatus>('PRESENT');
@@ -39,6 +44,12 @@ export default function DesignSystemCatalogPage() {
     timestamp: string;
   } | null>(null);
   const [healthChecking, setHealthChecking] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      router.replace('/dashboard');
+    }
+  }, [authLoading, isAuthenticated, router]);
 
   // Check backend health endpoint
   const checkHealth = async () => {
@@ -87,7 +98,7 @@ export default function DesignSystemCatalogPage() {
           }
         />
       }
-      footer={<TabBar activeTab={activeTab} onTabChange={setActiveTab} />}
+      footer={<TabBar />}
     >
       <div className="flex flex-col gap-6">
         {/* Phase 2 Auth & Login Banner */}

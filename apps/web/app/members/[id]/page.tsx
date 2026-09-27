@@ -8,6 +8,7 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { MemberEditDrawer } from '@/components/members/MemberEditDrawer';
+import { TabBar } from '@/components/layout/TabBar';
 import { api } from '@/lib/api';
 import {
   ArrowRight,
@@ -113,7 +114,7 @@ export default function MemberProfilePage() {
 
   return (
     <ProtectedRoute>
-      <div dir="rtl" className="min-h-screen bg-bg-app flex flex-col items-center p-4 sm:p-6 pb-20">
+      <div dir="rtl" className="min-h-screen bg-bg-app flex flex-col items-center p-4 sm:p-6 pb-24">
         <div className="w-full max-w-[480px] flex flex-col gap-4">
           {/* Top Bar */}
           <header className="flex items-center justify-between bg-bg-surface border border-border-default rounded-card p-4 shadow-card">
@@ -330,6 +331,9 @@ export default function MemberProfilePage() {
           member={member}
           onSuccess={(updated) => setMember(updated)}
         />
+
+        {/* Global Bottom Tab Bar */}
+        <TabBar activeTab="members" />
       </div>
     </ProtectedRoute>
   );

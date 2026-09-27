@@ -545,13 +545,7 @@ export default function MembersListPage() {
         </div>
 
         {/* Bottom Tab Bar */}
-        <TabBar
-          activeTab="members"
-          onTabChange={(tab) => {
-            if (tab === 'dashboard') router.push('/dashboard');
-            else if (tab === 'attendance') router.push('/attendance');
-          }}
-        />
+        <TabBar activeTab="members" />
       </div>
     </ProtectedRoute>
   );

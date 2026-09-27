@@ -222,7 +222,7 @@ async function main() {
   console.log('✅ 5 Roles and RolePermissionRules seeded');
 
   // 5. Five Demo Users (One for each hierarchical tier)
-  const defaultPasswordHash = '$2b$10$epNz4zP9c8k10.wO7l/Mye8N8b5f3d4c5e6f7g8h9i0j1k2l3m4n5'; // Demo hash
+  const defaultPasswordHash = '$2b$10$L03CLCdPDe2hdW3jIoiLMOD7epUjocc1DZAKtdPeQYOtuKAp3rQy2'; // bcrypt hash of "Demo@123"
 
   // 5.1 General Secretary (Level 5)
   const generalSec = await prisma.user.upsert({
