@@ -91,8 +91,15 @@ export default function AttendancePage() {
   );
 
   // Stage selection (from user scopes)
-  const primaryStageId = user?.scopes.stages[0]?.id || '';
+  const primaryStageId = user?.scopes?.stages?.[0]?.id || '';
   const [selectedStageId, setSelectedStageId] = useState<string>(primaryStageId);
+
+  // Sync selectedStageId when user profile loads asynchronously
+  useEffect(() => {
+    if (user?.scopes?.stages && user.scopes.stages.length > 0 && !selectedStageId) {
+      setSelectedStageId(user.scopes.stages[0].id);
+    }
+  }, [user, selectedStageId]);
 
   // Members list & state
   const [members, setMembers] = useState<MemberItem[]>([]);
@@ -125,9 +132,17 @@ export default function AttendancePage() {
     const fetchMembersAndAttendance = async () => {
       try {
         setIsLoadingMembers(true);
-        // 1. Fetch stage members
-        const membersRes = await api.get(`/api/v1/members?stageId=${selectedStageId}&limit=150`);
-        const rawMembers = membersRes.data?.data || [];
+        // 1. Fetch stage members (Level 1 servant filters assigned members, falls back to stage members)
+        const isServant = user?.role?.level === 1;
+        const assignedParam = isServant ? '&assignedOnly=true' : '';
+        const membersRes = await api.get(`/api/v1/members?stageId=${selectedStageId}&limit=150${assignedParam}`);
+        let rawMembers = membersRes.data?.members || membersRes.data?.data || [];
+
+        // If assignedOnly returned empty for a servant (e.g. not yet assigned), fallback to stage members
+        if (isServant && rawMembers.length === 0) {
+          const allRes = await api.get(`/api/v1/members?stageId=${selectedStageId}&limit=150`);
+          rawMembers = allRes.data?.members || allRes.data?.data || [];
+        }
 
         // 2. Fetch recorded attendance for this date & session
         let existingRecordsMap: Record<string, { status: AttendanceStatus; notes?: string }> = {};
@@ -135,8 +150,9 @@ export default function AttendancePage() {
           const attRes = await api.get(
             `/api/v1/attendance/members?stageId=${selectedStageId}&sessionType=${memberSessionType}&sessionDate=${selectedDate}`
           );
-          if (attRes.data?.data) {
-            for (const r of attRes.data.data) {
+          const attRecords = attRes.data?.data || attRes.data?.records || [];
+          if (Array.isArray(attRecords)) {
+            for (const r of attRecords) {
               existingRecordsMap[r.memberId] = {
                 status: r.status,
                 notes: r.notes || '',
@@ -166,7 +182,7 @@ export default function AttendancePage() {
     };
 
     fetchMembersAndAttendance();
-  }, [selectedStageId, selectedDate, memberSessionType]);
+  }, [selectedStageId, selectedDate, memberSessionType, user]);
 
   // Fetch absence alerts for the stage
   useEffect(() => {

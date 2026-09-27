@@ -127,6 +127,7 @@ export class MemberController {
       count: formatted.length,
       page: pageNum,
       members: formatted,
+      data: formatted,
     });
   }
 
