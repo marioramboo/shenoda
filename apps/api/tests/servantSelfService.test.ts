@@ -341,6 +341,48 @@ describe('Phase 5 — Servant Self-Service: تحضير & Spiritual Life Comprehe
 
       assert.strictEqual(res.status, 403);
     });
+
+    test('1.5 Stage Secretary can reject preparation with feedback returning status to DRAFT -> 200 OK', async () => {
+      const prep = await mockDb.lessonPreparation.create({
+        data: {
+          authorUserId: 'user-servant-a',
+          stageId: 'stage-prep-boys',
+          lessonDate: new Date('2026-10-16'),
+          title: 'درس يوسف الصديق',
+          content: 'مسودة تحتاج تفاصيل إضافية...',
+          status: 'SUBMITTED',
+        },
+      });
+
+      const supervisorToken = makeToken({
+        userId: 'user-stagesec-boys',
+        roleLevel: 3,
+        roleCode: 'STAGE_SECRETARY',
+        stageIds: ['stage-prep-boys'],
+        sectorIds: [],
+      });
+
+      const patchRes = await fetch(`${baseUrl}/api/v1/preparations/${prep.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${supervisorToken}`,
+        },
+        body: JSON.stringify({
+          reviewerNotes: 'يرجى مراجعة وتعديل الشواهد الكتابية وإعادة تقديم الدرس',
+          status: 'DRAFT',
+        }),
+      });
+
+      assert.strictEqual(patchRes.status, 200);
+      const patchData = await patchRes.json();
+      assert.strictEqual(patchData.data.status, 'DRAFT');
+      assert.strictEqual(
+        patchData.data.reviewerNotes,
+        'يرجى مراجعة وتعديل الشواهد الكتابية وإعادة تقديم الدرس'
+      );
+      assert.strictEqual(patchData.data.reviewedById, 'user-stagesec-boys');
+    });
   });
 
   // ------------------------------------------------------------------------

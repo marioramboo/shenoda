@@ -624,5 +624,24 @@ describe('Phase 4 — Attendance & Follow-up (جدول المتابعة) Compreh
       assert.ok(Array.isArray(data.data.records));
       assert.ok(data.data.stats);
     });
+
+    test('5.4 Stage Secretary can list stage servants via GET /api/v1/attendance/servants/list', async () => {
+      const supervisorToken = makeToken({
+        userId: 'user-stagesec-1',
+        roleLevel: 3,
+        roleCode: 'STAGE_SECRETARY',
+        stageIds: ['stage-prep-boys'],
+        sectorIds: [],
+      });
+
+      const res = await fetch(`${baseUrl}/api/v1/attendance/servants/list?stageId=stage-prep-boys`, {
+        headers: { Authorization: `Bearer ${supervisorToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data));
+    });
   });
 });
