@@ -14,6 +14,17 @@ interface MemberEditDrawerProps {
   onSuccess: (updatedMember: any) => void;
 }
 
+const formatDobForInput = (dob?: string | Date | null): string => {
+  if (!dob) return '';
+  if (typeof dob === 'string') {
+    return dob.split('T')[0];
+  }
+  if (dob instanceof Date) {
+    return dob.toISOString().split('T')[0];
+  }
+  return '';
+};
+
 export const MemberEditDrawer: React.FC<MemberEditDrawerProps> = ({
   isOpen,
   onClose,
@@ -30,6 +41,7 @@ export const MemberEditDrawer: React.FC<MemberEditDrawerProps> = ({
 
   // Full fields for Level 2+
   const [fullName, setFullName] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
   const [address, setAddress] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [fatherConfessor, setFatherConfessor] = useState('');
@@ -48,6 +60,7 @@ export const MemberEditDrawer: React.FC<MemberEditDrawerProps> = ({
       setPeerIntegration(member.peerIntegration || '');
 
       setFullName(member.fullName || '');
+      setDateOfBirth(formatDobForInput(member.dateOfBirth));
       setAddress(member.address || '');
       setPhoneNumber(member.phoneNumber || '');
       setFatherConfessor(member.fatherConfessor || '');
@@ -77,6 +90,7 @@ export const MemberEditDrawer: React.FC<MemberEditDrawerProps> = ({
     } else {
       payload = {
         fullName,
+        dateOfBirth: dateOfBirth || null,
         address,
         phoneNumber: phoneNumber || null,
         fatherConfessor: fatherConfessor || null,
@@ -163,14 +177,22 @@ export const MemberEditDrawer: React.FC<MemberEditDrawerProps> = ({
                 <Lock className="w-3.5 h-3.5 text-text-secondary" />
                 <span>البيانات الأساسية (محمية ومقروءة فقط للخادم):</span>
               </span>
-              <div className="text-body-small text-text-primary grid grid-cols-2 gap-2">
+              <div className="text-body-small text-text-primary grid grid-cols-3 gap-2">
                 <div>
-                  <span className="text-caption text-text-secondary block">العنوان:</span>
-                  <span>{member.address || '—'}</span>
+                  <span className="text-caption text-text-secondary block">تاريخ الميلاد:</span>
+                  <span>
+                    {member.dateOfBirth
+                      ? new Date(member.dateOfBirth).toLocaleDateString('ar-EG')
+                      : '—'}
+                  </span>
                 </div>
                 <div>
                   <span className="text-caption text-text-secondary block">رقم الهاتف:</span>
                   <span>{member.phoneNumber || '—'}</span>
+                </div>
+                <div>
+                  <span className="text-caption text-text-secondary block">العنوان:</span>
+                  <span>{member.address || '—'}</span>
                 </div>
               </div>
             </div>
@@ -188,17 +210,26 @@ export const MemberEditDrawer: React.FC<MemberEditDrawerProps> = ({
 
               <div className="grid grid-cols-2 gap-3">
                 <Input
+                  type="date"
+                  label="تاريخ الميلاد"
+                  value={dateOfBirth}
+                  onChange={(e) => setDateOfBirth(e.target.value)}
+                  required
+                />
+                <Input
                   label="رقم الهاتف"
+                  placeholder="01xxxxxxxxx"
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
                 />
-                <Input
-                  label="العنوان"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  required
-                />
               </div>
+
+              <Input
+                label="العنوان"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                required
+              />
 
               <div className="grid grid-cols-2 gap-3">
                 <Input

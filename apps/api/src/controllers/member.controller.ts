@@ -355,14 +355,29 @@ export class MemberController {
       const currentVal = (member as any)[key];
       const newVal = key === 'dateOfBirth' && val ? new Date(val as string) : val;
 
-      if (String(currentVal) !== String(newVal)) {
+      const hasChanged =
+        key === 'dateOfBirth' && currentVal instanceof Date && newVal instanceof Date
+          ? currentVal.getTime() !== newVal.getTime()
+          : String(currentVal ?? '') !== String(newVal ?? '');
+
+      if (hasChanged) {
         updateData[key] = newVal;
         auditLogs.push({
           memberId: member.id,
           changedById: user.userId,
           fieldName: key,
-          oldValue: currentVal != null ? String(currentVal) : null,
-          newValue: newVal != null ? String(newVal) : null,
+          oldValue:
+            currentVal != null
+              ? currentVal instanceof Date
+                ? currentVal.toISOString()
+                : String(currentVal)
+              : null,
+          newValue:
+            newVal != null
+              ? newVal instanceof Date
+                ? newVal.toISOString()
+                : String(newVal)
+              : null,
         });
 
         if (key === 'financialStatus') sensitiveFieldsToLog.push(SensitiveField.FINANCIAL_STATUS);
