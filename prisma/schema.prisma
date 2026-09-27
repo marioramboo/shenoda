@@ -368,6 +368,7 @@ model ServedMember {
   absenceAlerts       AbsenceAlert[]
 
   @@index([stageId])
+  @@index([stageId, fullName])
   @@map("served_members")
 }
 
@@ -508,6 +509,7 @@ model MemberAttendance {
 
   @@unique([memberId, sessionType, sessionDate])
   @@index([stageId, sessionDate])
+  @@index([stageId, sessionDate, sessionType])
   @@index([memberId, sessionDate])
   @@map("member_attendance")
 }

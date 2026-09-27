@@ -22,6 +22,7 @@ import { notificationRouter } from './routes/notification.routes';
 import { analyticsRouter } from './routes/analytics.routes';
 import { reportRouter } from './routes/report.routes';
 import { authenticateJwt } from './middleware/auth';
+import { enforceIdempotency } from './middleware/idempotency';
 
 export const createApp = (beforeRoutesMiddleware?: RequestHandler): Application => {
   const app = express();
@@ -49,6 +50,9 @@ export const createApp = (beforeRoutesMiddleware?: RequestHandler): Application 
 
   // Global JWT authentication middleware (populates req.user if Bearer token present)
   app.use(authenticateJwt);
+
+  // Phase 9: Network resilience & retry-safe idempotency (NFR-4.2)
+  app.use(enforceIdempotency());
 
   // Health check routes
   app.use(healthRouter);

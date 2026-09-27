@@ -1,0 +1,77 @@
+name: Church Service Management System — Production CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate-and-typecheck:
+    name: 1. Lint & Typecheck Sweep
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Monorepo Dependencies
+        run: npm ci
+
+      - name: Monorepo Typecheck
+        run: npm run typecheck
+
+  test-suite:
+    name: 2. Automated Test Suite (Phases 0–9)
+    needs: validate-and-typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Monorepo Dependencies
+        run: npm ci
+
+      - name: Run Backend Integration & Security Tests
+        run: npm run test --workspace=@shenoda/api
+        env:
+          NODE_ENV: test
+          JWT_ACCESS_SECRET: github-actions-ci-secret-2026-coptic
+          JWT_REFRESH_SECRET: github-actions-ci-secret-2026-coptic
+          COOKIE_SECRET: github-actions-ci-cookie-secret
+
+  build-production:
+    name: 3. Production Bundles & Docker Validation
+    needs: test-suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Monorepo Dependencies
+        run: npm ci
+
+      - name: Build Web Application
+        run: npm run build --workspace=@shenoda/web
+        env:
+          NEXT_PUBLIC_API_URL: https://api.shenoda.church
+
+      - name: Build API Backend
+        run: npm run build --workspace=@shenoda/api
