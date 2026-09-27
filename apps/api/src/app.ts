@@ -14,6 +14,11 @@ import { attendanceRouter } from './routes/attendance.routes';
 import { preparationRouter } from './routes/preparation.routes';
 import { spiritualLifeRouter } from './routes/spiritualLife.routes';
 import { dashboardRouter } from './routes/dashboard.routes';
+import yearPlanRouter from './routes/yearPlan.routes';
+import calendarRouter from './routes/calendar.routes';
+import { announcementRouter } from './routes/announcement.routes';
+import { pollRouter } from './routes/poll.routes';
+import { notificationRouter } from './routes/notification.routes';
 import { authenticateJwt } from './middleware/auth';
 
 export const createApp = (beforeRoutesMiddleware?: RequestHandler): Application => {
@@ -77,6 +82,22 @@ export const createApp = (beforeRoutesMiddleware?: RequestHandler): Application 
   app.use('/api/spiritual-life', spiritualLifeRouter);
   app.use('/api/v1/dashboard', dashboardRouter);
   app.use('/api/dashboard', dashboardRouter);
+
+  // Phase 6: Year Plan & Calendar routes (FR-7.1, FR-7.2, FR-7.4, FR-12.1, FR-12.2)
+  app.use('/api/v1/year-plans', yearPlanRouter);
+  app.use('/api/year-plans', yearPlanRouter);
+  app.use('/api/v1/calendar', calendarRouter);
+  app.use('/api/calendar', calendarRouter);
+  app.use('/api/v1/events', calendarRouter);
+  app.use('/api/events', calendarRouter);
+
+  // Phase 7: Announcements, Polls & Notifications (FR-9.1, FR-9.2, FR-10.1, FR-10.2, FR-10.3, FR-11.1–11.4)
+  app.use('/api/v1/announcements', announcementRouter);
+  app.use('/api/announcements', announcementRouter);
+  app.use('/api/v1/polls', pollRouter);
+  app.use('/api/polls', pollRouter);
+  app.use('/api/v1/notifications', notificationRouter);
+  app.use('/api/notifications', notificationRouter);
 
   // Root welcome route
   app.get('/', (_req: Request, res: Response) => {

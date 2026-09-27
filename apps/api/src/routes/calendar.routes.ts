@@ -1,0 +1,20 @@
+import { Router } from 'express';
+import { requireAuth } from '../middleware/auth';
+import { CalendarController } from '../controllers/calendar.controller';
+
+const router = Router();
+
+router.use(requireAuth);
+
+// Calendar Events Listing & Details (FR-12.1)
+router.get('/', CalendarController.getCalendarEvents);
+router.get('/:id', CalendarController.getEventById);
+
+// Volunteer Opt-In & Withdrawal (FR-7.2)
+router.post('/:id/volunteer', CalendarController.volunteerForEvent);
+router.delete('/:id/volunteer', CalendarController.withdrawVolunteer);
+
+// Attendance Verification Bridge into جدول المتابعة (FR-12.2)
+router.post('/:id/confirm-attendance', CalendarController.confirmAttendance);
+
+export default router;

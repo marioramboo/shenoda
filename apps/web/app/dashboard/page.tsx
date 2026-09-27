@@ -31,6 +31,7 @@ import {
   Sparkles,
   ExternalLink,
   ClipboardList,
+  Megaphone,
 } from 'lucide-react';
 
 interface ServantDashboardData {
@@ -163,7 +164,7 @@ export default function DashboardPage() {
   const handleTabChange = (tab: string) => {
     if (tab === 'members') router.push('/members');
     else if (tab === 'attendance') router.push('/attendance');
-    else if (tab === 'plan') router.push('/preparations');
+    else if (tab === 'plan') router.push('/year-plan');
   };
 
   return (
@@ -440,6 +441,23 @@ export default function DashboardPage() {
                   رصد الغياب وبطاقات الافتقاد
                 </p>
               </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => router.push('/announcements')}
+              className="col-span-2 p-4 bg-bg-surface border border-border-default rounded-card shadow-card flex items-center gap-3 hover:border-brand-accent transition-all text-right group"
+            >
+              <div className="w-10 h-10 rounded-lg bg-brand-accent-soft text-brand-accent flex items-center justify-center group-hover:scale-105 transition-transform shrink-0">
+                <Megaphone className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <h4 className="text-body-default font-bold text-text-primary">الإعلانات واستطلاعات الرأي</h4>
+                <p className="text-[11px] text-text-secondary mt-0.5">
+                  البيانات الرسمية وقرارات الخدمة والتصويت التفاعلي
+                </p>
+              </div>
+              <ChevronLeft className="w-4 h-4 text-text-secondary group-hover:text-brand-accent transition-colors" />
             </button>
           </section>
 
