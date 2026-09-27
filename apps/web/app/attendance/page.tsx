@@ -64,9 +64,31 @@ interface AbsenceAlertItem {
   resolutionNotes?: string;
 }
 
+export interface StageServantItem {
+  id: string;
+  fullName: string;
+  phoneNumber?: string;
+  email?: string;
+  role: {
+    id: string;
+    name: string;
+    code: string;
+    level: number;
+  };
+  stats?: {
+    attendanceRatePercentage: number;
+    presentCount: number;
+    absentCount: number;
+    excusedCount: number;
+    totalSessions: number;
+  };
+}
+
 export default function AttendancePage() {
   const { user } = useAuth();
   const router = useRouter();
+
+  const isSupervisor = Boolean(user && user.role && user.role.level >= 3);
 
   // Active top view tab: 'members' (تسجيل حضور المخدومين) | 'servants' (متابعة الخدام) | 'alerts' (تنبيهات الافتقاد)
   const [activeView, setActiveView] = useState<'members' | 'servants' | 'alerts'>('members');
@@ -124,6 +146,32 @@ export default function AttendancePage() {
   const [servantRecords, setServantRecords] = useState<FollowUpRecord[]>([]);
   const [servantStats, setServantStats] = useState<any>(null);
   const [isLoadingServants, setIsLoadingServants] = useState(false);
+
+  // Stage Servants List & Supervision (Level 3+)
+  const [stageServants, setStageServants] = useState<StageServantItem[]>([]);
+  const [selectedServantId, setSelectedServantId] = useState<string | null>(null);
+  const [isLoadingServantsList, setIsLoadingServantsList] = useState(false);
+
+  // Servant attendance recording modal (Level 3+)
+  const [isRecordServantModalOpen, setIsRecordServantModalOpen] = useState(false);
+  const [recordServantDate, setRecordServantDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [recordServantSessionType, setRecordServantSessionType] = useState<ServantSessionType>(ServantSessionType.SERVICE_ATTENDANCE);
+  const [recordServantStatus, setRecordServantStatus] = useState<AttendanceStatus>('PRESENT');
+  const [recordServantNotes, setRecordServantNotes] = useState('');
+  const [isSavingServantAttendance, setIsSavingServantAttendance] = useState(false);
+  const [servantFeedbackMessage, setServantFeedbackMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Active selected servant object
+  const selectedServant = useMemo(() => {
+    if (!selectedServantId) return null;
+    return stageServants.find((s) => s.id === selectedServantId) || null;
+  }, [stageServants, selectedServantId]);
+
+  // Allowed sessions for the selected servant (or current user)
+  const allowedServantSessions = useMemo(() => {
+    const level = selectedServant?.role?.level || user?.role?.level || 1;
+    return getAllowedSessionsForRole(level);
+  }, [selectedServant, user]);
 
   // Fetch members & initial attendance records for selected stage & date
   useEffect(() => {
@@ -205,27 +253,112 @@ export default function AttendancePage() {
     fetchAlerts();
   }, [selectedStageId]);
 
-  // Fetch servant history if on servants tab
+  // Fetch servants list for supervisor (Level 3+)
+  const fetchStageServants = async () => {
+    if (!selectedStageId) return;
+    try {
+      setIsLoadingServantsList(true);
+      const res = await api.get(`/api/v1/attendance/servants/list?stageId=${selectedStageId}`);
+      if (res.data?.success && Array.isArray(res.data.data)) {
+        const servantsData: StageServantItem[] = res.data.data;
+        setStageServants(servantsData);
+
+        // If no servant currently selected, select the first subordinate servant or first servant
+        if (!selectedServantId && servantsData.length > 0) {
+          const firstSubordinate = servantsData.find((s) => s.id !== user?.id) || servantsData[0];
+          setSelectedServantId(firstSubordinate.id);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load stage servants:', err);
+    } finally {
+      setIsLoadingServantsList(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeView === 'servants' && isSupervisor) {
+      fetchStageServants();
+    }
+  }, [activeView, selectedStageId, isSupervisor]);
+
+  // Fetch servant history for selected servant (or self if servant)
+  const fetchServantHistory = async (targetId?: string) => {
+    const idToFetch = targetId || selectedServantId || user?.id;
+    if (!idToFetch) return;
+
+    try {
+      setIsLoadingServants(true);
+      const queryParam = idToFetch ? `?servantUserId=${idToFetch}` : '';
+      const res = await api.get(`/api/v1/attendance/servants/history${queryParam}`);
+      if (res.data?.data) {
+        setServantRecords(res.data.data.records || []);
+        setServantStats(res.data.data.stats || null);
+      }
+    } catch (err) {
+      console.error('Failed to load servant follow-up history:', err);
+    } finally {
+      setIsLoadingServants(false);
+    }
+  };
+
   useEffect(() => {
     if (activeView !== 'servants') return;
+    const targetId = isSupervisor ? (selectedServantId || user?.id) : user?.id;
+    if (targetId) {
+      fetchServantHistory(targetId);
+    }
+  }, [activeView, selectedServantId, isSupervisor, user?.id]);
 
-    const fetchServantHistory = async () => {
-      try {
-        setIsLoadingServants(true);
-        const res = await api.get('/api/v1/attendance/servants/history');
-        if (res.data?.data) {
-          setServantRecords(res.data.data.records || []);
-          setServantStats(res.data.data.stats || null);
-        }
-      } catch (err) {
-        console.error('Failed to load servant follow-up history:', err);
-      } finally {
-        setIsLoadingServants(false);
+  // Save Supervisor Recording Servant Attendance
+  const handleSaveServantAttendance = async () => {
+    if (!selectedServantId) return;
+    setServantFeedbackMessage(null);
+
+    if (selectedServantId === user?.id) {
+      setServantFeedbackMessage({
+        type: 'error',
+        text: 'لا يمكن تسجيل الحضور لنفسك. تسجل متابعتك بواسطة المشرف المسؤول.',
+      });
+      return;
+    }
+
+    try {
+      setIsSavingServantAttendance(true);
+      const res = await api.post('/api/v1/attendance/servants/batch', {
+        stageId: selectedStageId,
+        sessionType: recordServantSessionType,
+        sessionDate: recordServantDate,
+        records: [
+          {
+            servantUserId: selectedServantId,
+            status: recordServantStatus,
+            notes: recordServantNotes.trim() || undefined,
+          },
+        ],
+      });
+
+      if (res.data?.success) {
+        setServantFeedbackMessage({
+          type: 'success',
+          text: `تم تسجيل حضور الخادم (${selectedServant?.fullName}) بنجاح!`,
+        });
+        setIsRecordServantModalOpen(false);
+        setRecordServantNotes('');
+        await fetchServantHistory(selectedServantId);
+        await fetchStageServants();
+        setTimeout(() => setServantFeedbackMessage(null), 4000);
       }
-    };
-
-    fetchServantHistory();
-  }, [activeView]);
+    } catch (err: any) {
+      console.error('Failed to record servant attendance:', err);
+      setServantFeedbackMessage({
+        type: 'error',
+        text: err.response?.data?.error?.message || 'حدث خطأ أثناء حفظ حضور الخادم',
+      });
+    } finally {
+      setIsSavingServantAttendance(false);
+    }
+  };
 
   // Date jump helpers
   const handleDateShift = (days: number) => {
@@ -377,10 +510,6 @@ export default function AttendancePage() {
       setIsResolvingAlert(false);
     }
   };
-
-  const allowedServantSessions = useMemo(() => {
-    return getAllowedSessionsForRole(user?.role.level || 1);
-  }, [user?.role.level]);
 
   return (
     <ProtectedRoute>
@@ -660,9 +789,135 @@ export default function AttendancePage() {
           {/* VIEW 2: SERVANT FOLLOW-UP HISTORY (متابعة الخدام) */}
           {activeView === 'servants' && (
             <div className="space-y-4">
+              {/* Feedback Toast */}
+              {servantFeedbackMessage && (
+                <div
+                  className={cn(
+                    'p-3.5 rounded-card flex items-center gap-2 text-body-small border',
+                    servantFeedbackMessage.type === 'success'
+                      ? 'bg-status-success-soft text-status-success border-status-success/30'
+                      : 'bg-status-danger-soft text-status-danger border-status-danger/30'
+                  )}
+                >
+                  {servantFeedbackMessage.type === 'success' ? (
+                    <CheckCircle className="w-5 h-5 shrink-0" />
+                  ) : (
+                    <AlertTriangle className="w-5 h-5 shrink-0" />
+                  )}
+                  <span className="font-semibold">{servantFeedbackMessage.text}</span>
+                </div>
+              )}
+
+              {/* Supervisor Servant Selector Carousel */}
+              {isSupervisor && (
+                <div className="bg-bg-surface rounded-card p-4 border border-border-default shadow-card space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Users className="w-5 h-5 text-brand-primary" />
+                      <h3 className="text-body font-bold text-text-primary">
+                        خدام المرحلة ({stageServants.length})
+                      </h3>
+                    </div>
+                    <span className="text-caption text-text-secondary">
+                      اختر خادماً لعرض سجله أو تسجيل حضوره
+                    </span>
+                  </div>
+
+                  {isLoadingServantsList ? (
+                    <div className="text-center py-4 text-caption text-text-secondary">
+                      جارٍ تحميل قائمة خدام المرحلة...
+                    </div>
+                  ) : stageServants.length === 0 ? (
+                    <p className="text-caption text-text-secondary text-center py-2">
+                      لا يوجد خدام مسجلين في هذه المرحلة حالياً
+                    </p>
+                  ) : (
+                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
+                      {stageServants.map((s) => {
+                        const isSelected = (selectedServantId || user?.id) === s.id;
+                        const isSelf = s.id === user?.id;
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => setSelectedServantId(s.id)}
+                            className={cn(
+                              'flex flex-col items-center gap-1.5 p-2.5 rounded-card border min-w-[110px] max-w-[130px] shrink-0 text-center transition-all',
+                              isSelected
+                                ? 'bg-brand-primary/10 border-brand-primary shadow-sm ring-1 ring-brand-primary'
+                                : 'bg-bg-muted/50 border-border-default hover:bg-bg-muted'
+                            )}
+                          >
+                            <div
+                              className={cn(
+                                'w-9 h-9 rounded-full flex items-center justify-center font-bold text-caption',
+                                isSelected
+                                ? 'bg-brand-primary text-white'
+                                : 'bg-bg-surface text-text-primary border border-border-default'
+                              )}
+                            >
+                              {s.fullName.charAt(0)}
+                            </div>
+                            <span className="text-caption font-bold text-text-primary truncate w-full">
+                              {s.fullName.split(' ')[0]} {s.fullName.split(' ')[1] || ''}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-surface border border-border-default text-text-secondary">
+                                {isSelf ? 'أنت' : s.role.name}
+                              </span>
+                              {s.stats && (
+                                <span className="text-[10px] font-bold text-status-success">
+                                  {s.stats.attendanceRatePercentage}%
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Action button to record attendance for the selected subordinate */}
+                  {selectedServantId && selectedServantId !== user?.id && (
+                    <div className="pt-2 border-t border-border-default flex items-center justify-between">
+                      <span className="text-caption text-text-secondary">
+                        متابعة: <strong className="text-text-primary">{selectedServant?.fullName}</strong>
+                      </span>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => {
+                          setRecordServantNotes('');
+                          setIsRecordServantModalOpen(true);
+                        }}
+                        className="h-8 px-3 text-caption font-semibold gap-1.5"
+                      >
+                        <UserCheck className="w-4 h-4" />
+                        <span>تسجيل حضور الخادم</span>
+                      </Button>
+                    </div>
+                  )}
+
+                  {selectedServantId && selectedServantId === user?.id && (
+                    <div className="pt-2 border-t border-border-default text-caption text-text-secondary">
+                      (سجلك الشخصي كأمين خدمة — للقراءة فقط، يسجل بمعرفة الأمانة العامة)
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* FollowUpTable Component */}
               <FollowUpTable
-                servantName={user?.fullName || 'الخادم'}
-                roleName={user?.role.name}
+                servantName={
+                  isSupervisor
+                    ? selectedServant?.fullName || user?.fullName || 'الخادم'
+                    : user?.fullName || 'الخادم'
+                }
+                roleName={
+                  isSupervisor
+                    ? selectedServant?.role?.name || user?.role?.name
+                    : user?.role?.name
+                }
                 records={servantRecords}
                 allowedSessions={allowedServantSessions}
                 stats={servantStats}
@@ -860,6 +1115,143 @@ export default function AttendancePage() {
                   fullWidth
                   onClick={() => setResolveModalAlert(null)}
                   className="h-[40px]"
+                >
+                  إلغاء
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Supervisor Records Servant Attendance */}
+        {isRecordServantModalOpen && selectedServant && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-bg-surface border border-border-default rounded-card w-full max-w-md p-5 shadow-elevated text-right space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-border-default">
+                <div>
+                  <h3 className="text-h2 font-bold text-text-primary">
+                    تسجيل حضور خادم
+                  </h3>
+                  <p className="text-caption text-text-secondary mt-0.5">
+                    الخادم: <span className="font-bold text-brand-primary">{selectedServant.fullName}</span> ({selectedServant.role.name})
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsRecordServantModalOpen(false)}
+                  className="p-1 rounded-full hover:bg-bg-muted text-text-secondary"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {/* Session Type */}
+                <div>
+                  <label className="text-caption font-semibold text-text-secondary block mb-1">
+                    نوع النشاط / الجلسة
+                  </label>
+                  <select
+                    value={recordServantSessionType}
+                    onChange={(e) => setRecordServantSessionType(e.target.value as ServantSessionType)}
+                    className="w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary"
+                  >
+                    {allowedServantSessions.map((st) => (
+                      <option key={st} value={st}>
+                        {SERVANT_SESSION_LABELS[st]?.ar || st}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Date */}
+                <div>
+                  <label className="text-caption font-semibold text-text-secondary block mb-1">
+                    تاريخ الجلسة
+                  </label>
+                  <Input
+                    type="date"
+                    value={recordServantDate}
+                    onChange={(e) => setRecordServantDate(e.target.value)}
+                  />
+                </div>
+
+                {/* Status Selection */}
+                <div>
+                  <label className="text-caption font-semibold text-text-secondary block mb-1.5">
+                    حالة الحضور
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setRecordServantStatus('PRESENT')}
+                      className={cn(
+                        'py-2 px-3 rounded-card text-caption font-bold border transition-all text-center',
+                        recordServantStatus === 'PRESENT'
+                          ? 'bg-status-success text-white border-status-success shadow-sm'
+                          : 'bg-bg-muted text-text-secondary border-border-default hover:bg-bg-muted/80'
+                      )}
+                    >
+                      حاضر
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRecordServantStatus('EXCUSED')}
+                      className={cn(
+                        'py-2 px-3 rounded-card text-caption font-bold border transition-all text-center',
+                        recordServantStatus === 'EXCUSED'
+                          ? 'bg-status-warning text-white border-status-warning shadow-sm'
+                          : 'bg-bg-muted text-text-secondary border-border-default hover:bg-bg-muted/80'
+                      )}
+                    >
+                      معتذر
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRecordServantStatus('ABSENT')}
+                      className={cn(
+                        'py-2 px-3 rounded-card text-caption font-bold border transition-all text-center',
+                        recordServantStatus === 'ABSENT'
+                          ? 'bg-status-danger text-white border-status-danger shadow-sm'
+                          : 'bg-bg-muted text-text-secondary border-border-default hover:bg-bg-muted/80'
+                      )}
+                    >
+                      غائب
+                    </button>
+                  </div>
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <label className="text-caption font-semibold text-text-secondary block mb-1">
+                    ملاحظات وتوجيهات المشرف (اختياري)
+                  </label>
+                  <textarea
+                    value={recordServantNotes}
+                    onChange={(e) => setRecordServantNotes(e.target.value)}
+                    placeholder="مثال: تم إبلاغ الخادم مسبقاً، أو اعتذر لظروف امتحانات..."
+                    rows={2}
+                    className="w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2 border-t border-border-default">
+                <Button
+                  variant="primary"
+                  fullWidth
+                  isLoading={isSavingServantAttendance}
+                  onClick={handleSaveServantAttendance}
+                  className="h-[40px] font-semibold text-caption"
+                >
+                  حفظ الحضور
+                </Button>
+                <Button
+                  variant="outline"
+                  fullWidth
+                  disabled={isSavingServantAttendance}
+                  onClick={() => setIsRecordServantModalOpen(false)}
+                  className="h-[40px] text-text-secondary hover:text-text-primary text-caption"
                 >
                   إلغاء
                 </Button>

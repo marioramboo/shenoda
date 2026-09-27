@@ -291,4 +291,81 @@ export class ServantAttendanceController {
       timestamp: new Date().toISOString(),
     });
   }
+
+  /**
+   * GET /api/v1/attendance/servants/list
+   * Lists servants in the requested or permitted stage with their attendance stats.
+   */
+  static async listServants(req: Request, res: Response) {
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'AUTH_REQUIRED', message: 'Authentication required' },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const { stageId } = req.query;
+    const targetStageId = (stageId as string) || (user.stageIds && user.stageIds[0]);
+
+    if (!targetStageId && user.roleLevel < 4) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'STAGE_ID_REQUIRED', message: 'stageId query parameter is required' },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // Find all users who are assigned to this stage
+    const scopeAssignments = await prisma.scopeAssignment.findMany({
+      where: targetStageId ? { stageId: targetStageId } : {},
+      include: {
+        user: {
+          include: {
+            role: true,
+          },
+        },
+      },
+    });
+
+    // Extract unique active users
+    const userMap = new Map<string, any>();
+    for (const sa of scopeAssignments) {
+      if (sa.user && sa.user.status === 'ACTIVE' && !userMap.has(sa.user.id)) {
+        userMap.set(sa.user.id, sa.user);
+      }
+    }
+
+    const servants = Array.from(userMap.values());
+
+    // Enrich each servant with attendance stats
+    const enrichedServants = await Promise.all(
+      servants.map(async (s) => {
+        const stats = await calculateServantAttendanceRate(s.id, 8);
+        return {
+          id: s.id,
+          fullName: s.fullName,
+          phoneNumber: s.phoneNumber,
+          email: s.email,
+          role: {
+            id: s.role.id,
+            name: s.role.name,
+            code: s.role.code,
+            level: s.role.level,
+          },
+          stats,
+        };
+      })
+    );
+
+    // Sort by role level descending
+    enrichedServants.sort((a, b) => b.role.level - a.role.level);
+
+    return res.status(200).json({
+      success: true,
+      data: enrichedServants,
+      timestamp: new Date().toISOString(),
+    });
+  }
 }

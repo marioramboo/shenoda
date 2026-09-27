@@ -20,6 +20,7 @@ import {
   FileText,
   Paperclip,
   CheckCircle2,
+  XCircle,
   Clock,
   MessageSquare,
   Search,
@@ -153,15 +154,20 @@ export default function PreparationsPage() {
     }
   };
 
-  // Handle Review Submit (Supervisor feedback)
-  const handleConfirmReview = async () => {
+  // Handle Review Submit (Supervisor approval or rejection)
+  const handleReview = async (action: 'APPROVE' | 'REJECT') => {
     if (!reviewModalPrep) return;
 
     try {
       setIsReviewing(true);
+      const isApproved = action === 'APPROVE';
+      const defaultNote = isApproved
+        ? 'تم الاطلاع واعتماد التحضير'
+        : 'يرجى مراجعة وتعديل محتوى الدرس وإعادة تقديمه';
+
       const res = await api.patch(`/api/v1/preparations/${reviewModalPrep.id}`, {
-        reviewerNotes: reviewerNotes.trim() || 'تم الاطلاع والاعتماد',
-        status: PrepStatus.REVIEWED,
+        reviewerNotes: reviewerNotes.trim() || defaultNote,
+        status: isApproved ? PrepStatus.REVIEWED : PrepStatus.DRAFT,
       });
 
       if (res.data?.success) {
@@ -524,21 +530,38 @@ export default function PreparationsPage() {
                 />
               </div>
 
-              <div className="flex items-center gap-2 pt-1">
+              <div className="flex flex-col sm:flex-row items-center gap-2 pt-2 border-t border-border-default">
+                {/* 1. زر الموافقة */}
                 <Button
                   variant="primary"
                   fullWidth
                   isLoading={isReviewing}
-                  onClick={handleConfirmReview}
-                  className="h-[40px]"
+                  onClick={() => handleReview('APPROVE')}
+                  className="h-[40px] bg-status-success hover:bg-status-success/90 text-white gap-1.5 font-semibold text-caption"
                 >
-                  اعتماد ومراجعة
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>موافقة واعتماد</span>
                 </Button>
+
+                {/* 2. زر الرفض */}
                 <Button
                   variant="outline"
                   fullWidth
+                  isLoading={isReviewing}
+                  onClick={() => handleReview('REJECT')}
+                  className="h-[40px] text-status-danger border-[#F5C2BE] hover:bg-status-danger-soft gap-1.5 font-semibold text-caption"
+                >
+                  <XCircle className="w-4 h-4" />
+                  <span>رفض (طلب إعادة التحضير)</span>
+                </Button>
+
+                {/* 3. زر الإلغاء */}
+                <Button
+                  variant="outline"
+                  fullWidth
+                  disabled={isReviewing}
                   onClick={() => setReviewModalPrep(null)}
-                  className="h-[40px]"
+                  className="h-[40px] text-text-secondary hover:text-text-primary text-caption"
                 >
                   إلغاء
                 </Button>

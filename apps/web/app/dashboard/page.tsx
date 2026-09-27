@@ -489,31 +489,59 @@ export default function DashboardPage() {
                   <Shield className="w-5 h-5 text-brand-accent" />
                   <h3 className="text-h2 font-bold text-text-primary">إدارة الخدمة والخدام</h3>
                 </div>
-                <Badge variant="accent">أمين المرحلة</Badge>
+                <Badge variant="accent">
+                  {user.role.level >= 5 ? 'الأمانة العامة' : 'أمين المرحلة'}
+                </Badge>
               </div>
 
               <p className="text-body-small text-text-secondary leading-relaxed">
-                بصفتك ({user.role.name})، يمكنك إنشاء وتفعيل حسابات الخدام ومراجعة تحضيرات المرحلة.
+                {user.role.level >= 5
+                  ? `بصفتك (${user.role.name})، يمكنك إنشاء وتفعيل حسابات الخدام ونقلهم وإدارتهم شاملاً.`
+                  : `بصفتك (${user.role.name})، يمكنك مراجعة تحضيرات خدام المرحلة ومتابعة حضورهم وتقييمهم.`}
               </p>
 
               <div className="flex items-center gap-2">
-                <Button
-                  variant="primary"
-                  onClick={() => setIsCreateModalOpen(true)}
-                  className="flex-1 h-[40px] gap-1.5 font-semibold text-caption"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  <span>إضافة خادم جديد</span>
-                </Button>
+                {user.role.level >= 5 ? (
+                  <>
+                    <Button
+                      variant="primary"
+                      onClick={() => setIsCreateModalOpen(true)}
+                      className="flex-1 h-[40px] gap-1.5 font-semibold text-caption"
+                    >
+                      <UserPlus className="w-4 h-4" />
+                      <span>إضافة خادم جديد</span>
+                    </Button>
 
-                <Button
-                  variant="outline"
-                  onClick={() => router.push('/preparations')}
-                  className="flex-1 h-[40px] gap-1.5 font-semibold text-caption"
-                >
-                  <BookOpen className="w-4 h-4" />
-                  <span>مراجعة التحضيرات</span>
-                </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => router.push('/preparations')}
+                      className="flex-1 h-[40px] gap-1.5 font-semibold text-caption"
+                    >
+                      <BookOpen className="w-4 h-4" />
+                      <span>مراجعة التحضيرات</span>
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      variant="primary"
+                      onClick={() => router.push('/preparations')}
+                      className="flex-1 h-[40px] gap-1.5 font-semibold text-caption"
+                    >
+                      <BookOpen className="w-4 h-4" />
+                      <span>مراجعة التحضيرات</span>
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      onClick={() => router.push('/attendance')}
+                      className="flex-1 h-[40px] gap-1.5 font-semibold text-caption"
+                    >
+                      <Users className="w-4 h-4" />
+                      <span>متابعة جدول الخدام</span>
+                    </Button>
+                  </>
+                )}
               </div>
             </section>
           )}

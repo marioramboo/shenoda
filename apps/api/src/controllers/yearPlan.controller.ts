@@ -347,10 +347,12 @@ export class YearPlanController {
         sectorId = plan.sectorId,
       } = req.body;
 
-      if (!title || !category || !startDate || !endDate) {
+      const resolvedEndDate = endDate || startDate;
+
+      if (!title || !category || !startDate) {
         return res.status(400).json({
           success: false,
-          error: { code: 'ERR_VALIDATION', message: 'title, category, startDate and endDate are required' },
+          error: { code: 'ERR_VALIDATION', message: 'title, category and startDate are required' },
           timestamp: new Date().toISOString(),
         });
       }
@@ -364,7 +366,7 @@ export class YearPlanController {
           description: description || null,
           category: category as any,
           startDate: new Date(startDate),
-          endDate: new Date(endDate),
+          endDate: new Date(resolvedEndDate),
           location: location || null,
           maxVolunteers: maxVolunteers ? Number(maxVolunteers) : null,
           createdById: user.userId,

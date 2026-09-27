@@ -20,6 +20,7 @@ attendanceRouter.get('/members/:memberId/stats', MemberAttendanceController.getM
 // SERVANT ATTENDANCE (الخدام والأمناء - جدول المتابعة)
 // -------------------------------------------------------------
 attendanceRouter.post('/servants/batch', ServantAttendanceController.recordBatch);
+attendanceRouter.get('/servants/list', ServantAttendanceController.listServants);
 attendanceRouter.get('/servants/history', ServantAttendanceController.getHistory);
 attendanceRouter.get('/servants/allowed-sessions', ServantAttendanceController.getAllowedSessions);
 

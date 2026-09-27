@@ -8,7 +8,12 @@ import { PollCard, PollItem } from '@/components/polls/PollCard';
 import { NotificationDrawer } from '@/components/layout/NotificationDrawer';
 import { TabBar } from '@/components/layout/TabBar';
 import { api } from '@/lib/api';
-import { TargetScopeLevel } from '@shenoda/shared';
+enum TargetScopeLevel {
+  STAGE_SUBSET = 'STAGE_SUBSET',
+  STAGE_ALL = 'STAGE_ALL',
+  SECTOR_ALL = 'SECTOR_ALL',
+  ORG_ALL = 'ORG_ALL',
+}
 import {
   Megaphone,
   Vote,
