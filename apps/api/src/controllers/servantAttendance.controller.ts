@@ -1,0 +1,294 @@
+import { Request, Response } from 'express';
+import { prisma } from '../config/prisma';
+import {
+  ServantSessionType,
+  getAllowedSessionsForRole,
+} from '@shenoda/shared';
+import { AttendanceStatus as PrismaAttendanceStatus } from '@prisma/client';
+import { calculateServantAttendanceRate } from '../services/attendanceAnalytics.service';
+
+export class ServantAttendanceController {
+  /**
+   * POST /api/v1/attendance/servants/batch (FR-4.1 & Assumption A4)
+   * Supervisor records or updates attendance for subordinates.
+   * Self-attendance is strictly rejected with 403 (ERR_CANNOT_SELF_RECORD_ATTENDANCE).
+   */
+  static async recordBatch(req: Request, res: Response) {
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'AUTH_REQUIRED', message: 'Authentication required' },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const { sessionType, sessionDate, stageId, records } = req.body;
+
+    if (!sessionType || !sessionDate || !Array.isArray(records) || records.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_REQUEST',
+          message: 'sessionType, sessionDate, and a non-empty records array are required',
+        },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // 1. Strict Self-Recording Prevention Check (FR-4.1 & §3.1.2)
+    const containsSelf = records.some((r: any) => r.servantUserId === user.userId);
+    if (containsSelf) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'ERR_CANNOT_SELF_RECORD_ATTENDANCE',
+          message: 'Servants and secretaries cannot record or edit their own attendance. Attendance must be logged by a supervisor.',
+        },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // Operator must be at least Level 3 (Stage Secretary) to record any servant attendance
+    if (user.roleLevel < 3) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'ERR_INSUFFICIENT_SUPERVISORY_LEVEL',
+          message: 'Only supervising secretaries (Level 3+) can record servant attendance',
+        },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const parsedDate = new Date(sessionDate);
+    parsedDate.setUTCHours(0, 0, 0, 0);
+
+    const savedRecords: any[] = [];
+
+    // Process each record within hierarchy and Assumption A4 session checks
+    for (const item of records) {
+      if (!item.servantUserId || !item.status) continue;
+
+      const targetUser = await prisma.user.findUnique({
+        where: { id: item.servantUserId },
+        include: {
+          role: true,
+          scopeAssignments: {
+            include: { stage: true, sector: true },
+          },
+        },
+      });
+
+      if (!targetUser) {
+        return res.status(404).json({
+          success: false,
+          error: {
+            code: 'USER_NOT_FOUND',
+            message: `Servant with ID ${item.servantUserId} not found`,
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const targetRoleLevel = targetUser.role.level;
+
+      // 2. Hierarchy Supervision Authorization Check
+      // - Level 1 & 2 (خادم ومساعد): Operator must be Level 3+
+      if (targetRoleLevel <= 2) {
+        if (user.roleLevel < 3) {
+          return res.status(403).json({
+            success: false,
+            error: {
+              code: 'SUPERVISOR_LEVEL_MISMATCH',
+              message: 'Attendance for servants or assistant secretaries must be logged by Stage Secretary (Level 3) or above',
+            },
+            timestamp: new Date().toISOString(),
+          });
+        }
+        // If operator is Level 3, ensure same stage scope
+        if (user.roleLevel === 3 && stageId && !user.stageIds.includes(stageId)) {
+          return res.status(403).json({
+            success: false,
+            error: {
+              code: 'STAGE_SCOPE_MISMATCH',
+              message: 'Stage Secretary can only record attendance for servants within their stage',
+            },
+            timestamp: new Date().toISOString(),
+          });
+        }
+      }
+      // - Level 3 (امين الخدمة): Operator must be Level 4+ (Sector Secretary)
+      else if (targetRoleLevel === 3) {
+        if (user.roleLevel < 4) {
+          return res.status(403).json({
+            success: false,
+            error: {
+              code: 'SUPERVISOR_LEVEL_MISMATCH',
+              message: 'Attendance for Stage Secretaries must be logged by Sector Secretary (Level 4) or above',
+            },
+            timestamp: new Date().toISOString(),
+          });
+        }
+      }
+      // - Level 4 (امين قطاع): Operator must be Level 5 (General Secretary)
+      else if (targetRoleLevel === 4) {
+        if (user.roleLevel < 5) {
+          return res.status(403).json({
+            success: false,
+            error: {
+              code: 'SUPERVISOR_LEVEL_MISMATCH',
+              message: 'Attendance for Sector Secretaries must be logged by General Secretary (Level 5)',
+            },
+            timestamp: new Date().toISOString(),
+          });
+        }
+      } else {
+        return res.status(403).json({
+          success: false,
+          error: {
+            code: 'CANNOT_RECORD_FOR_ROLE',
+            message: 'Attendance cannot be recorded for General Secretary',
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      // 3. Assumption A4 Session Allowance Check
+      const allowedSessions = getAllowedSessionsForRole(targetRoleLevel);
+      if (!allowedSessions.includes(sessionType as ServantSessionType)) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'ERR_SESSION_TYPE_NOT_ALLOWED_FOR_ROLE',
+            message: `Session type ${sessionType} is not permitted for role ${targetUser.role.name} (Assumption A4)`,
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const upserted = await prisma.servantAttendance.upsert({
+        where: {
+          servantUserId_sessionType_sessionDate: {
+            servantUserId: item.servantUserId,
+            sessionType: sessionType as ServantSessionType,
+            sessionDate: parsedDate,
+          },
+        },
+        update: {
+          status: item.status as PrismaAttendanceStatus,
+          notes: item.notes !== undefined ? item.notes : null,
+          recordedById: user.userId,
+        },
+        create: {
+          servantUserId: item.servantUserId,
+          stageId: stageId || null,
+          sessionType: sessionType as ServantSessionType,
+          sessionDate: parsedDate,
+          status: item.status as PrismaAttendanceStatus,
+          notes: item.notes || null,
+          recordedById: user.userId,
+        },
+      });
+
+      savedRecords.push(upserted);
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        sessionType,
+        sessionDate: parsedDate.toISOString(),
+        recordedCount: savedRecords.length,
+        records: savedRecords,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * GET /api/v1/attendance/servants/history (FR-4.1 & §3.1.2)
+   * Servants view their own follow-up history (read-only), or supervisors view their subordinates.
+   */
+  static async getHistory(req: Request, res: Response) {
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'AUTH_REQUIRED', message: 'Authentication required' },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const targetUserId = (req.query.servantUserId as string) || user.userId;
+
+    // If querying another servant's history, ensure user is a supervisor (Level 3+)
+    if (targetUserId !== user.userId && user.roleLevel < 3) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'FORBIDDEN_SCOPE',
+          message: 'Servants can only view their own attendance history',
+        },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const sessionType = req.query.sessionType as ServantSessionType | undefined;
+    const startDate = req.query.startDate as string | undefined;
+    const endDate = req.query.endDate as string | undefined;
+
+    const whereClause: any = { servantUserId: targetUserId };
+    if (sessionType) whereClause.sessionType = sessionType;
+
+    if (startDate || endDate) {
+      whereClause.sessionDate = {};
+      if (startDate) whereClause.sessionDate.gte = new Date(startDate);
+      if (endDate) whereClause.sessionDate.lte = new Date(endDate);
+    }
+
+    const records = await prisma.servantAttendance.findMany({
+      where: whereClause,
+      include: {
+        recordedBy: {
+          select: {
+            id: true,
+            fullName: true,
+            role: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: { sessionDate: 'desc' },
+    });
+
+    const stats = await calculateServantAttendanceRate(targetUserId, 8);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        servantUserId: targetUserId,
+        stats,
+        records,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * GET /api/v1/attendance/servants/allowed-sessions (Assumption A4)
+   * Returns allowed sessions for a role level.
+   */
+  static async getAllowedSessions(req: Request, res: Response) {
+    const roleLevel = Number(req.query.roleLevel || req.user?.roleLevel || 1);
+    const sessions = getAllowedSessionsForRole(roleLevel);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        roleLevel,
+        allowedSessions: sessions,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  }
+}

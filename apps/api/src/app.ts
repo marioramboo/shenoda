@@ -10,6 +10,7 @@ import { authRouter } from './routes/auth.routes';
 import { accountRouter } from './routes/account.routes';
 import { memberRouter } from './routes/member.routes';
 import { noteRouter } from './routes/note.routes';
+import { attendanceRouter } from './routes/attendance.routes';
 import { authenticateJwt } from './middleware/auth';
 
 export const createApp = (beforeRoutesMiddleware?: RequestHandler): Application => {
@@ -61,6 +62,10 @@ export const createApp = (beforeRoutesMiddleware?: RequestHandler): Application 
   // Supervisory Notes routes (FR-8.1, FR-8.2)
   app.use('/api/v1/notes', noteRouter);
   app.use('/api/notes', noteRouter);
+
+  // Phase 4: Attendance & Follow-up routes (FR-4.1, FR-4.2, FR-4.3)
+  app.use('/api/v1/attendance', attendanceRouter);
+  app.use('/api/attendance', attendanceRouter);
 
   // Root welcome route
   app.get('/', (_req: Request, res: Response) => {

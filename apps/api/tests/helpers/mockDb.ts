@@ -131,6 +131,50 @@ export interface MockSupervisoryNote {
   updatedAt: Date;
 }
 
+export interface MockMemberAttendance {
+  id: string;
+  memberId: string;
+  stageId: string;
+  sessionType: any;
+  sessionDate: Date;
+  status: any;
+  notes: string | null;
+  recordedById: string;
+  idempotencyKey: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface MockServantAttendance {
+  id: string;
+  servantUserId: string;
+  stageId: string | null;
+  sessionType: any;
+  sessionDate: Date;
+  status: any;
+  notes: string | null;
+  recordedById: string;
+  idempotencyKey: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface MockAbsenceAlert {
+  id: string;
+  targetType: any;
+  memberId: string | null;
+  servantUserId: string | null;
+  stageId: string;
+  consecutiveCount: number;
+  lastAttendedDate: Date | null;
+  alertStatus: any;
+  assignedFollowUpId: string | null;
+  resolutionNotes: string | null;
+  resolvedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export function createMockPrisma() {
   const users: MockUser[] = [];
   const roles: MockRole[] = [];
@@ -147,6 +191,11 @@ export function createMockPrisma() {
   const sensitiveAccessLogs: MockSensitiveAccessLog[] = [];
   const memberAuditLogs: MockMemberAuditLog[] = [];
   const supervisoryNotes: MockSupervisoryNote[] = [];
+
+  // Phase 4 collections
+  const memberAttendances: MockMemberAttendance[] = [];
+  const servantAttendances: MockServantAttendance[] = [];
+  const absenceAlerts: MockAbsenceAlert[] = [];
 
   let idCounter = 1;
   const nextId = (prefix: string) => `${prefix}-${idCounter++}`;
@@ -201,6 +250,9 @@ export function createMockPrisma() {
       sensitiveAccessLogs,
       memberAuditLogs,
       supervisoryNotes,
+      memberAttendances,
+      servantAttendances,
+      absenceAlerts,
     },
 
     user: {
@@ -610,6 +662,17 @@ export function createMockPrisma() {
         return memberServantAssignments.find((a) => a.id === where.id) || null;
       },
 
+      findFirst: async (args?: any) => {
+        const where = args?.where || {};
+        return (
+          memberServantAssignments.find((a) => {
+            if (where.memberId && a.memberId !== where.memberId) return false;
+            if (where.servantUserId && a.servantUserId !== where.servantUserId) return false;
+            return true;
+          }) || null
+        );
+      },
+
       findMany: async (args?: any) => {
         const where = args?.where || {};
         return memberServantAssignments.filter((a) => {
@@ -629,6 +692,55 @@ export function createMockPrisma() {
             (!where.servantUserId || a.servantUserId === where.servantUserId)
           ) {
             memberServantAssignments.splice(i, 1);
+            count++;
+          }
+        }
+        return { count };
+      },
+    },
+
+    scopeAssignment: {
+      create: async (args: any) => {
+        const sa = { id: args.data.id || nextId('sa'), ...args.data };
+        scopeAssignments.push(sa);
+        return sa;
+      },
+      findFirst: async (args?: any) => {
+        const where = args?.where || {};
+        return (
+          scopeAssignments.find((sa) => {
+            if (where.stageId && sa.stageId !== where.stageId) return false;
+            if (where.sectorId && sa.sectorId !== where.sectorId) return false;
+            if (where.userId && sa.userId !== where.userId) return false;
+            if (where.user?.role?.level) {
+              const u = users.find((usr) => usr.id === sa.userId);
+              const r = u ? roles.find((rol) => rol.id === u.roleId) : null;
+              if (where.user.role.level.in && Array.isArray(where.user.role.level.in)) {
+                if (!r || !where.user.role.level.in.includes(r.level)) return false;
+              } else if (r?.level !== where.user.role.level) {
+                return false;
+              }
+            }
+            return true;
+          }) || null
+        );
+      },
+      findMany: async (args?: any) => {
+        const where = args?.where || {};
+        return scopeAssignments.filter((sa) => {
+          if (where.stageId && sa.stageId !== where.stageId) return false;
+          if (where.sectorId && sa.sectorId !== where.sectorId) return false;
+          if (where.userId && sa.userId !== where.userId) return false;
+          return true;
+        });
+      },
+      deleteMany: async (args: any) => {
+        const where = args?.where || {};
+        let count = 0;
+        for (let i = scopeAssignments.length - 1; i >= 0; i--) {
+          const sa = scopeAssignments[i];
+          if (!where.userId || sa.userId === where.userId) {
+            scopeAssignments.splice(i, 1);
             count++;
           }
         }
@@ -725,6 +837,286 @@ export function createMockPrisma() {
               authorUser: author ? { id: author.id, fullName: author.fullName, role } : null,
             };
           });
+      },
+    },
+
+    memberAttendance: {
+      findMany: async (args?: any) => {
+        const where = args?.where || {};
+        let list = memberAttendances.filter((ma) => {
+          if (where.memberId && ma.memberId !== where.memberId) return false;
+          if (where.stageId && ma.stageId !== where.stageId) return false;
+          if (where.sessionType) {
+            if (where.sessionType.in && Array.isArray(where.sessionType.in)) {
+              if (!where.sessionType.in.includes(ma.sessionType)) return false;
+            } else if (ma.sessionType !== where.sessionType) {
+              return false;
+            }
+          }
+          if (where.sessionDate) {
+            const d = new Date(ma.sessionDate).getTime();
+            if (where.sessionDate instanceof Date) {
+              if (d !== new Date(where.sessionDate).getTime()) return false;
+            } else {
+              if (where.sessionDate.gte && d < new Date(where.sessionDate.gte).getTime()) return false;
+              if (where.sessionDate.lte && d > new Date(where.sessionDate.lte).getTime()) return false;
+            }
+          }
+          return true;
+        });
+
+        if (args?.orderBy) {
+          list.sort((a, b) => new Date(b.sessionDate).getTime() - new Date(a.sessionDate).getTime());
+        }
+
+        if (args?.take && list.length > args.take) {
+          list = list.slice(0, args.take);
+        }
+
+        if (args?.include?.member) {
+          return list.map((ma) => {
+            const mem = servedMembers.find((m) => m.id === ma.memberId);
+            return {
+              ...ma,
+              member: mem
+                ? {
+                    id: mem.id,
+                    fullName: mem.fullName,
+                    educationalGrade: mem.educationalGrade,
+                    phoneNumber: mem.phoneNumber,
+                  }
+                : null,
+            };
+          });
+        }
+
+        return list;
+      },
+
+      findFirst: async (args?: any) => {
+        const where = args?.where || {};
+        return (
+          memberAttendances.find((ma) => {
+            if (where.memberId && ma.memberId !== where.memberId) return false;
+            if (where.sessionType && ma.sessionType !== where.sessionType) return false;
+            return true;
+          }) || null
+        );
+      },
+
+      upsert: async (args: any) => {
+        const { where, update, create } = args;
+        const target = where.memberId_sessionType_sessionDate;
+        const existing = memberAttendances.find(
+          (ma) =>
+            ma.memberId === target.memberId &&
+            ma.sessionType === target.sessionType &&
+            new Date(ma.sessionDate).getTime() === new Date(target.sessionDate).getTime()
+        );
+
+        if (existing) {
+          existing.status = update.status;
+          if (update.notes !== undefined) existing.notes = update.notes;
+          if (update.recordedById) existing.recordedById = update.recordedById;
+          if (update.idempotencyKey) existing.idempotencyKey = update.idempotencyKey;
+          existing.updatedAt = new Date();
+          return existing;
+        }
+
+        const newRecord: MockMemberAttendance = {
+          id: nextId('matt'),
+          memberId: create.memberId,
+          stageId: create.stageId,
+          sessionType: create.sessionType,
+          sessionDate: new Date(create.sessionDate),
+          status: create.status,
+          notes: create.notes || null,
+          recordedById: create.recordedById,
+          idempotencyKey: create.idempotencyKey || null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        memberAttendances.push(newRecord);
+        return newRecord;
+      },
+    },
+
+    servantAttendance: {
+      findMany: async (args?: any) => {
+        const where = args?.where || {};
+        let list = servantAttendances.filter((sa) => {
+          if (where.servantUserId && sa.servantUserId !== where.servantUserId) return false;
+          if (where.stageId && sa.stageId !== where.stageId) return false;
+          if (where.sessionType && sa.sessionType !== where.sessionType) return false;
+          if (where.sessionDate) {
+            const d = new Date(sa.sessionDate).getTime();
+            if (where.sessionDate.gte && d < new Date(where.sessionDate.gte).getTime()) return false;
+            if (where.sessionDate.lte && d > new Date(where.sessionDate.lte).getTime()) return false;
+          }
+          return true;
+        });
+
+        if (args?.orderBy) {
+          list.sort((a, b) => new Date(b.sessionDate).getTime() - new Date(a.sessionDate).getTime());
+        }
+
+        if (args?.include?.recordedBy) {
+          return list.map((sa) => {
+            const rec = users.find((u) => u.id === sa.recordedById);
+            const role = rec ? roles.find((r) => r.id === rec.roleId) : null;
+            return {
+              ...sa,
+              recordedBy: rec ? { id: rec.id, fullName: rec.fullName, role: { name: role?.name } } : null,
+            };
+          });
+        }
+
+        return list;
+      },
+
+      upsert: async (args: any) => {
+        const { where, update, create } = args;
+        const target = where.servantUserId_sessionType_sessionDate;
+        const existing = servantAttendances.find(
+          (sa) =>
+            sa.servantUserId === target.servantUserId &&
+            sa.sessionType === target.sessionType &&
+            new Date(sa.sessionDate).getTime() === new Date(target.sessionDate).getTime()
+        );
+
+        if (existing) {
+          existing.status = update.status;
+          if (update.notes !== undefined) existing.notes = update.notes;
+          if (update.recordedById) existing.recordedById = update.recordedById;
+          existing.updatedAt = new Date();
+          return existing;
+        }
+
+        const newRecord: MockServantAttendance = {
+          id: nextId('satt'),
+          servantUserId: create.servantUserId,
+          stageId: create.stageId || null,
+          sessionType: create.sessionType,
+          sessionDate: new Date(create.sessionDate),
+          status: create.status,
+          notes: create.notes || null,
+          recordedById: create.recordedById,
+          idempotencyKey: create.idempotencyKey || null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        servantAttendances.push(newRecord);
+        return newRecord;
+      },
+    },
+
+    absenceAlert: {
+      findMany: async (args?: any) => {
+        const where = args?.where || {};
+        let list = absenceAlerts.filter((a) => {
+          if (where.alertStatus && a.alertStatus !== where.alertStatus) return false;
+          if (where.targetType && a.targetType !== where.targetType) return false;
+          if (where.stageId) {
+            if (typeof where.stageId === 'string' && a.stageId !== where.stageId) return false;
+            if (where.stageId.in && !where.stageId.in.includes(a.stageId)) return false;
+          }
+          if (where.OR && Array.isArray(where.OR)) {
+            const matchesOr = where.OR.some((orClause: any) => {
+              if (orClause.assignedFollowUpId && a.assignedFollowUpId === orClause.assignedFollowUpId) return true;
+              if (orClause.member?.servantAssignments?.some) {
+                const servantUserId = orClause.member.servantAssignments.some.servantUserId;
+                const isAssigned = memberServantAssignments.some(
+                  (msa) => msa.memberId === a.memberId && msa.servantUserId === servantUserId
+                );
+                if (isAssigned) return true;
+              }
+              return false;
+            });
+            if (!matchesOr) return false;
+          }
+          return true;
+        });
+
+        if (args?.include) {
+          return list.map((a) => {
+            const mem = a.memberId ? servedMembers.find((m) => m.id === a.memberId) : null;
+            const servant = a.servantUserId ? users.find((u) => u.id === a.servantUserId) : null;
+            const followUp = a.assignedFollowUpId ? users.find((u) => u.id === a.assignedFollowUpId) : null;
+            const stage = stages.find((s) => s.id === a.stageId);
+            return {
+              ...a,
+              member: mem
+                ? {
+                    id: mem.id,
+                    fullName: mem.fullName,
+                    phoneNumber: mem.phoneNumber,
+                    educationalGrade: mem.educationalGrade,
+                  }
+                : null,
+              servantUser: servant ? { id: servant.id, fullName: servant.fullName, phoneNumber: servant.phoneNumber } : null,
+              assignedFollowUp: followUp ? { id: followUp.id, fullName: followUp.fullName } : null,
+              stage: stage ? { id: stage.id, name: stage.name } : null,
+            };
+          });
+        }
+
+        return list;
+      },
+
+      findFirst: async (args?: any) => {
+        const where = args?.where || {};
+        return (
+          absenceAlerts.find((a) => {
+            if (where.memberId && a.memberId !== where.memberId) return false;
+            if (where.servantUserId && a.servantUserId !== where.servantUserId) return false;
+            if (where.alertStatus && a.alertStatus !== where.alertStatus) return false;
+            return true;
+          }) || null
+        );
+      },
+
+      findUnique: async (args: any) => {
+        const where = args?.where || {};
+        return absenceAlerts.find((a) => a.id === where.id) || null;
+      },
+
+      create: async (args: any) => {
+        const data = args.data;
+        const alert: MockAbsenceAlert = {
+          id: nextId('alert'),
+          targetType: data.targetType,
+          memberId: data.memberId || null,
+          servantUserId: data.servantUserId || null,
+          stageId: data.stageId,
+          consecutiveCount: data.consecutiveCount,
+          lastAttendedDate: data.lastAttendedDate ? new Date(data.lastAttendedDate) : null,
+          alertStatus: data.alertStatus || 'ACTIVE',
+          assignedFollowUpId: data.assignedFollowUpId || null,
+          resolutionNotes: null,
+          resolvedAt: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        absenceAlerts.push(alert);
+        return alert;
+      },
+
+      update: async (args: any) => {
+        const { where, data } = args;
+        const alert = absenceAlerts.find((a) => a.id === where.id);
+        if (!alert) throw new Error('Alert not found');
+        if (data.consecutiveCount !== undefined) alert.consecutiveCount = data.consecutiveCount;
+        if (data.lastAttendedDate !== undefined) alert.lastAttendedDate = data.lastAttendedDate;
+        if (data.alertStatus !== undefined) alert.alertStatus = data.alertStatus;
+        if (data.resolvedAt !== undefined) alert.resolvedAt = data.resolvedAt;
+        if (data.resolutionNotes !== undefined) alert.resolutionNotes = data.resolutionNotes;
+        alert.updatedAt = new Date();
+
+        if (args?.include?.member) {
+          const mem = alert.memberId ? servedMembers.find((m) => m.id === alert.memberId) : null;
+          return { ...alert, member: mem };
+        }
+        return alert;
       },
     },
 

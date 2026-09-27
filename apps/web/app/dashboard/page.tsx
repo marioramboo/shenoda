@@ -326,6 +326,7 @@ export default function DashboardPage() {
           activeTab="dashboard"
           onTabChange={(tab) => {
             if (tab === 'members') router.push('/members');
+            else if (tab === 'attendance') router.push('/attendance');
           }}
         />
       </div>

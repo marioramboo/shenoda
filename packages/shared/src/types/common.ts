@@ -56,11 +56,12 @@ export interface HealthResponse {
 /**
  * Attendance Status Enum and Definition
  */
-export type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'EXCUSED' | 'UNSET';
+export type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'EXCUSED' | 'LATE' | 'UNSET';
 
 export const ATTENDANCE_STATUS_LABELS: Record<AttendanceStatus, { ar: string; en: string }> = {
   PRESENT: { ar: 'حاضر', en: 'Present' },
   ABSENT: { ar: 'غائب', en: 'Absent' },
   EXCUSED: { ar: 'معتذر', en: 'Excused' },
+  LATE: { ar: 'متأخر', en: 'Late' },
   UNSET: { ar: 'غير محدد', en: 'Unset' },
 };

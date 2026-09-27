@@ -70,6 +70,8 @@ model Stage {
   assignments ScopeAssignment[]
   members     ServedMember[]
   supervisoryNotes SupervisoryNote[]
+  memberAttendances MemberAttendance[]
+  absenceAlerts AbsenceAlert[]
 
   @@unique([sectorId, code])
   @@map("stages")
@@ -194,6 +196,13 @@ model User {
   sensitiveAccessLogs      SensitiveAccessLog[]
   subjectNotes             SupervisoryNote[]         @relation("SubjectNotes")
   authoredNotes            SupervisoryNote[]         @relation("AuthorNotes")
+
+  // Phase 4: Attendance & Absence Alerts
+  memberAttendancesRecorded  MemberAttendance[]  @relation("MemberAttendanceRecorder")
+  servantAttendancesReceived ServantAttendance[] @relation("ServantAttendanceSubject")
+  servantAttendancesRecorded ServantAttendance[] @relation("ServantAttendanceRecorder")
+  absenceAlertsSubject       AbsenceAlert[]      @relation("AbsenceAlertServant")
+  absenceAlertsAssigned      AbsenceAlert[]      @relation("AbsenceAlertFollowUp")
 
   @@index([organizationId, roleId])
   @@map("users")
@@ -323,6 +332,8 @@ model ServedMember {
   servantAssignments MemberServantAssignment[]
   auditLogs           MemberAuditLog[]
   sensitiveAccessLogs SensitiveAccessLog[]
+  attendances         MemberAttendance[]
+  absenceAlerts       AbsenceAlert[]
 
   @@index([stageId])
   @@map("served_members")
@@ -413,4 +424,116 @@ model SupervisoryNote {
 
   @@index([targetUserId])
   @@map("supervisory_notes")
+}
+
+// -------------------------------------------------------------
+// PHASE 4: ATTENDANCE & FOLLOW-UP (جدول المتابعة)
+// -------------------------------------------------------------
+
+enum AttendanceStatus {
+  PRESENT  // حاضر
+  ABSENT   // غائب
+  EXCUSED  // معتذر
+  LATE     // متأخر
+}
+
+enum ServantSessionType {
+  MASS                    // القداس الإلهي
+  LESSON_PREPARATION      // التحضير
+  SERVICE_ATTENDANCE      // الخدمة
+  PASTORAL_VISITATION     // الافتقاد
+  SERVICE_MEETING         // اجتماع الخدمة
+  PRAYER_FAMILY_MEETING   // اجتماع الصلاة / الأسرة
+  ACTIVITIES              // الأنشطة
+  SECRETARIES_MEETING     // اجتماع الأمناء (Stage Secretary+)
+  STAGE_SECRETARIES_MEET  // اجتماع أمناء المراحل (Sector Secretary+)
+}
+
+enum MemberSessionType {
+  MASS                    // القداس الإلهي
+  SERVICE_ATTENDANCE      // الخدمة / حصة مدارس الأحد
+  PASTORAL_VISITATION     // الافتقاد المنزلي
+  ACTIVITY_CLUB_TRIP_CONF // نادي / رحلة / مؤتمر
+}
+
+// Attendance Record for Served Members (المخدومين)
+model MemberAttendance {
+  id              String            @id @default(uuid())
+  memberId        String
+  stageId         String
+  sessionType     MemberSessionType
+  sessionDate     DateTime          // YYYY-MM-DD
+  status          AttendanceStatus
+  notes           String?           // Notes on behavior/visitation
+  recordedById    String            // Secretary or assigned servant who logged it
+  idempotencyKey  String?           // NFR-4.2 retry-safe token
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  member          ServedMember      @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  stage           Stage             @relation(fields: [stageId], references: [id])
+  recordedBy      User              @relation("MemberAttendanceRecorder", fields: [recordedById], references: [id])
+
+  @@unique([memberId, sessionType, sessionDate])
+  @@index([stageId, sessionDate])
+  @@index([memberId, sessionDate])
+  @@map("member_attendance")
+}
+
+// Attendance Record for Servants & Secretaries (الخدام والأمناء)
+model ServantAttendance {
+  id              String             @id @default(uuid())
+  servantUserId   String
+  stageId         String?            // Nullable for Sector/General Secretaries
+  sessionType     ServantSessionType
+  sessionDate     DateTime           // YYYY-MM-DD
+  status          AttendanceStatus
+  notes           String?
+  recordedById    String             // Supervising Secretary ONLY (FR-4.1)
+  idempotencyKey  String?            // NFR-4.2 retry-safe token
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  servantUser     User               @relation("ServantAttendanceSubject", fields: [servantUserId], references: [id], onDelete: Cascade)
+  recordedBy      User               @relation("ServantAttendanceRecorder", fields: [recordedById], references: [id])
+
+  @@unique([servantUserId, sessionType, sessionDate])
+  @@index([servantUserId, sessionDate])
+  @@map("servant_attendance")
+}
+
+// Consecutive Absence Alert Tracking (FR-4.3 & FR-11.1)
+enum AlertTargetType {
+  MEMBER
+  SERVANT
+}
+
+enum AlertStatus {
+  ACTIVE
+  RESOLVED
+  DISMISSED
+}
+
+model AbsenceAlert {
+  id                 String          @id @default(uuid())
+  targetType         AlertTargetType
+  memberId           String?
+  servantUserId      String?
+  stageId            String
+  consecutiveCount   Int             // e.g. 2, 3, 4 weeks
+  lastAttendedDate   DateTime?
+  alertStatus        AlertStatus     @default(ACTIVE)
+  assignedFollowUpId String?         // Servant responsible for home visit/call
+  resolutionNotes    String?
+  resolvedAt         DateTime?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  stage              Stage           @relation(fields: [stageId], references: [id])
+  member             ServedMember?   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  servantUser        User?           @relation("AbsenceAlertServant", fields: [servantUserId], references: [id], onDelete: Cascade)
+  assignedFollowUp   User?           @relation("AbsenceAlertFollowUp", fields: [assignedFollowUpId], references: [id])
+
+  @@index([stageId, alertStatus])
+  @@map("absence_alerts")
 }
