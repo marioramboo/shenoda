@@ -18,5 +18,7 @@ authRouter.post('/logout', AuthController.logout);
 authRouter.post('/forgot-password', AuthController.forgotPassword);
 authRouter.post('/reset-password', AuthController.resetPassword);
 
-// Profile context
+// Profile context & self-service update (FR-2.1)
 authRouter.get('/me', authenticateJwt, requireAuth, AuthController.me);
+authRouter.patch('/profile', authenticateJwt, requireAuth, AuthController.updateProfile);
+authRouter.patch('/me', authenticateJwt, requireAuth, AuthController.updateProfile);

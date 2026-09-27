@@ -8,6 +8,7 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { TabBar } from '@/components/layout/TabBar';
+import { AccountEditModal } from '@/components/profile/AccountEditModal';
 import {
   User,
   Shield,
@@ -22,12 +23,16 @@ import {
   BookOpen,
   Award,
   ChevronLeft,
+  Edit3,
+  MapPin,
+  Briefcase,
 } from 'lucide-react';
 
 export default function ProfilePage() {
-  const { user, logout } = useAuth();
+  const { user, logout, updateUser } = useAuth();
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   const handleLogout = async () => {
     try {
@@ -119,7 +124,77 @@ export default function ProfilePage() {
                   </span>
                 </div>
               )}
+
+              {user?.dateOfBirth && (
+                <div className="flex items-center justify-between p-2.5 rounded-button bg-bg-muted">
+                  <span className="text-text-secondary text-caption flex items-center gap-1.5">
+                    <Calendar className="w-4 h-4 text-brand-primary" />
+                    تاريخ الميلاد
+                  </span>
+                  <span className="font-semibold text-text-primary">
+                    {new Date(user.dateOfBirth).toLocaleDateString('ar-EG')}
+                  </span>
+                </div>
+              )}
+
+              {user?.fatherConfessor && (
+                <div className="flex items-center justify-between p-2.5 rounded-button bg-bg-muted">
+                  <span className="text-text-secondary text-caption flex items-center gap-1.5">
+                    <User className="w-4 h-4 text-brand-primary" />
+                    أب الاعتراف
+                  </span>
+                  <span className="font-semibold text-text-primary">
+                    {user.fatherConfessor}
+                  </span>
+                </div>
+              )}
+
+              {user?.address && (
+                <div className="flex items-center justify-between p-2.5 rounded-button bg-bg-muted">
+                  <span className="text-text-secondary text-caption flex items-center gap-1.5">
+                    <MapPin className="w-4 h-4 text-brand-primary" />
+                    العنوان
+                  </span>
+                  <span className="font-semibold text-text-primary">
+                    {user.address}
+                  </span>
+                </div>
+              )}
+
+              {user?.educationOrCareer && (
+                <div className="flex items-center justify-between p-2.5 rounded-button bg-bg-muted">
+                  <span className="text-text-secondary text-caption flex items-center gap-1.5">
+                    <Briefcase className="w-4 h-4 text-brand-primary" />
+                    المؤهل / الوظيفة
+                  </span>
+                  <span className="font-semibold text-text-primary">
+                    {user.educationOrCareer}
+                  </span>
+                </div>
+              )}
+
+              {user?.maritalStatus && (
+                <div className="flex items-center justify-between p-2.5 rounded-button bg-bg-muted">
+                  <span className="text-text-secondary text-caption flex items-center gap-1.5">
+                    <Heart className="w-4 h-4 text-brand-primary" />
+                    الحالة الاجتماعية
+                  </span>
+                  <span className="font-semibold text-text-primary">
+                    {user.maritalStatus} {user.spouseName ? `(${user.spouseName})` : ''}
+                  </span>
+                </div>
+              )}
             </div>
+
+            {/* Edit Account Button */}
+            <Button
+              variant="outline"
+              onClick={() => setIsEditModalOpen(true)}
+              className="w-full mt-4 h-[42px] border-brand-primary text-brand-primary hover:bg-brand-primary-soft flex items-center justify-center gap-2 font-semibold shadow-xs"
+            >
+              <Edit3 className="w-4 h-4" />
+              <span>تعديل بيانات الحساب</span>
+            </Button>
           </section>
 
           {/* Service Scope Card */}
@@ -209,6 +284,16 @@ export default function ProfilePage() {
             </Link>
           </section>
         </div>
+
+        {/* Account Edit Modal */}
+        {user && (
+          <AccountEditModal
+            isOpen={isEditModalOpen}
+            onClose={() => setIsEditModalOpen(false)}
+            user={user}
+            onSuccess={(updated) => updateUser(updated)}
+          />
+        )}
 
         {/* Global Bottom Tab Bar */}
         <TabBar activeTab="profile" />

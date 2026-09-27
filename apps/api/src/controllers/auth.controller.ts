@@ -45,6 +45,31 @@ const resetPasswordSchema = z.object({
   newPassword: z.string().min(8, 'كلمة المرور الجديدة يجب ألا تقل عن 8 أحرف'),
 });
 
+// Zod self-profile update schema (FR-2.1)
+const updateProfileSchema = z.object({
+  fullName: z.string().min(3, 'الاسم بالكامل يجب ألا يقل عن 3 أحرف').optional(),
+  phoneNumber: z
+    .string()
+    .min(10, 'رقم الهاتف مطلوب')
+    .regex(EGYPTIAN_PHONE_REGEX, 'يرجى إدخال رقم هاتف مصري صحيح (مثال: 01xxxxxxxxx)')
+    .optional(),
+  email: z.string().email('بريد إلكتروني غير صالح').optional().nullable(),
+  fatherConfessor: z.string().optional().nullable(),
+  dateOfBirth: z
+    .string()
+    .optional()
+    .nullable()
+    .refine((val) => !val || !isNaN(Date.parse(val)), {
+      message: 'تاريخ الميلاد غير صالح',
+    }),
+  address: z.string().optional().nullable(),
+  maritalStatus: z.string().optional().nullable(),
+  spouseName: z.string().optional().nullable(),
+  educationOrCareer: z.string().optional().nullable(),
+  currentPassword: z.string().optional(),
+  newPassword: z.string().min(8, 'كلمة المرور الجديدة يجب ألا تقل عن 8 أحرف').optional(),
+});
+
 /**
  * Normalizes phone numbers to standard searchable variants (+20... and 01...)
  */
@@ -248,6 +273,12 @@ export class AuthController {
         phoneNumber: user.phoneNumber,
         email: user.email,
         status: user.status,
+        fatherConfessor: user.fatherConfessor,
+        dateOfBirth: user.dateOfBirth,
+        address: user.address,
+        maritalStatus: user.maritalStatus,
+        spouseName: user.spouseName,
+        educationOrCareer: user.educationOrCareer,
         role: {
           id: user.role.id,
           code: user.role.code,
@@ -349,6 +380,12 @@ export class AuthController {
         phoneNumber: user.phoneNumber,
         email: user.email,
         status: user.status,
+        fatherConfessor: user.fatherConfessor,
+        dateOfBirth: user.dateOfBirth,
+        address: user.address,
+        maritalStatus: user.maritalStatus,
+        spouseName: user.spouseName,
+        educationOrCareer: user.educationOrCareer,
         role: {
           id: user.role.id,
           code: user.role.code,
@@ -553,6 +590,12 @@ export class AuthController {
         phoneNumber: user.phoneNumber,
         email: user.email,
         status: user.status,
+        fatherConfessor: user.fatherConfessor,
+        dateOfBirth: user.dateOfBirth,
+        address: user.address,
+        maritalStatus: user.maritalStatus,
+        spouseName: user.spouseName,
+        educationOrCareer: user.educationOrCareer,
         role: {
           id: user.role.id,
           code: user.role.code,
@@ -566,6 +609,187 @@ export class AuthController {
           sectors: user.scopeAssignments
             .filter((a) => a.sector)
             .map((a) => ({ id: a.sector!.id, name: a.sector!.name, code: a.sector!.code })),
+        },
+      },
+    });
+  }
+
+  /**
+   * PATCH /api/v1/auth/profile or PATCH /api/v1/auth/me (FR-2.1)
+   * Self-service profile editing for authenticated servants and secretaries.
+   */
+  public static async updateProfile(req: Request, res: Response) {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'AUTH_REQUIRED', message: 'Authentication required' },
+      });
+    }
+
+    const parseResult = updateProfileSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: parseResult.error.errors[0]?.message || 'بيانات التعديل غير صحيحة',
+          details: parseResult.error.format(),
+        },
+      });
+    }
+
+    const {
+      fullName,
+      phoneNumber,
+      email,
+      fatherConfessor,
+      dateOfBirth,
+      address,
+      maritalStatus,
+      spouseName,
+      educationOrCareer,
+      currentPassword,
+      newPassword,
+    } = parseResult.data;
+
+    // Fetch user
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.userId },
+      include: {
+        role: true,
+        scopeAssignments: {
+          include: { stage: true, sector: true },
+        },
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'USER_NOT_FOUND', message: 'المستخدم غير موجود' },
+      });
+    }
+
+    // Phone uniqueness check
+    if (phoneNumber && phoneNumber !== user.phoneNumber) {
+      const existingPhone = await prisma.user.findFirst({
+        where: {
+          phoneNumber,
+          id: { not: user.id },
+        },
+      });
+      if (existingPhone) {
+        return res.status(409).json({
+          success: false,
+          error: {
+            code: 'ERR_PHONE_EXISTS',
+            message: 'رقم الهاتف مسجل لحساب آخر بالفعل في النظام',
+          },
+        });
+      }
+    }
+
+    // Email uniqueness check
+    if (email && email.toLowerCase() !== user.email?.toLowerCase()) {
+      const existingEmail = await prisma.user.findFirst({
+        where: {
+          email: email.toLowerCase(),
+          id: { not: user.id },
+        },
+      });
+      if (existingEmail) {
+        return res.status(409).json({
+          success: false,
+          error: {
+            code: 'ERR_EMAIL_EXISTS',
+            message: 'البريد الإلكتروني مسجل لحساب آخر بالفعل في النظام',
+          },
+        });
+      }
+    }
+
+    // Password change check
+    let newPasswordHash: string | undefined = undefined;
+    if (newPassword) {
+      if (!currentPassword) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'CURRENT_PASSWORD_REQUIRED',
+            message: 'يرجى إدخال كلمة المرور الحالية لتتمكن من تعيين كلمة مرور جديدة',
+          },
+        });
+      }
+
+      const isValid = await HashService.verifyPassword(currentPassword, user.passwordHash);
+      if (!isValid) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'INVALID_CURRENT_PASSWORD',
+            message: 'كلمة المرور الحالية غير صحيحة',
+          },
+        });
+      }
+
+      newPasswordHash = await HashService.hashPassword(newPassword);
+    }
+
+    // Update user record
+    const updatedUser = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        fullName: fullName !== undefined ? fullName : undefined,
+        phoneNumber: phoneNumber !== undefined ? phoneNumber : undefined,
+        email: email !== undefined ? (email ? email.toLowerCase() : null) : undefined,
+        fatherConfessor: fatherConfessor !== undefined ? fatherConfessor : undefined,
+        dateOfBirth:
+          dateOfBirth !== undefined ? (dateOfBirth ? new Date(dateOfBirth) : null) : undefined,
+        address: address !== undefined ? address : undefined,
+        maritalStatus: maritalStatus !== undefined ? maritalStatus : undefined,
+        spouseName: spouseName !== undefined ? spouseName : undefined,
+        educationOrCareer: educationOrCareer !== undefined ? educationOrCareer : undefined,
+        passwordHash: newPasswordHash || undefined,
+      },
+      include: {
+        role: true,
+        scopeAssignments: {
+          include: { stage: true, sector: true },
+        },
+      },
+    });
+
+    const stages = updatedUser.scopeAssignments
+      .filter((a) => a.stage)
+      .map((a) => ({ id: a.stage!.id, name: a.stage!.name, code: a.stage!.code }));
+    const sectors = updatedUser.scopeAssignments
+      .filter((a) => a.sector)
+      .map((a) => ({ id: a.sector!.id, name: a.sector!.name, code: a.sector!.code }));
+
+    return res.status(200).json({
+      success: true,
+      message: 'تم تحديث بيانات الحساب الشخصي بنجاح',
+      user: {
+        id: updatedUser.id,
+        fullName: updatedUser.fullName,
+        phoneNumber: updatedUser.phoneNumber,
+        email: updatedUser.email,
+        status: updatedUser.status,
+        fatherConfessor: updatedUser.fatherConfessor,
+        dateOfBirth: updatedUser.dateOfBirth,
+        address: updatedUser.address,
+        maritalStatus: updatedUser.maritalStatus,
+        spouseName: updatedUser.spouseName,
+        educationOrCareer: updatedUser.educationOrCareer,
+        role: {
+          id: updatedUser.role.id,
+          code: updatedUser.role.code,
+          name: updatedUser.role.name,
+          level: updatedUser.role.level,
+        },
+        scopes: {
+          stages,
+          sectors,
         },
       },
     });

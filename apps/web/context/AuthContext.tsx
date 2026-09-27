@@ -22,6 +22,12 @@ export interface AuthUser {
   phoneNumber: string;
   email: string | null;
   status: string;
+  fatherConfessor?: string | null;
+  dateOfBirth?: string | Date | null;
+  address?: string | null;
+  maritalStatus?: string | null;
+  spouseName?: string | null;
+  educationOrCareer?: string | null;
   role: RoleInfo;
   scopes: {
     stages: ScopeItem[];
@@ -37,6 +43,8 @@ export interface AuthContextType {
   login: (identifier: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
+  updateUser: (updatedUser: Partial<AuthUser>) => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -106,6 +114,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateUser = useCallback((updated: Partial<AuthUser>) => {
+    setUser((prev) => (prev ? { ...prev, ...updated } : null));
+  }, []);
+
+  const refreshUser = useCallback(async () => {
+    try {
+      const res = await api.get('/api/v1/auth/me');
+      if (res.data?.success && res.data?.user) {
+        setUser(res.data.user);
+      }
+    } catch {
+      // Ignore
+    }
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -116,6 +139,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         logout,
         checkAuth,
+        updateUser,
+        refreshUser,
       }}
     >
       {children}
