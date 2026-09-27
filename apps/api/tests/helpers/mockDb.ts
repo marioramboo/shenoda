@@ -536,7 +536,17 @@ export function createMockPrisma() {
         const where = args?.where || {};
         return stages.find((s) => s.id === where.id || s.code === where.code) || null;
       },
-      findMany: async () => stages,
+      findMany: async (args?: any) => {
+        const where = args?.where || {};
+        return stages.filter((s) => {
+          if (where.sectorId && s.sectorId !== where.sectorId) return false;
+          if (where.id) {
+            if (typeof where.id === 'string' && s.id !== where.id) return false;
+            if (where.id.in && Array.isArray(where.id.in) && !where.id.in.includes(s.id)) return false;
+          }
+          return true;
+        });
+      },
     },
 
     sector: {
@@ -757,6 +767,19 @@ export function createMockPrisma() {
         }
 
         return result.map((m) => attachRelationsToMember(m));
+      },
+
+      count: async (args?: any) => {
+        const where = args?.where || {};
+        return servedMembers.filter((m) => {
+          if (where.stageId) {
+            if (typeof where.stageId === 'string' && m.stageId !== where.stageId) return false;
+            if (where.stageId.in && Array.isArray(where.stageId.in) && !where.stageId.in.includes(m.stageId)) {
+              return false;
+            }
+          }
+          return true;
+        }).length;
       },
 
       update: async (args: any) => {
@@ -1139,6 +1162,25 @@ export function createMockPrisma() {
         memberAttendances.push(newRecord);
         return newRecord;
       },
+
+      create: async (args: any) => {
+        const data = args.data;
+        const newRecord: MockMemberAttendance = {
+          id: nextId('matt'),
+          memberId: data.memberId,
+          stageId: data.stageId,
+          sessionType: data.sessionType,
+          sessionDate: new Date(data.sessionDate),
+          status: data.status,
+          notes: data.notes || null,
+          recordedById: data.recordedById,
+          idempotencyKey: data.idempotencyKey || null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        memberAttendances.push(newRecord);
+        return newRecord;
+      },
     },
 
     servantAttendance: {
@@ -1265,6 +1307,19 @@ export function createMockPrisma() {
         }
 
         return list;
+      },
+
+      count: async (args?: any) => {
+        const where = args?.where || {};
+        return absenceAlerts.filter((a) => {
+          if (where.targetType && a.targetType !== where.targetType) return false;
+          if (where.alertStatus && a.alertStatus !== where.alertStatus) return false;
+          if (where.stageId) {
+            if (typeof where.stageId === 'string' && a.stageId !== where.stageId) return false;
+            if (where.stageId.in && !where.stageId.in.includes(a.stageId)) return false;
+          }
+          return true;
+        }).length;
       },
 
       findFirst: async (args?: any) => {

@@ -32,6 +32,7 @@ import {
   ExternalLink,
   ClipboardList,
   Megaphone,
+  BarChart3,
 } from 'lucide-react';
 
 interface ServantDashboardData {
@@ -446,18 +447,35 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => router.push('/announcements')}
-              className="col-span-2 p-4 bg-bg-surface border border-border-default rounded-card shadow-card flex items-center gap-3 hover:border-brand-accent transition-all text-right group"
+              className="p-4 bg-bg-surface border border-border-default rounded-card shadow-card flex items-center gap-3 hover:border-brand-accent transition-all text-right group"
             >
               <div className="w-10 h-10 rounded-lg bg-brand-accent-soft text-brand-accent flex items-center justify-center group-hover:scale-105 transition-transform shrink-0">
                 <Megaphone className="w-5 h-5" />
               </div>
               <div className="flex-1">
-                <h4 className="text-body-default font-bold text-text-primary">الإعلانات واستطلاعات الرأي</h4>
+                <h4 className="text-body-default font-bold text-text-primary">الإعلانات والاستطلاعات</h4>
                 <p className="text-[11px] text-text-secondary mt-0.5">
-                  البيانات الرسمية وقرارات الخدمة والتصويت التفاعلي
+                  البيانات الرسمية والتصويت
                 </p>
               </div>
               <ChevronLeft className="w-4 h-4 text-text-secondary group-hover:text-brand-accent transition-colors" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => router.push('/analytics')}
+              className="p-4 bg-bg-surface border border-border-default rounded-card shadow-card flex items-center gap-3 hover:border-brand-primary transition-all text-right group"
+            >
+              <div className="w-10 h-10 rounded-lg bg-brand-primary-soft text-brand-primary flex items-center justify-center group-hover:scale-105 transition-transform shrink-0">
+                <BarChart3 className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <h4 className="text-body-default font-bold text-text-primary">التحليلات والتقارير</h4>
+                <p className="text-[11px] text-text-secondary mt-0.5">
+                  مؤشرات الحضور وتصدير PDF/Excel
+                </p>
+              </div>
+              <ChevronLeft className="w-4 h-4 text-text-secondary group-hover:text-brand-primary transition-colors" />
             </button>
           </section>
 

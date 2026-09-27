@@ -19,6 +19,8 @@ import calendarRouter from './routes/calendar.routes';
 import { announcementRouter } from './routes/announcement.routes';
 import { pollRouter } from './routes/poll.routes';
 import { notificationRouter } from './routes/notification.routes';
+import { analyticsRouter } from './routes/analytics.routes';
+import { reportRouter } from './routes/report.routes';
 import { authenticateJwt } from './middleware/auth';
 
 export const createApp = (beforeRoutesMiddleware?: RequestHandler): Application => {
@@ -98,6 +100,12 @@ export const createApp = (beforeRoutesMiddleware?: RequestHandler): Application 
   app.use('/api/polls', pollRouter);
   app.use('/api/v1/notifications', notificationRouter);
   app.use('/api/notifications', notificationRouter);
+
+  // Phase 8: Analytics & Export routes (FR-13.1, FR-14.1, FR-14.2, NFR-3.4)
+  app.use('/api/v1/analytics', analyticsRouter);
+  app.use('/api/analytics', analyticsRouter);
+  app.use('/api/v1/reports', reportRouter);
+  app.use('/api/reports', reportRouter);
 
   // Root welcome route
   app.get('/', (_req: Request, res: Response) => {
