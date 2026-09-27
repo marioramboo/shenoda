@@ -1,13 +1,16 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
+import { TabBar } from '@/components/layout/TabBar';
+import { SpiritualJournal } from '@/components/spiritual/SpiritualJournal';
 import { api } from '@/lib/api';
+import { getCopticDate } from '@shenoda/shared';
 import {
   User,
   Shield,
@@ -19,17 +22,67 @@ import {
   X,
   Phone,
   Lock,
-  Mail,
   Users,
   ChevronLeft,
+  BookOpen,
+  CalendarCheck,
+  HeartHandshake,
+  Clock,
+  Sparkles,
+  ExternalLink,
+  ClipboardList,
 } from 'lucide-react';
-import { TabBar } from '@/components/layout/TabBar';
+
+interface ServantDashboardData {
+  servant: {
+    id: string;
+    roleCode: string;
+    roleLevel: number;
+  };
+  metrics: {
+    attendanceRatePercentage: number;
+    attendancePresentCount: number;
+    attendanceTotalSessions: number;
+    preparationsCount: number;
+    assignedMembersCount: number;
+    daysSinceLastConfession: number | null;
+  };
+  upcomingLessons: Array<{
+    id: string;
+    title: string;
+    lessonDate: string;
+    scriptureRef: string | null;
+    status: string;
+    stage?: { id: string; name: string };
+  }>;
+  assignedMembers: Array<{
+    id: string;
+    fullName: string;
+    phoneNumber: string | null;
+    educationalGrade: string;
+  }>;
+  urgentAbsenceAlerts: Array<{
+    id: string;
+    consecutiveCount: number;
+    lastAttendedDate: string | null;
+    member?: {
+      id: string;
+      fullName: string;
+      phoneNumber: string | null;
+      educationalGrade: string;
+    };
+  }>;
+}
 
 export default function DashboardPage() {
   const { user, logout } = useAuth();
   const router = useRouter();
 
-  // Account creation modal state
+  const [loading, setLoading] = useState(true);
+  const [dashboardData, setDashboardData] = useState<ServantDashboardData | null>(null);
+  const [isSpiritualJournalOpen, setIsSpiritualJournalOpen] = useState(false);
+
+  // Account creation modal state (Level 3+)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [fullName, setFullName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -37,10 +90,36 @@ export default function DashboardPage() {
   const [roleCode, setRoleCode] = useState('SERVANT');
   const [stageId, setStageId] = useState('');
   const [tempPassword, setTempPassword] = useState('InitPassword2026!');
-
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [createSuccess, setCreateSuccess] = useState<string | null>(null);
+
+  // Coptic Date
+  const copticDate = getCopticDate();
+  const gregorianDate = new Intl.DateTimeFormat('ar-EG', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date());
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      const res = await api.get('/api/v1/dashboard/servant-summary');
+      if (res.data?.success) {
+        setDashboardData(res.data.data);
+      }
+    } catch (err) {
+      console.error('Failed to load servant dashboard summary:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
 
   const handleLogout = async () => {
     await logout();
@@ -52,8 +131,6 @@ export default function DashboardPage() {
     setCreateError(null);
     setCreateSuccess(null);
 
-    // In a real app we lookup roleId by code or pass code/ID
-    // Let's resolve role and stage IDs
     const resolvedStageId = stageId || user?.scopes.stages[0]?.id;
 
     try {
@@ -76,18 +153,25 @@ export default function DashboardPage() {
     } catch (err: any) {
       setCreateError(
         err.response?.data?.error?.message ||
-        'حدث خطأ أثناء إنشاء الحساب. تأكد من استيفاء الصلاحيات.'
+          'حدث خطأ أثناء إنشاء الحساب. تأكد من استيفاء الصلاحيات.'
       );
     } finally {
       setCreateLoading(false);
     }
   };
 
+  const handleTabChange = (tab: string) => {
+    if (tab === 'members') router.push('/members');
+    else if (tab === 'attendance') router.push('/attendance');
+    else if (tab === 'plan') router.push('/preparations');
+  };
+
   return (
     <ProtectedRoute>
-      <div dir="rtl" className="min-h-screen bg-bg-app flex flex-col items-center p-4 sm:p-6 pb-24">
-        <div className="w-full max-w-[480px] flex flex-col gap-5">
-          {/* Header Bar */}
+      <div dir="rtl" className="min-h-screen bg-bg-app flex flex-col items-center p-4 sm:p-6 pb-28">
+        <div className="w-full max-w-[480px] flex flex-col gap-4">
+          
+          {/* Top Bar */}
           <header className="flex items-center justify-between bg-bg-surface border border-border-default rounded-card p-4 shadow-card">
             <div className="flex items-center gap-3">
               <div className="w-11 h-11 rounded-full bg-brand-primary-soft border border-[#D5E1F0] flex items-center justify-center text-brand-primary font-bold">
@@ -98,7 +182,7 @@ export default function DashboardPage() {
                   {user?.fullName}
                 </h1>
                 <p className="text-caption text-text-secondary mt-0.5">
-                  {user?.phoneNumber}
+                  المستوى {user?.role.level}: {user?.role.name}
                 </p>
               </div>
             </div>
@@ -114,101 +198,285 @@ export default function DashboardPage() {
             </Button>
           </header>
 
-          {/* Servant Role & Scope Summary Card */}
-          <section className="bg-bg-surface border border-border-default rounded-card p-5 shadow-card flex flex-col gap-4 text-right">
-            <div className="flex items-center justify-between pb-3 border-b border-border-default">
-              <div className="flex items-center gap-2">
-                <Shield className="w-5 h-5 text-brand-accent" />
-                <h2 className="text-h2 font-semibold text-text-primary">الرتبة والصلاحية</h2>
+          {/* Coptic Greeting Card (TASK-05-8) */}
+          <section className="bg-gradient-to-br from-brand-primary via-[#264875] to-[#162B47] text-white rounded-card p-5 shadow-elevated relative overflow-hidden text-right">
+            <div className="absolute top-0 left-0 w-36 h-36 bg-brand-accent/15 rounded-full blur-2xl pointer-events-none" />
+            <div className="relative z-10 flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-brand-accent animate-pulse" />
+                  <span className="text-caption text-brand-accent font-semibold tracking-wide">
+                    خدمة كنيستنا الأرثوذكسية
+                  </span>
+                </div>
+                <Badge variant="accent" className="bg-brand-accent/20 text-brand-accent border-brand-accent/30">
+                  {copticDate.formatted}
+                </Badge>
               </div>
-              <Badge variant="accent">
-                المستوى {user?.role.level}: {user?.role.name}
-              </Badge>
-            </div>
 
-            {/* Scopes Section */}
-            <div className="flex flex-col gap-2.5">
-              <span className="text-caption font-semibold text-text-secondary">
-                النطاق الإداري المصرح به (Scope):
+              <div>
+                <h2 className="text-h1 font-bold text-white leading-snug">
+                  أهلاً بك يا خادم المسيح / {user?.fullName.split(' ')[0]}
+                </h2>
+                <p className="text-body-small text-white/80 mt-1">
+                  اليوم {gregorianDate}
+                </p>
+              </div>
+
+              {/* Private Spiritual Journal Trigger */}
+              <div className="pt-2 border-t border-white/10 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setIsSpiritualJournalOpen(true)}
+                  className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg bg-white/10 hover:bg-white/15 border border-white/15 text-white transition-all text-body-small font-medium group"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-full bg-brand-accent text-brand-primary flex items-center justify-center font-bold">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                    <div className="text-right">
+                      <p className="text-body-small font-bold text-brand-accent">
+                        المفكرة الروحية الخاصة
+                      </p>
+                      <p className="text-[11px] text-white/70">
+                        سجل التناول والاعتراف (مشفر وسري بالكامل)
+                      </p>
+                    </div>
+                  </div>
+                  <ChevronLeft className="w-4 h-4 text-brand-accent group-hover:-translate-x-1 transition-transform" />
+                </button>
+              </div>
+            </div>
+          </section>
+
+          {/* Personal Metrics Row (StatCards) */}
+          <section className="grid grid-cols-3 gap-2.5">
+            {/* StatCard 1: Attendance Rate */}
+            <div className="bg-bg-surface border border-border-default rounded-card p-3.5 shadow-card flex flex-col items-center text-center">
+              <div className="w-8 h-8 rounded-full bg-status-success-soft text-status-success flex items-center justify-center mb-1.5">
+                <CalendarCheck className="w-4 h-4" />
+              </div>
+              <span className="text-h2 font-bold text-text-primary">
+                {dashboardData?.metrics.attendanceRatePercentage ?? 100}%
               </span>
-
-              {user?.scopes.stages && user.scopes.stages.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-body-small text-text-secondary">المراحل:</span>
-                  {user.scopes.stages.map((stg) => (
-                    <span
-                      key={stg.id}
-                      className="px-2.5 py-1 bg-brand-primary-soft text-brand-primary rounded-pill text-caption font-medium border border-[#D0DFEF]"
-                    >
-                      {stg.name}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {user?.scopes.sectors && user.scopes.sectors.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-body-small text-text-secondary">القطاعات:</span>
-                  {user.scopes.sectors.map((sec) => (
-                    <span
-                      key={sec.id}
-                      className="px-2.5 py-1 bg-bg-muted text-text-primary rounded-pill text-caption font-medium border border-border-default"
-                    >
-                      {sec.name}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          </section>
-
-          {/* Members Roster Quick Access (Phase 3) */}
-          <section className="bg-bg-surface border border-border-default rounded-card p-5 shadow-card flex flex-col gap-3 text-right">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-brand-primary" />
-                <h2 className="text-h2 font-semibold text-text-primary">سجل المخدومين</h2>
-              </div>
-              <Badge variant="neutral">المرحلة النشطة</Badge>
+              <span className="text-[11px] text-text-secondary mt-0.5">
+                حضور الخدمة (8 أسابيع)
+              </span>
             </div>
 
-            <p className="text-body-small text-text-secondary leading-relaxed">
-              عرض سجلات المخدومين والمتابعة والتقييم الروحي والسلوكي المباشر.
-            </p>
-
-            <Button
-              variant="primary"
-              onClick={() => router.push('/members')}
-              className="h-[44px] gap-2 mt-1 justify-between font-semibold"
+            {/* StatCard 2: Preparations Count */}
+            <div
+              onClick={() => router.push('/preparations')}
+              className="bg-bg-surface border border-border-default rounded-card p-3.5 shadow-card flex flex-col items-center text-center cursor-pointer hover:border-brand-primary/50 transition-colors"
             >
-              <div className="flex items-center gap-2">
-                <Users className="w-4 h-4" />
-                <span>فتح قائمة المخدومين</span>
+              <div className="w-8 h-8 rounded-full bg-brand-primary-soft text-brand-primary flex items-center justify-center mb-1.5">
+                <BookOpen className="w-4 h-4" />
               </div>
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
+              <span className="text-h2 font-bold text-text-primary">
+                {dashboardData?.metrics.preparationsCount ?? 0}
+              </span>
+              <span className="text-[11px] text-text-secondary mt-0.5">
+                دروس محضرة
+              </span>
+            </div>
+
+            {/* StatCard 3: Assigned Members */}
+            <div
+              onClick={() => router.push('/members')}
+              className="bg-bg-surface border border-border-default rounded-card p-3.5 shadow-card flex flex-col items-center text-center cursor-pointer hover:border-brand-primary/50 transition-colors"
+            >
+              <div className="w-8 h-8 rounded-full bg-brand-accent-soft text-brand-accent flex items-center justify-center mb-1.5">
+                <HeartHandshake className="w-4 h-4" />
+              </div>
+              <span className="text-h2 font-bold text-text-primary">
+                {dashboardData?.metrics.assignedMembersCount ?? 0}
+              </span>
+              <span className="text-[11px] text-text-secondary mt-0.5">
+                مخدومين برعايتي
+              </span>
+            </div>
           </section>
 
-          {/* Secretary Actions (Assumption A7 & FR-1.2: Scoped Account Creation) */}
-          {user && user.role.level >= 3 && (
-            <section className="bg-bg-surface border border-border-default rounded-card p-5 shadow-card flex flex-col gap-3 text-right">
+          {/* Action Required: Urgent Absence Alerts */}
+          {dashboardData && dashboardData.urgentAbsenceAlerts.length > 0 && (
+            <section className="bg-bg-surface border border-status-danger/30 rounded-card p-4 shadow-card flex flex-col gap-3 text-right">
+              <div className="flex items-center justify-between pb-2 border-b border-border-default">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5 text-status-danger" />
+                  <h3 className="text-h2 font-bold text-text-primary">
+                    تنبيهات الافتقاد العاجلة ({dashboardData.urgentAbsenceAlerts.length})
+                  </h3>
+                </div>
+                <Badge variant="danger">متابعة فورية</Badge>
+              </div>
+
+              <div className="flex flex-col gap-2.5">
+                {dashboardData.urgentAbsenceAlerts.slice(0, 3).map((alert) => (
+                  <div
+                    key={alert.id}
+                    className="p-3 bg-status-danger-soft/40 border border-[#F5C2BE] rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+                  >
+                    <div>
+                      <h4 className="text-body-default font-bold text-text-primary">
+                        {alert.member?.fullName || 'مخدوم'}
+                      </h4>
+                      <p className="text-caption text-status-danger font-medium mt-0.5">
+                        غائب لـ {alert.consecutiveCount} أسابيع متتالية ({alert.member?.educationalGrade})
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {alert.member?.phoneNumber && (
+                        <a
+                          href={`tel:${alert.member.phoneNumber}`}
+                          className="px-3 py-1.5 bg-bg-surface border border-border-default rounded-pill text-caption font-semibold text-brand-primary flex items-center gap-1.5 hover:bg-bg-muted"
+                        >
+                          <Phone className="w-3.5 h-3.5 text-brand-primary" />
+                          <span>اتصال</span>
+                        </a>
+                      )}
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => router.push('/attendance')}
+                        className="text-caption font-semibold py-1 px-3 h-8"
+                      >
+                        تسجيل افتقاد
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Upcoming Lesson Obligation */}
+          <section className="bg-bg-surface border border-border-default rounded-card p-4 shadow-card flex flex-col gap-3 text-right">
+            <div className="flex items-center justify-between pb-2 border-b border-border-default">
               <div className="flex items-center gap-2">
-                <Layers className="w-5 h-5 text-brand-primary" />
-                <h2 className="text-h2 font-semibold text-text-primary">إدارة الحسابات المصرحة</h2>
+                <BookOpen className="w-5 h-5 text-brand-primary" />
+                <h3 className="text-h2 font-bold text-text-primary">التحضير الأسبوعي القادم</h3>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.push('/preparations')}
+                className="text-caption font-semibold py-1 px-2.5 h-8 gap-1"
+              >
+                <span>كل الدروس</span>
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+
+            {dashboardData && dashboardData.upcomingLessons.length > 0 ? (
+              <div className="p-3.5 bg-bg-app rounded-lg border border-border-default flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-caption font-bold text-brand-primary">
+                    {new Date(dashboardData.upcomingLessons[0].lessonDate).toLocaleDateString('ar-EG', {
+                      weekday: 'long',
+                      day: 'numeric',
+                      month: 'short',
+                    })}
+                  </span>
+                  <Badge variant={dashboardData.upcomingLessons[0].status === 'REVIEWED' ? 'success' : 'accent'}>
+                    {dashboardData.upcomingLessons[0].status === 'REVIEWED' ? 'تمت المراجعة' : 'مقدم'}
+                  </Badge>
+                </div>
+                <h4 className="text-body-default font-bold text-text-primary">
+                  {dashboardData.upcomingLessons[0].title}
+                </h4>
+                {dashboardData.upcomingLessons[0].scriptureRef && (
+                  <p className="text-caption text-text-secondary">
+                    الشاهد: {dashboardData.upcomingLessons[0].scriptureRef}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="p-4 bg-bg-app rounded-lg border border-dashed border-border-default text-center flex flex-col items-center gap-2">
+                <p className="text-body-small text-text-secondary">
+                  لا توجد تحضيرات قادمة مسجلة حالياً
+                </p>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => router.push('/preparations')}
+                  className="font-semibold"
+                >
+                  كتابة تحضير جديد
+                </Button>
+              </div>
+            )}
+          </section>
+
+          {/* Quick Action Navigation Grid */}
+          <section className="grid grid-cols-2 gap-3 text-right">
+            <button
+              type="button"
+              onClick={() => router.push('/members')}
+              className="p-4 bg-bg-surface border border-border-default rounded-card shadow-card flex flex-col gap-2 hover:border-brand-primary transition-all text-right group"
+            >
+              <div className="w-10 h-10 rounded-lg bg-brand-primary-soft text-brand-primary flex items-center justify-center group-hover:scale-105 transition-transform">
+                <Users className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-body-default font-bold text-text-primary">سجل المخدومين</h4>
+                <p className="text-[11px] text-text-secondary mt-0.5">
+                  بيانات المخدومين والتسجيل الشامل
+                </p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => router.push('/attendance')}
+              className="p-4 bg-bg-surface border border-border-default rounded-card shadow-card flex flex-col gap-2 hover:border-brand-primary transition-all text-right group"
+            >
+              <div className="w-10 h-10 rounded-lg bg-status-success-soft text-status-success flex items-center justify-center group-hover:scale-105 transition-transform">
+                <ClipboardList className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-body-default font-bold text-text-primary">حضور وافتقاد</h4>
+                <p className="text-[11px] text-text-secondary mt-0.5">
+                  رصد الغياب وبطاقات الافتقاد
+                </p>
+              </div>
+            </button>
+          </section>
+
+          {/* Administrative Secretarial Scopes (Level 3+) */}
+          {user && user.role.level >= 3 && (
+            <section className="bg-bg-surface border border-border-default rounded-card p-4 shadow-card flex flex-col gap-3 text-right">
+              <div className="flex items-center justify-between pb-2 border-b border-border-default">
+                <div className="flex items-center gap-2">
+                  <Shield className="w-5 h-5 text-brand-accent" />
+                  <h3 className="text-h2 font-bold text-text-primary">إدارة الخدمة والخدام</h3>
+                </div>
+                <Badge variant="accent">أمين المرحلة</Badge>
               </div>
 
               <p className="text-body-small text-text-secondary leading-relaxed">
-                بصفتك ({user.role.name})، يمكنك إنشاء وتفعيل حسابات الخدام التابعين لنطاقك الإشرافي (طبقا للبند FR-1.2 والفرضية A7).
+                بصفتك ({user.role.name})، يمكنك إنشاء وتفعيل حسابات الخدام ومراجعة تحضيرات المرحلة.
               </p>
 
-              <Button
-                variant="outline"
-                onClick={() => setIsCreateModalOpen(true)}
-                className="h-[44px] gap-2 mt-1"
-              >
-                <UserPlus className="w-4 h-4" />
-                <span>إنشاء حساب خادم جديد</span>
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="primary"
+                  onClick={() => setIsCreateModalOpen(true)}
+                  className="flex-1 h-[40px] gap-1.5 font-semibold text-caption"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span>إضافة خادم جديد</span>
+                </Button>
+
+                <Button
+                  variant="outline"
+                  onClick={() => router.push('/preparations')}
+                  className="flex-1 h-[40px] gap-1.5 font-semibold text-caption"
+                >
+                  <BookOpen className="w-4 h-4" />
+                  <span>مراجعة التحضيرات</span>
+                </Button>
+              </div>
             </section>
           )}
 
@@ -248,42 +516,41 @@ export default function DashboardPage() {
                 <form onSubmit={handleCreateAccount} className="flex flex-col gap-3.5">
                   <Input
                     label="الاسم بالكامل"
-                    placeholder="مثال: بيتر عادل منصور"
+                    placeholder="مثال: يوسف عادل جورج"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     required
                   />
 
                   <Input
-                    label="رقم الهاتف (مصري)"
-                    placeholder="01xxxxxxxxx"
+                    label="رقم الهاتف المحمول"
+                    type="tel"
+                    placeholder="010XXXXXXXX"
                     value={phoneNumber}
                     onChange={(e) => setPhoneNumber(e.target.value)}
-                    iconLeading={<Phone className="w-4 h-4" />}
                     required
                   />
 
                   <Input
                     label="البريد الإلكتروني (اختياري)"
-                    placeholder="servant@example.com"
+                    type="email"
+                    placeholder="servant@church.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    iconLeading={<Mail className="w-4 h-4" />}
                   />
 
-                  {/* Role Selector */}
                   <div className="flex flex-col gap-1.5 text-right">
-                    <label className="text-body-small font-medium text-text-primary">
-                      الرتبة الممنوحة
+                    <label className="text-caption font-semibold text-text-primary">
+                      الرتبة في المرحلة
                     </label>
                     <select
                       value={roleCode}
                       onChange={(e) => setRoleCode(e.target.value)}
-                      className="w-full h-[46px] bg-bg-surface text-text-primary font-cairo text-body-default rounded-input border border-border-default px-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                      className="h-11 px-3 rounded-button border border-border-default bg-bg-surface text-body-default text-text-primary focus:outline-none focus:border-brand-primary"
                     >
-                      <option value="SERVANT">خادم (المستوى 1)</option>
+                      <option value="SERVANT">خادم مرحلة (المستوى 1)</option>
                       {user && user.role.level >= 3 && (
-                        <option value="ASSISTANT_SECRETARY">مساعد امين الخدمة (المستوى 2)</option>
+                        <option value="ASSISTANT_SECRETARY">مساعد أمين الخدمة (المستوى 2)</option>
                       )}
                     </select>
                   </div>
@@ -292,7 +559,6 @@ export default function DashboardPage() {
                     label="كلمة المرور المؤقتة"
                     value={tempPassword}
                     onChange={(e) => setTempPassword(e.target.value)}
-                    iconLeading={<Lock className="w-4 h-4" />}
                     required
                   />
 
@@ -300,9 +566,8 @@ export default function DashboardPage() {
                     <Button
                       type="submit"
                       variant="primary"
-                      fullWidth
                       isLoading={createLoading}
-                      className="h-[44px]"
+                      className="flex-1 h-11 font-semibold"
                     >
                       تأكيد إنشاء الحساب
                     </Button>
@@ -310,7 +575,7 @@ export default function DashboardPage() {
                       type="button"
                       variant="outline"
                       onClick={() => setIsCreateModalOpen(false)}
-                      className="h-[44px]"
+                      className="h-11 px-4"
                     >
                       إلغاء
                     </Button>
@@ -319,16 +584,17 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
+
+          {/* Spiritual Journal Drawer (TASK-05-7) */}
+          <SpiritualJournal
+            isOpen={isSpiritualJournalOpen}
+            onClose={() => setIsSpiritualJournalOpen(false)}
+          />
+
         </div>
 
-        {/* Bottom Tab Bar */}
-        <TabBar
-          activeTab="dashboard"
-          onTabChange={(tab) => {
-            if (tab === 'members') router.push('/members');
-            else if (tab === 'attendance') router.push('/attendance');
-          }}
-        />
+        {/* Bottom Tab Bar Navigation */}
+        <TabBar activeTab="dashboard" onTabChange={handleTabChange} />
       </div>
     </ProtectedRoute>
   );

@@ -11,6 +11,9 @@ import { accountRouter } from './routes/account.routes';
 import { memberRouter } from './routes/member.routes';
 import { noteRouter } from './routes/note.routes';
 import { attendanceRouter } from './routes/attendance.routes';
+import { preparationRouter } from './routes/preparation.routes';
+import { spiritualLifeRouter } from './routes/spiritualLife.routes';
+import { dashboardRouter } from './routes/dashboard.routes';
 import { authenticateJwt } from './middleware/auth';
 
 export const createApp = (beforeRoutesMiddleware?: RequestHandler): Application => {
@@ -66,6 +69,14 @@ export const createApp = (beforeRoutesMiddleware?: RequestHandler): Application 
   // Phase 4: Attendance & Follow-up routes (FR-4.1, FR-4.2, FR-4.3)
   app.use('/api/v1/attendance', attendanceRouter);
   app.use('/api/attendance', attendanceRouter);
+
+  // Phase 5: Servant Self-Service routes (FR-5.1, FR-5.2, FR-6.1, FR-13.2)
+  app.use('/api/v1/preparations', preparationRouter);
+  app.use('/api/preparations', preparationRouter);
+  app.use('/api/v1/spiritual-life', spiritualLifeRouter);
+  app.use('/api/spiritual-life', spiritualLifeRouter);
+  app.use('/api/v1/dashboard', dashboardRouter);
+  app.use('/api/dashboard', dashboardRouter);
 
   // Root welcome route
   app.get('/', (_req: Request, res: Response) => {

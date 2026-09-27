@@ -175,6 +175,34 @@ export interface MockAbsenceAlert {
   updatedAt: Date;
 }
 
+export interface MockLessonPreparation {
+  id: string;
+  authorUserId: string;
+  stageId: string;
+  lessonDate: Date;
+  title: string;
+  scriptureRef: string | null;
+  mainObjective: string | null;
+  content: string;
+  attachments: any;
+  status: any;
+  reviewerNotes: string | null;
+  reviewedById: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface MockSpiritualLifeEntry {
+  id: string;
+  userId: string;
+  sacrament: any;
+  entryDate: Date;
+  notes: string | null;
+  fatherName: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export function createMockPrisma() {
   const users: MockUser[] = [];
   const roles: MockRole[] = [];
@@ -196,6 +224,10 @@ export function createMockPrisma() {
   const memberAttendances: MockMemberAttendance[] = [];
   const servantAttendances: MockServantAttendance[] = [];
   const absenceAlerts: MockAbsenceAlert[] = [];
+
+  // Phase 5 collections
+  const lessonPreparations: MockLessonPreparation[] = [];
+  const spiritualLifeEntries: MockSpiritualLifeEntry[] = [];
 
   let idCounter = 1;
   const nextId = (prefix: string) => `${prefix}-${idCounter++}`;
@@ -253,6 +285,8 @@ export function createMockPrisma() {
       memberAttendances,
       servantAttendances,
       absenceAlerts,
+      lessonPreparations,
+      spiritualLifeEntries,
     },
 
     user: {
@@ -675,11 +709,29 @@ export function createMockPrisma() {
 
       findMany: async (args?: any) => {
         const where = args?.where || {};
-        return memberServantAssignments.filter((a) => {
+        const list = memberServantAssignments.filter((a) => {
           if (where.memberId && a.memberId !== where.memberId) return false;
           if (where.servantUserId && a.servantUserId !== where.servantUserId) return false;
           return true;
         });
+
+        if (args?.include?.member) {
+          return list.map((a) => {
+            const mem = servedMembers.find((m) => m.id === a.memberId);
+            return {
+              ...a,
+              member: mem
+                ? {
+                    id: mem.id,
+                    fullName: mem.fullName,
+                    phoneNumber: mem.phoneNumber,
+                    educationalGrade: mem.educationalGrade,
+                  }
+                : null,
+            };
+          });
+        }
+        return list;
       },
 
       deleteMany: async (args: any) => {
@@ -1023,6 +1075,10 @@ export function createMockPrisma() {
           if (where.OR && Array.isArray(where.OR)) {
             const matchesOr = where.OR.some((orClause: any) => {
               if (orClause.assignedFollowUpId && a.assignedFollowUpId === orClause.assignedFollowUpId) return true;
+              if (orClause.memberId) {
+                if (orClause.memberId.in && Array.isArray(orClause.memberId.in) && orClause.memberId.in.includes(a.memberId)) return true;
+                if (a.memberId === orClause.memberId) return true;
+              }
               if (orClause.member?.servantAssignments?.some) {
                 const servantUserId = orClause.member.servantAssignments.some.servantUserId;
                 const isAssigned = memberServantAssignments.some(
@@ -1117,6 +1173,193 @@ export function createMockPrisma() {
           return { ...alert, member: mem };
         }
         return alert;
+      },
+    },
+
+    lessonPreparation: {
+      create: async (args: any) => {
+        const d = args.data;
+        const newPrep: MockLessonPreparation = {
+          id: nextId('prep'),
+          authorUserId: d.authorUserId,
+          stageId: d.stageId,
+          lessonDate: new Date(d.lessonDate),
+          title: d.title,
+          scriptureRef: d.scriptureRef || null,
+          mainObjective: d.mainObjective || null,
+          content: d.content,
+          attachments: d.attachments || null,
+          status: d.status || 'SUBMITTED',
+          reviewerNotes: null,
+          reviewedById: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        lessonPreparations.push(newPrep);
+        const stage = stages.find((s) => s.id === newPrep.stageId);
+        const author = users.find((u) => u.id === newPrep.authorUserId);
+        return {
+          ...newPrep,
+          stage: stage ? { id: stage.id, name: stage.name } : null,
+          author: author ? { id: author.id, fullName: author.fullName } : null,
+        };
+      },
+
+      count: async (args?: any) => {
+        const where = args?.where || {};
+        return lessonPreparations.filter((p) => {
+          if (where.authorUserId && p.authorUserId !== where.authorUserId) return false;
+          return true;
+        }).length;
+      },
+
+      findMany: async (args?: any) => {
+        const where = args?.where || {};
+        let list = lessonPreparations.filter((p) => {
+          if (where.authorUserId && p.authorUserId !== where.authorUserId) return false;
+          if (where.stageId) {
+            if (typeof where.stageId === 'string' && p.stageId !== where.stageId) return false;
+            if (where.stageId.in && !where.stageId.in.includes(p.stageId)) return false;
+          }
+          if (where.status && p.status !== where.status) return false;
+          if (where.lessonDate) {
+            const d = new Date(p.lessonDate).getTime();
+            if (where.lessonDate.gte && d < new Date(where.lessonDate.gte).getTime()) return false;
+            if (where.lessonDate.lte && d > new Date(where.lessonDate.lte).getTime()) return false;
+          }
+          return true;
+        });
+
+        if (args?.orderBy?.lessonDate === 'asc') {
+          list.sort((a, b) => new Date(a.lessonDate).getTime() - new Date(b.lessonDate).getTime());
+        } else {
+          list.sort((a, b) => new Date(b.lessonDate).getTime() - new Date(a.lessonDate).getTime());
+        }
+
+        if (args?.take && list.length > args.take) {
+          list = list.slice(0, args.take);
+        }
+
+        if (args?.include) {
+          return list.map((p) => {
+            const stage = stages.find((s) => s.id === p.stageId);
+            const author = users.find((u) => u.id === p.authorUserId);
+            const rev = p.reviewedById ? users.find((u) => u.id === p.reviewedById) : null;
+            return {
+              ...p,
+              stage: stage ? { id: stage.id, name: stage.name, sectorId: stage.sectorId } : null,
+              author: author ? { id: author.id, fullName: author.fullName } : null,
+              reviewedBy: rev ? { id: rev.id, fullName: rev.fullName } : null,
+            };
+          });
+        }
+
+        return list;
+      },
+
+      findUnique: async (args: any) => {
+        const where = args?.where || {};
+        const p = lessonPreparations.find((item) => item.id === where.id);
+        if (!p) return null;
+        const stage = stages.find((s) => s.id === p.stageId);
+        const author = users.find((u) => u.id === p.authorUserId);
+        const rev = p.reviewedById ? users.find((u) => u.id === p.reviewedById) : null;
+        return {
+          ...p,
+          stage: stage ? { id: stage.id, name: stage.name, sectorId: stage.sectorId } : null,
+          author: author ? { id: author.id, fullName: author.fullName } : null,
+          reviewedBy: rev ? { id: rev.id, fullName: rev.fullName } : null,
+        };
+      },
+
+      update: async (args: any) => {
+        const { where, data } = args;
+        const p = lessonPreparations.find((item) => item.id === where.id);
+        if (!p) throw new Error('Lesson preparation not found');
+        if (data.title !== undefined) p.title = data.title;
+        if (data.scriptureRef !== undefined) p.scriptureRef = data.scriptureRef;
+        if (data.mainObjective !== undefined) p.mainObjective = data.mainObjective;
+        if (data.content !== undefined) p.content = data.content;
+        if (data.attachments !== undefined) p.attachments = data.attachments;
+        if (data.status !== undefined) p.status = data.status;
+        if (data.reviewerNotes !== undefined) p.reviewerNotes = data.reviewerNotes;
+        if (data.reviewedById !== undefined) p.reviewedById = data.reviewedById;
+        p.updatedAt = new Date();
+
+        const stage = stages.find((s) => s.id === p.stageId);
+        const author = users.find((u) => u.id === p.authorUserId);
+        const rev = p.reviewedById ? users.find((u) => u.id === p.reviewedById) : null;
+        return {
+          ...p,
+          stage: stage ? { id: stage.id, name: stage.name, sectorId: stage.sectorId } : null,
+          author: author ? { id: author.id, fullName: author.fullName } : null,
+          reviewedBy: rev ? { id: rev.id, fullName: rev.fullName } : null,
+        };
+      },
+
+      delete: async (args: any) => {
+        const { where } = args;
+        const index = lessonPreparations.findIndex((item) => item.id === where.id);
+        if (index === -1) throw new Error('Lesson preparation not found');
+        return lessonPreparations.splice(index, 1)[0];
+      },
+    },
+
+    spiritualLifeEntry: {
+      create: async (args: any) => {
+        const d = args.data;
+        const entry: MockSpiritualLifeEntry = {
+          id: nextId('spentry'),
+          userId: d.userId,
+          sacrament: d.sacrament,
+          entryDate: new Date(d.entryDate),
+          notes: d.notes || null,
+          fatherName: d.fatherName || null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        spiritualLifeEntries.push(entry);
+        return entry;
+      },
+
+      findMany: async (args?: any) => {
+        const where = args?.where || {};
+        let list = spiritualLifeEntries.filter((e) => {
+          if (where.userId && e.userId !== where.userId) return false;
+          if (where.sacrament && e.sacrament !== where.sacrament) return false;
+          if (where.entryDate) {
+            const d = new Date(e.entryDate).getTime();
+            if (where.entryDate.gte && d < new Date(where.entryDate.gte).getTime()) return false;
+            if (where.entryDate.lte && d > new Date(where.entryDate.lte).getTime()) return false;
+          }
+          return true;
+        });
+
+        list.sort((a, b) => new Date(b.entryDate).getTime() - new Date(a.entryDate).getTime());
+        return list;
+      },
+
+      findFirst: async (args?: any) => {
+        const where = args?.where || {};
+        let list = spiritualLifeEntries.filter((e) => {
+          if (where.userId && e.userId !== where.userId) return false;
+          if (where.sacrament && e.sacrament !== where.sacrament) return false;
+          return true;
+        });
+        list.sort((a, b) => new Date(b.entryDate).getTime() - new Date(a.entryDate).getTime());
+        return list[0] || null;
+      },
+
+      findUnique: async (args: any) => {
+        const where = args?.where || {};
+        return spiritualLifeEntries.find((e) => e.id === where.id) || null;
+      },
+
+      delete: async (args: any) => {
+        const { where } = args;
+        const index = spiritualLifeEntries.findIndex((e) => e.id === where.id);
+        if (index === -1) throw new Error('Spiritual entry not found');
+        return spiritualLifeEntries.splice(index, 1)[0];
       },
     },
 

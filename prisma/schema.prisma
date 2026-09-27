@@ -72,6 +72,7 @@ model Stage {
   supervisoryNotes SupervisoryNote[]
   memberAttendances MemberAttendance[]
   absenceAlerts AbsenceAlert[]
+  lessonPreparations LessonPreparation[]
 
   @@unique([sectorId, code])
   @@map("stages")
@@ -203,6 +204,11 @@ model User {
   servantAttendancesRecorded ServantAttendance[] @relation("ServantAttendanceRecorder")
   absenceAlertsSubject       AbsenceAlert[]      @relation("AbsenceAlertServant")
   absenceAlertsAssigned      AbsenceAlert[]      @relation("AbsenceAlertFollowUp")
+
+  // Phase 5: Lesson Preparation & Spiritual Life
+  lessonPrepsAuthored        LessonPreparation[]  @relation("PrepAuthor")
+  lessonPrepsReviewed        LessonPreparation[]  @relation("PrepReviewer")
+  spiritualLifeEntries       SpiritualLifeEntry[]
 
   @@index([organizationId, roleId])
   @@map("users")
@@ -536,4 +542,62 @@ model AbsenceAlert {
 
   @@index([stageId, alertStatus])
   @@map("absence_alerts")
+}
+
+// -------------------------------------------------------------
+// PHASE 5: SERVANT SELF-SERVICE (تحضير الدروس والحياة الروحية)
+// -------------------------------------------------------------
+
+enum PrepStatus {
+  DRAFT
+  SUBMITTED
+  REVIEWED
+}
+
+model LessonPreparation {
+  id             String      @id @default(uuid())
+  authorUserId   String      // The خادم author
+  stageId        String      // The مرحلة this lesson is for
+  lessonDate     DateTime    // Date the lesson will be taught
+  title          String      // e.g. "مثل الابن الضال"
+  scriptureRef   String?     // e.g. "لوقا 15: 11-32"
+  mainObjective  String?     // الهدف العام للدرس
+  content        String      // Rich text or Markdown lesson body
+  attachments    Json?       // Array of { url, fileName, fileType, sizeBytes }
+  status         PrepStatus  @default(SUBMITTED)
+  reviewerNotes  String?     // Optional feedback from امين الخدمة
+  reviewedById   String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  author         User        @relation("PrepAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
+  stage          Stage       @relation(fields: [stageId], references: [id])
+  reviewedBy     User?       @relation("PrepReviewer", fields: [reviewedById], references: [id])
+
+  @@index([stageId, lessonDate])
+  @@index([authorUserId])
+  @@map("lesson_preparations")
+}
+
+enum SpiritualSacrament {
+  COMMUNION   // تناول الأسرار المقدسة
+  CONFESSION  // سر الاعتراف
+  FASTING     // الصوم الكنسي
+  PRAYER_RULE // قانون الصلاة اليومي
+}
+
+model SpiritualLifeEntry {
+  id             String             @id @default(uuid())
+  userId         String             // Owner ONLY (NFR-3.4 Absolute Privacy Firewall)
+  sacrament      SpiritualSacrament
+  entryDate      DateTime           // YYYY-MM-DD
+  notes          String?            // Private reflections
+  fatherName     String?            // e.g. Father confessor visited
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, entryDate])
+  @@map("spiritual_life_entries")
 }
