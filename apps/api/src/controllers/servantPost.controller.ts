@@ -98,21 +98,28 @@ export class ServantPostController {
 
       const { id: yearPlanId } = req.params;
 
-      // Stage Isolation: Servant in Prep Boys only sees Prep Boys posts!
-      // If user has no stages (e.g. unassigned), returns []
-      if (!user.stageIds || user.stageIds.length === 0) {
-        return res.status(200).json({
-          success: true,
-          data: [],
-          timestamp: new Date().toISOString(),
-        });
+      // Stage Isolation: Servant in Prep Boys only sees Prep Boys posts (with supervisory oversight)
+      const postsWhere: any = { yearPlanId };
+      if (user.roleLevel < 5) {
+        if (user.roleLevel === 4 && user.sectorIds && user.sectorIds.length > 0) {
+          postsWhere.OR = [
+            { stageId: { in: user.stageIds } },
+            { stage: { sectorId: { in: user.sectorIds } } },
+          ];
+        } else {
+          if (!user.stageIds || user.stageIds.length === 0) {
+            return res.status(200).json({
+              success: true,
+              data: [],
+              timestamp: new Date().toISOString(),
+            });
+          }
+          postsWhere.stageId = { in: user.stageIds };
+        }
       }
 
       const posts = await prisma.yearPlanServantPost.findMany({
-        where: {
-          yearPlanId,
-          stageId: { in: user.stageIds },
-        },
+        where: postsWhere,
         include: {
           author: { select: { id: true, fullName: true } },
           stage: { select: { id: true, name: true } },

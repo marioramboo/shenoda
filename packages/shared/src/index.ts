@@ -7,3 +7,4 @@ export * from './permissions';
 export * from './utils/copticDate';
 export * from './constants/yearPlanAndCalendar';
 export * from './constants/announcementsAndPolls';
+export * from './utils/phone';

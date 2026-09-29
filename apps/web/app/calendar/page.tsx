@@ -136,7 +136,7 @@ export default function CalendarPage() {
     if (tab === 'dashboard') router.push('/dashboard');
     else if (tab === 'members') router.push('/members');
     else if (tab === 'attendance') router.push('/attendance');
-    else if (tab === 'plan') router.push('/year-plan');
+    else if (tab === 'plan') router.push('/plan');
   };
 
   return (
@@ -149,7 +149,7 @@ export default function CalendarPage() {
             <div className="flex items-center gap-2.5">
               <button
                 type="button"
-                onClick={() => router.push('/year-plan')}
+                onClick={() => router.push('/plan')}
                 className="p-1 text-text-secondary hover:text-text-primary"
               >
                 <ArrowRight className="w-5 h-5" />
@@ -167,7 +167,7 @@ export default function CalendarPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => router.push('/year-plan')}
+              onClick={() => router.push('/plan')}
               className="text-caption font-semibold h-8 px-2.5"
             >
               تدبير السنة

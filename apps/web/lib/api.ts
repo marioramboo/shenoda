@@ -5,6 +5,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 export const api = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,
+  timeout: 15000, // 15-second timeout prevents indefinite UI hangs
   headers: {
     'Content-Type': 'application/json',
   },
@@ -26,10 +27,10 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Automatic silent token refresh on 401 responses
+// Automatic silent token refresh on 401 responses with deduped promise
 let isRefreshing = false;
 let failedQueue: Array<{
-  resolve: (value?: unknown) => void;
+  resolve: (token: string | null) => void;
   reject: (reason?: unknown) => void;
 }> = [];
 
@@ -55,12 +56,14 @@ api.interceptors.response.use(
       !originalRequest.url?.includes('/auth/login') &&
       !originalRequest.url?.includes('/auth/refresh')
     ) {
+      originalRequest._retry = true;
+
       if (isRefreshing) {
-        return new Promise((resolve, reject) => {
+        return new Promise<string | null>((resolve, reject) => {
           failedQueue.push({ resolve, reject });
         })
           .then((token) => {
-            if (originalRequest.headers) {
+            if (originalRequest.headers && token) {
               originalRequest.headers.Authorization = `Bearer ${token}`;
             }
             return api(originalRequest);
@@ -68,21 +71,20 @@ api.interceptors.response.use(
           .catch((err) => Promise.reject(err));
       }
 
-      originalRequest._retry = true;
       isRefreshing = true;
 
       try {
         const { data } = await axios.post(
           `${API_BASE_URL}/api/v1/auth/refresh`,
           {},
-          { withCredentials: true }
+          { withCredentials: true, timeout: 10000 }
         );
 
-        const newAccessToken = data.accessToken;
+        const newAccessToken = data.accessToken || null;
         setAuthToken(newAccessToken);
         processQueue(null, newAccessToken);
 
-        if (originalRequest.headers) {
+        if (originalRequest.headers && newAccessToken) {
           originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
         }
         return api(originalRequest);

@@ -39,6 +39,7 @@ import {
   CheckCircle,
   Clock3,
   Info,
+  Pencil,
 } from 'lucide-react';
 
 enum EventCategory {
@@ -109,6 +110,8 @@ interface LessonPreparationData {
   content: string;
   extraReferences?: string | null;
   servantReflection?: string | null;
+  eventId?: string | null;
+  attachments?: any;
   status: 'DRAFT' | 'SUBMITTED' | 'REVIEWED';
   reviewerNotes?: string | null;
   createdAt: string;
@@ -205,6 +208,8 @@ export default function StagePlanPage() {
   // 3. Servant Preparation Submission Modal (For Servant)
   const [prepModalOpen, setPrepModalOpen] = useState(false);
   const [targetLessonEvent, setTargetLessonEvent] = useState<CalendarEvent | null>(null);
+  const [editingPrepId, setEditingPrepId] = useState<string | null>(null);
+  const [userPreparations, setUserPreparations] = useState<LessonPreparationData[]>([]);
   const [prepObjective, setPrepObjective] = useState('');
   const [prepVisualAid, setPrepVisualAid] = useState('');
   const [prepMainContent, setPrepMainContent] = useState('');
@@ -225,6 +230,28 @@ export default function StagePlanPage() {
   const canManagePlan = Boolean(user && user.role && user.role.level >= 3);
   const isSupervisor = Boolean(user && user.role && user.role.level >= 3);
 
+  // Fetch logged-in servant's preparations to track what has already been submitted
+  const fetchUserPreparations = async () => {
+    try {
+      const res = await api.get('/api/v1/preparations?scope=mine');
+      if (res.data?.success && Array.isArray(res.data.data)) {
+        setUserPreparations(res.data.data);
+      }
+    } catch (err) {
+      console.error('Failed to load user preparations:', err);
+    }
+  };
+
+  // Match lesson event to servant's existing preparation if submitted
+  const getUserPrepForEvent = (evt: CalendarEvent): LessonPreparationData | undefined => {
+    return userPreparations.find((p) => {
+      if (p.eventId && p.eventId === evt.id) return true;
+      if (p.attachments && typeof p.attachments === 'object' && (p.attachments as any).eventId === evt.id) return true;
+      if (p.title && evt.title && p.title.trim().toLowerCase() === evt.title.trim().toLowerCase()) return true;
+      return false;
+    });
+  };
+
   // Fetch Year Plans
   const fetchPlans = async () => {
     try {
@@ -237,6 +264,7 @@ export default function StagePlanPage() {
         setPlans([]);
         setSelectedPlan(null);
       }
+      await fetchUserPreparations();
     } catch (err) {
       console.error('Failed to load year plans:', err);
     } finally {
@@ -257,6 +285,7 @@ export default function StagePlanPage() {
 
   useEffect(() => {
     fetchPlans();
+    fetchUserPreparations();
   }, []);
 
   // Filter events into the 3 distinct parts
@@ -316,7 +345,28 @@ export default function StagePlanPage() {
     e.preventDefault();
     setActionMessage(null);
 
-    let planId = selectedPlan?.id;
+    if (!eventTitle.trim()) {
+      setActionMessage({ type: 'error', text: 'يرجى كتابة عنوان التدبير أو الدرس' });
+      return;
+    }
+
+    if (!eventStartDate) {
+      setActionMessage({ type: 'error', text: 'يرجى تحديد تاريخ البدء / موعد الدرس' });
+      return;
+    }
+
+    // Validation for Lesson in التدبير: المراجع إجباري
+    if (addEventType === 'lesson') {
+      if (!lessonReferences.trim()) {
+        setActionMessage({
+          type: 'error',
+          text: 'المراجع الكنسية إجبارية عند تدبير درس جديد للمنهج',
+        });
+        return;
+      }
+    }
+
+    let planId = selectedPlan?.id || (plans.length > 0 ? plans[0].id : null);
 
     // Auto-create plan if none exists
     if (!planId) {
@@ -346,17 +396,6 @@ export default function StagePlanPage() {
     }
 
     if (!planId) return;
-
-    // Validation for Lesson in التدبير: المراجع إجباري
-    if (addEventType === 'lesson') {
-      if (!lessonReferences.trim()) {
-        setActionMessage({
-          type: 'error',
-          text: 'المراجع الكنسية إجبارية عند تدبير درس جديد للمنهج',
-        });
-        return;
-      }
-    }
 
     try {
       setCreateEventLoading(true);
@@ -409,18 +448,30 @@ export default function StagePlanPage() {
     }
   };
 
-  // Open Servant Preparation Form for a Lesson
-  const handleOpenPrepModal = (evt: CalendarEvent) => {
+  // Open Servant Preparation Form for a Lesson (Create or Edit)
+  const handleOpenPrepModal = (evt: CalendarEvent, existingPrep?: LessonPreparationData) => {
+    const prepToEdit = existingPrep || getUserPrepForEvent(evt);
     setTargetLessonEvent(evt);
-    setPrepObjective('');
-    setPrepVisualAid('');
-    setPrepMainContent('');
-    setPrepExtraReferences('');
-    setPrepServantReflection('');
+
+    if (prepToEdit) {
+      setEditingPrepId(prepToEdit.id);
+      setPrepObjective(prepToEdit.mainObjective || '');
+      setPrepVisualAid(prepToEdit.visualAid || (prepToEdit.attachments as any)?.visualAid || '');
+      setPrepMainContent(prepToEdit.content || '');
+      setPrepExtraReferences(prepToEdit.extraReferences || (prepToEdit.attachments as any)?.extraReferences || '');
+      setPrepServantReflection(prepToEdit.servantReflection || (prepToEdit.attachments as any)?.servantReflection || '');
+    } else {
+      setEditingPrepId(null);
+      setPrepObjective('');
+      setPrepVisualAid('');
+      setPrepMainContent('');
+      setPrepExtraReferences('');
+      setPrepServantReflection('');
+    }
     setPrepModalOpen(true);
   };
 
-  // Submit Servant Preparation
+  // Submit Servant Preparation (Create or Edit)
   const handleSubmitPrep = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!targetLessonEvent) return;
@@ -432,29 +483,43 @@ export default function StagePlanPage() {
 
     try {
       setPrepSubmitting(true);
-      const res = await api.post('/api/v1/preparations', {
-        eventId: targetLessonEvent.id,
-        mainObjective: prepObjective.trim(),
-        visualAid: prepVisualAid.trim(),
-        content: prepMainContent.trim(),
-        extraReferences: prepExtraReferences.trim() || undefined,
-        servantReflection: prepServantReflection.trim() || undefined,
-      });
+      let res;
+      if (editingPrepId) {
+        res = await api.patch(`/api/v1/preparations/${editingPrepId}`, {
+          mainObjective: prepObjective.trim(),
+          visualAid: prepVisualAid.trim(),
+          content: prepMainContent.trim(),
+          extraReferences: prepExtraReferences.trim() || undefined,
+          servantReflection: prepServantReflection.trim() || undefined,
+        });
+      } else {
+        res = await api.post('/api/v1/preparations', {
+          eventId: targetLessonEvent.id,
+          mainObjective: prepObjective.trim(),
+          visualAid: prepVisualAid.trim(),
+          content: prepMainContent.trim(),
+          extraReferences: prepExtraReferences.trim() || undefined,
+          servantReflection: prepServantReflection.trim() || undefined,
+        });
+      }
 
       if (res.data?.success) {
         setPrepModalOpen(false);
         setActionMessage({
           type: 'success',
-          text: 'تم تقديم تحضير الدرس بنجاح، وتم تسجيل تاريخ التحضير تلقائياً!',
+          text: editingPrepId
+            ? 'تم حفظ وتحديث تحضير الدرس بنجاح!'
+            : 'تم تقديم تحضير الدرس بنجاح، وتم تسجيل تاريخ التحضير تلقائياً!',
         });
         setTimeout(() => setActionMessage(null), 4000);
+        await fetchUserPreparations();
         // Refresh inspection if open
         if (inspectingEvent?.id === targetLessonEvent.id) {
           await handleInspectLesson(targetLessonEvent);
         }
       }
     } catch (err: any) {
-      alert(err.response?.data?.error?.message || 'فشل في إرسال التحضير');
+      alert(err.response?.data?.error?.message || 'فشل في حفظ التحضير');
     } finally {
       setPrepSubmitting(false);
     }
@@ -924,16 +989,33 @@ export default function StagePlanPage() {
                       year: 'numeric',
                     });
 
+                    const userPrep = getUserPrepForEvent(evt);
+
                     return (
                       <div
                         key={evt.id}
                         className="bg-bg-surface border border-border-default rounded-card p-4 shadow-card text-right flex flex-col gap-3 hover:border-brand-primary/40 transition-all"
                       >
-                        {/* Header: Lesson order & Delivery Date in التدبير */}
+                        {/* Header: Lesson order, Delivery Date & Prep Status in التدبير */}
                         <div className="flex items-center justify-between">
-                          <span className="text-caption font-bold px-2.5 py-0.5 rounded-full bg-brand-primary/10 text-brand-primary border border-brand-primary/20">
-                            الدرس {idx + 1}
-                          </span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-caption font-bold px-2.5 py-0.5 rounded-full bg-brand-primary/10 text-brand-primary border border-brand-primary/20">
+                              الدرس {idx + 1}
+                            </span>
+                            {userPrep && (
+                              <span className={cn(
+                                "text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1",
+                                userPrep.status === 'REVIEWED'
+                                  ? "bg-status-success-soft text-status-success border-status-success/30"
+                                  : userPrep.status === 'DRAFT'
+                                  ? "bg-status-danger-soft text-status-danger border-status-danger/30"
+                                  : "bg-brand-primary-soft text-brand-primary border-brand-primary/30"
+                              )}>
+                                <CheckCircle2 className="w-3 h-3" />
+                                <span>{userPrep.status === 'REVIEWED' ? 'معتمد' : userPrep.status === 'DRAFT' ? 'مطلوب تعديل' : 'تم التحضير'}</span>
+                              </span>
+                            )}
+                          </div>
                           <span className="text-[11px] text-text-secondary flex items-center gap-1 font-medium">
                             <Clock className="w-3.5 h-3.5 text-brand-primary" />
                             تاريخ الإلقاء: {formattedDate}
@@ -971,15 +1053,27 @@ export default function StagePlanPage() {
 
                         {/* Action Buttons: Preparation is required for Servant, Assistant Secretary, and Stage Secretary */}
                         <div className="pt-2 border-t border-border-default flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={() => handleOpenPrepModal(evt)}
-                            className="flex-1 h-8 text-caption font-bold gap-1.5 bg-status-success hover:bg-status-success/90 shadow-sm"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                            <span>إضافة تحضيري للدرس</span>
-                          </Button>
+                          {userPrep ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleOpenPrepModal(evt, userPrep)}
+                              className="flex-1 h-8 text-caption font-bold gap-1.5 border-brand-primary text-brand-primary bg-brand-primary-soft hover:bg-brand-primary/20 shadow-sm transition-colors"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                              <span>تعديل تحضيري للدرس</span>
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={() => handleOpenPrepModal(evt)}
+                              className="flex-1 h-8 text-caption font-bold gap-1.5 bg-status-success hover:bg-status-success/90 shadow-sm"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>إضافة تحضيري للدرس</span>
+                            </Button>
+                          )}
 
                           {isSupervisor && (
                             <Button
@@ -1440,10 +1534,12 @@ export default function StagePlanPage() {
                 <div className="flex items-center justify-between pb-2 border-b border-border-default">
                   <div>
                     <h3 className="text-h2 font-bold text-text-primary">
-                      تحضير: {targetLessonEvent.title}
+                      {editingPrepId ? `تعديل تحضير: ${targetLessonEvent.title}` : `تحضير: ${targetLessonEvent.title}`}
                     </h3>
                     <p className="text-caption text-text-secondary mt-0.5">
-                      رفع التحضير الأسبوعي لأمين الخدمة
+                      {editingPrepId
+                        ? 'تعديل بيانات التحضير المسجلة لهذا الدرس'
+                        : 'رفع التحضير الأسبوعي لأمين الخدمة'}
                     </p>
                   </div>
                   <button
@@ -1482,11 +1578,18 @@ export default function StagePlanPage() {
                 </div>
 
                 <form onSubmit={handleSubmitPrep} className="space-y-3.5">
-                  {/* Auto submission date notice */}
-                  <div className="bg-bg-muted/70 p-2 rounded-card text-[11px] text-text-secondary flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-status-success shrink-0" />
-                    <span>تاريخ التحضير: يُسجل تلقائياً فور الإرسال (Auto once submitted)</span>
-                  </div>
+                  {/* Status notice */}
+                  {editingPrepId ? (
+                    <div className="bg-amber-500/10 border border-amber-500/20 p-2 rounded-card text-[11px] text-amber-700 dark:text-amber-300 flex items-center gap-1.5 font-medium">
+                      <Pencil className="w-3.5 h-3.5 shrink-0 text-amber-600" />
+                      <span>أنت تقوم الآن بتعديل تحضيرك الحالي المحفوظ لهذا الدرس</span>
+                    </div>
+                  ) : (
+                    <div className="bg-bg-muted/70 p-2 rounded-card text-[11px] text-text-secondary flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-status-success shrink-0" />
+                      <span>تاريخ التحضير: يُسجل تلقائياً فور الإرسال (Auto once submitted)</span>
+                    </div>
+                  )}
 
                   {/* 1. الهدف (في التحضير - إجباري) */}
                   <div>
@@ -1579,10 +1682,24 @@ export default function StagePlanPage() {
                       variant="primary"
                       size="sm"
                       isLoading={prepSubmitting}
-                      className="gap-1 font-bold bg-status-success hover:bg-status-success/90"
+                      className={cn(
+                        "gap-1 font-bold shadow-sm text-white",
+                        editingPrepId
+                          ? "bg-brand-primary hover:bg-brand-primary/90"
+                          : "bg-status-success hover:bg-status-success/90"
+                      )}
                     >
-                      <Send className="w-3.5 h-3.5" />
-                      <span>إرسال التحضير</span>
+                      {editingPrepId ? (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          <span>حفظ تعديل التحضير</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-3.5 h-3.5" />
+                          <span>إرسال التحضير</span>
+                        </>
+                      )}
                     </Button>
                   </div>
                 </form>

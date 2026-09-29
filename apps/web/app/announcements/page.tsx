@@ -92,9 +92,11 @@ export default function AnnouncementsPage() {
   const userLevel = user?.role?.level ?? 1;
 
   useEffect(() => {
-    fetchAnnouncements();
-    fetchPolls();
-  }, []);
+    if (user) {
+      fetchAnnouncements();
+      fetchPolls();
+    }
+  }, [user]);
 
   useEffect(() => {
     if (user?.scopes?.stages?.[0]?.id) {
@@ -817,7 +819,7 @@ export default function AnnouncementsPage() {
             if (tab === 'dashboard') router.push('/dashboard');
             else if (tab === 'members') router.push('/members');
             else if (tab === 'attendance') router.push('/attendance');
-            else if (tab === 'plan') router.push('/year-plan');
+            else if (tab === 'plan') router.push('/plan');
             else if (tab === 'profile') router.push('/preparations');
           }}
         />

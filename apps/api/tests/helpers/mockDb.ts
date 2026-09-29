@@ -460,7 +460,12 @@ export function createMockPrisma() {
           }
           if (where.OR && Array.isArray(where.OR)) {
             return where.OR.some((condition: any) => {
-              if (condition.phoneNumber && u.phoneNumber === condition.phoneNumber) return true;
+              if (condition.phoneNumber) {
+                if (typeof condition.phoneNumber === 'string' && u.phoneNumber === condition.phoneNumber) return true;
+                if (condition.phoneNumber.in && Array.isArray(condition.phoneNumber.in)) {
+                  return condition.phoneNumber.in.includes(u.phoneNumber);
+                }
+              }
               if (condition.email && u.email?.toLowerCase() === condition.email.toLowerCase()) return true;
               return false;
             });
@@ -1978,6 +1983,21 @@ export function createMockPrisma() {
           if (where.stageId) {
             if (typeof where.stageId === 'string' && sp.stageId !== where.stageId) return false;
             if (where.stageId.in && !where.stageId.in.includes(sp.stageId)) return false;
+          }
+          if (where.stage?.sectorId?.in) {
+            const st = stages.find((s) => s.id === sp.stageId);
+            if (!st || !where.stage.sectorId.in.includes(st.sectorId)) return false;
+          }
+          if (where.OR && Array.isArray(where.OR)) {
+            const matchesOr = where.OR.some((cond: any) => {
+              if (cond.stageId?.in && cond.stageId.in.includes(sp.stageId)) return true;
+              if (cond.stage?.sectorId?.in) {
+                const st = stages.find((s) => s.id === sp.stageId);
+                if (st && cond.stage.sectorId.in.includes(st.sectorId)) return true;
+              }
+              return false;
+            });
+            if (!matchesOr) return false;
           }
           return true;
         });

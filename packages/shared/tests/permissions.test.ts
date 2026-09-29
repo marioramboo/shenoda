@@ -124,6 +124,19 @@ describe('Phase 1 - Cumulative Permission Engine & Scope Isolation', () => {
       assert.strictEqual(allowed, false);
     });
 
+    test('Servant with undefined assignedMemberIds CANNOT evaluate a specific member', () => {
+      const userWithoutAssigned: UserContext = {
+        ...servantUser,
+        assignedMemberIds: undefined,
+      };
+      const allowed = hasPermission(
+        userWithoutAssigned,
+        PermissionAction.EDIT_ASSIGNED_MEMBER_EVAL,
+        { memberId: 'member-101', orgId }
+      );
+      assert.strictEqual(allowed, false);
+    });
+
     test('Servant can view year plan in assigned stage', () => {
       const allowed = hasPermission(
         servantUser,

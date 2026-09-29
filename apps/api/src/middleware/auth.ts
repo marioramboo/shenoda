@@ -2,6 +2,32 @@ import { Request, Response, NextFunction } from 'express';
 import { TokenService } from '../services/token.service';
 import { prisma } from '../config/prisma';
 
+let cachedStageToSectorMap: Record<string, string> | null = null;
+let lastCacheTimestamp = 0;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+export function clearStageToSectorCache(): void {
+  cachedStageToSectorMap = null;
+  lastCacheTimestamp = 0;
+}
+
+export async function getStageToSectorMap(): Promise<Record<string, string>> {
+  const now = Date.now();
+  if (cachedStageToSectorMap && now - lastCacheTimestamp < CACHE_TTL_MS) {
+    return cachedStageToSectorMap;
+  }
+  const stages = await prisma.stage.findMany({
+    select: { id: true, sectorId: true },
+  });
+  const map: Record<string, string> = {};
+  for (const s of stages) {
+    map[s.id] = s.sectorId;
+  }
+  cachedStageToSectorMap = map;
+  lastCacheTimestamp = now;
+  return map;
+}
+
 /**
  * Middleware that extracts Bearer JWT token from Authorization header
  * and attaches verified user context to req.user.
@@ -33,14 +59,7 @@ export async function authenticateJwt(req: Request, _res: Response, next: NextFu
     // Lazily load stageToSectorMap if not already populated
     if (!req.stageToSectorMap) {
       try {
-        const stages = await prisma.stage.findMany({
-          select: { id: true, sectorId: true },
-        });
-        const map: Record<string, string> = {};
-        for (const s of stages) {
-          map[s.id] = s.sectorId;
-        }
-        req.stageToSectorMap = map;
+        req.stageToSectorMap = await getStageToSectorMap();
       } catch {
         // Fallback if DB query fails
       }
@@ -49,6 +68,7 @@ export async function authenticateJwt(req: Request, _res: Response, next: NextFu
 
   next();
 }
+
 
 /**
  * Middleware requiring authenticated user context.

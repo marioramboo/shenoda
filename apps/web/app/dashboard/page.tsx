@@ -171,7 +171,7 @@ export default function DashboardPage() {
   const handleTabChange = (tab: string) => {
     if (tab === 'members') router.push('/members');
     else if (tab === 'attendance') router.push('/attendance');
-    else if (tab === 'plan') router.push('/year-plan');
+    else if (tab === 'plan') router.push('/plan');
   };
 
 

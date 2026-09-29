@@ -420,8 +420,28 @@ export class PreparationController {
       if (req.body.scriptureRef !== undefined) dataToUpdate.scriptureRef = req.body.scriptureRef;
       if (req.body.mainObjective !== undefined) dataToUpdate.mainObjective = req.body.mainObjective;
       if (req.body.content !== undefined) dataToUpdate.content = req.body.content;
-      if (req.body.attachments !== undefined) dataToUpdate.attachments = req.body.attachments;
       if (req.body.lessonDate !== undefined) dataToUpdate.lessonDate = new Date(req.body.lessonDate);
+
+      const existingAttachments =
+        typeof prep.attachments === 'object' && prep.attachments !== null ? (prep.attachments as any) : {};
+      const hasStructuredFields =
+        req.body.visualAid !== undefined ||
+        req.body.extraReferences !== undefined ||
+        req.body.servantReflection !== undefined ||
+        req.body.attachments !== undefined;
+
+      if (hasStructuredFields) {
+        const incomingAttachments =
+          typeof req.body.attachments === 'object' && req.body.attachments !== null ? req.body.attachments : {};
+        dataToUpdate.attachments = {
+          ...existingAttachments,
+          ...incomingAttachments,
+          ...(req.body.visualAid !== undefined ? { visualAid: req.body.visualAid ? req.body.visualAid.trim() : null } : {}),
+          ...(req.body.extraReferences !== undefined ? { extraReferences: req.body.extraReferences ? req.body.extraReferences.trim() : null } : {}),
+          ...(req.body.servantReflection !== undefined ? { servantReflection: req.body.servantReflection ? req.body.servantReflection.trim() : null } : {}),
+          updatedAt: new Date().toISOString(),
+        };
+      }
     }
 
     // Supervisor reviews

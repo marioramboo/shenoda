@@ -140,6 +140,7 @@ export class DashboardAnalyticsService {
       },
       select: {
         id: true,
+        stageId: true,
         memberId: true,
         sessionType: true,
         sessionDate: true,
@@ -157,7 +158,7 @@ export class DashboardAnalyticsService {
       where: {
         stageId: { in: targetStageIds },
       },
-      select: { id: true, status: true },
+      select: { id: true, stageId: true, status: true },
     });
     const submittedOrReviewedPreps = preparations.filter(
       (p) => p.status === 'SUBMITTED' || p.status === 'REVIEWED'
@@ -173,7 +174,7 @@ export class DashboardAnalyticsService {
         stageId: { in: targetStageIds },
         alertStatus: 'ACTIVE',
       },
-      select: { id: true, memberId: true },
+      select: { id: true, stageId: true, memberId: true },
     });
     const outstandingAbsenceAlerts = activeAlerts.length;
 
@@ -266,19 +267,35 @@ export class DashboardAnalyticsService {
             ? attendanceRecords
             : await prisma.memberAttendance.findMany({
                 where: { stageId: { in: compareStageIds } },
-                select: { memberId: true, status: true, sessionType: true, stageId: true },
+                select: { id: true, stageId: true, memberId: true, status: true, sessionType: true, sessionDate: true },
+              });
+
+        const comparePreps =
+          compareStageIds.length === targetStageIds.length
+            ? preparations
+            : await prisma.lessonPreparation.findMany({
+                where: { stageId: { in: compareStageIds } },
+                select: { id: true, stageId: true, status: true },
+              });
+
+        const compareAlerts =
+          compareStageIds.length === targetStageIds.length
+            ? activeAlerts
+            : await prisma.absenceAlert.findMany({
+                where: { stageId: { in: compareStageIds }, alertStatus: 'ACTIVE' },
+                select: { id: true, stageId: true, memberId: true },
               });
 
         stageComparisons = allStagesMeta.map((st) => {
           const stMembers = compareMembers.filter((m) => m.stageId === st.id).length;
-          const stAttendance = compareAttendance.filter((r) => (r as any).stageId === st.id);
+          const stAttendance = compareAttendance.filter((r) => r.stageId === st.id);
           const stPresent = stAttendance.filter((r) => r.status === 'PRESENT').length;
           const stRate =
             stAttendance.length > 0 ? Math.round((stPresent / stAttendance.length) * 100) : 0;
-          const stPreps = preparations.filter((p) => (p as any).stageId === st.id);
+          const stPreps = comparePreps.filter((p) => p.stageId === st.id);
           const stPrepSubmitted = stPreps.filter((p) => p.status === 'SUBMITTED' || p.status === 'REVIEWED').length;
           const stPrepRate = stPreps.length > 0 ? Math.round((stPrepSubmitted / stPreps.length) * 100) : 100;
-          const stAlerts = activeAlerts.filter((a) => (a as any).stageId === st.id).length;
+          const stAlerts = compareAlerts.filter((a) => a.stageId === st.id).length;
 
           return {
             stageId: st.id,

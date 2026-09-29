@@ -82,10 +82,10 @@ export function hasPermission(
   if (user.roleLevel === 1) {
     // Restricted to assigned members for member evaluation
     if (rule.defaultScope === ScopeRule.ASSIGNED_MEMBERS) {
-      if (targetScope.memberId && user.assignedMemberIds) {
-        return user.assignedMemberIds.includes(targetScope.memberId);
+      if (targetScope.memberId) {
+        return Boolean(user.assignedMemberIds && user.assignedMemberIds.includes(targetScope.memberId));
       }
-      // If no specific member targeted or checking capability
+      // If no specific member targeted or checking general capability
       return true;
     }
 

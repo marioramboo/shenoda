@@ -22,7 +22,6 @@ const MAX_IP_REQUESTS_PER_MIN = 100;
  * Resets all rate limit tracking in-memory (useful for testing).
  */
 export function resetAllRateLimits(): void {
-  identityAttempts.clear;
   identityAttempts.clear();
   ipRequests.clear();
 }

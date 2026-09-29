@@ -557,7 +557,7 @@ export default function AnalyticsPage() {
           if (tab === 'dashboard') router.push('/dashboard');
           if (tab === 'members') router.push('/members');
           if (tab === 'attendance') router.push('/attendance');
-          if (tab === 'plan') router.push('/year-plan');
+          if (tab === 'plan') router.push('/plan');
           if (tab === 'profile') router.push('/dashboard');
         }} />
       </div>

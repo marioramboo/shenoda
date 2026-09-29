@@ -130,9 +130,15 @@ export class YearPlanController {
         }
       }
 
+      let orgId = user.organizationId;
+      if (!orgId) {
+        const org = await prisma.organization.findFirst({ select: { id: true } });
+        orgId = org?.id || 'org-1';
+      }
+
       const plan = await prisma.yearPlan.create({
         data: {
-          organizationId: user.organizationId || 'org-1',
+          organizationId: orgId,
           title,
           academicYear,
           scopeType: scopeType as PrismaPlanScopeType,
@@ -286,12 +292,21 @@ export class YearPlanController {
         });
       }
 
-      // Servant posts strictly isolated by user stage (FR-7.4)
+      // Servant posts strictly isolated by user stage (FR-7.4) with supervisory oversight
+      const postWhere: any = { yearPlanId: plan.id };
+      if (user.roleLevel < 5) {
+        if (user.roleLevel === 4 && user.sectorIds && user.sectorIds.length > 0) {
+          postWhere.OR = [
+            { stageId: { in: user.stageIds } },
+            { stage: { sectorId: { in: user.sectorIds } } },
+          ];
+        } else {
+          postWhere.stageId = { in: user.stageIds };
+        }
+      }
+
       const servantPosts = await prisma.yearPlanServantPost.findMany({
-        where: {
-          yearPlanId: plan.id,
-          stageId: { in: user.stageIds },
-        },
+        where: postWhere,
         include: {
           author: { select: { id: true, fullName: true } },
           stage: { select: { id: true, name: true } },

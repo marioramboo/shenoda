@@ -4,6 +4,7 @@ import { prisma } from '../config/prisma';
 import { HashService } from '../services/hash.service';
 import { TokenService } from '../services/token.service';
 import { UserStatus } from '@prisma/client';
+import { getPhoneVariants } from '@shenoda/shared';
 
 const EGYPTIAN_PHONE_REGEX = /^(?:\+20|0)?1[0125][0-9]{8}$/;
 
@@ -181,11 +182,12 @@ export class AccountController {
       }
     }
 
-    // 4. Check uniqueness for phone and email
+    // 4. Check uniqueness for phone variants and email
+    const phoneVariants = getPhoneVariants(phoneNumber);
     const existingUser = await prisma.user.findFirst({
       where: {
         OR: [
-          { phoneNumber },
+          { phoneNumber: { in: phoneVariants } },
           ...(email ? [{ email: email.toLowerCase() }] : []),
         ],
       },

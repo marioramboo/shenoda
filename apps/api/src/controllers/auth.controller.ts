@@ -12,6 +12,7 @@ import {
   recordFailedLoginAttempt,
   clearLoginRateLimit,
 } from '../middleware/rateLimiter';
+import { getPhoneVariants } from '@shenoda/shared';
 
 // Regex for Egyptian mobile phone (allowing optional +2 prefix)
 const EGYPTIAN_PHONE_REGEX = /^(?:\+20|0)?1[0125][0-9]{8}$/;
@@ -70,28 +71,6 @@ const updateProfileSchema = z.object({
   newPassword: z.string().min(8, 'كلمة المرور الجديدة يجب ألا تقل عن 8 أحرف').optional(),
 });
 
-/**
- * Normalizes phone numbers to standard searchable variants (+20... and 01...)
- */
-function getPhoneVariants(phone: string): string[] {
-  const clean = phone.trim().replace(/\s+/g, '');
-  const variants = new Set<string>([clean]);
-
-  if (clean.startsWith('+20')) {
-    variants.add(clean.substring(2)); // '01...'
-    variants.add(clean.substring(3)); // '1...'
-  } else if (clean.startsWith('20')) {
-    variants.add('+' + clean);
-    variants.add('0' + clean.substring(2));
-  } else if (clean.startsWith('01')) {
-    variants.add('+2' + clean);
-  } else if (clean.startsWith('1')) {
-    variants.add('+20' + clean);
-    variants.add('0' + clean);
-  }
-
-  return Array.from(variants);
-}
 
 /**
  * Finds user by phone or email
@@ -297,111 +276,123 @@ export class AuthController {
    * POST /api/v1/auth/refresh
    */
   public static async refresh(req: Request, res: Response) {
-    const rawToken = req.cookies?.[REFRESH_COOKIE_NAME] || req.body?.refreshToken;
+    try {
+      const rawToken = req.cookies?.[REFRESH_COOKIE_NAME] || req.body?.refreshToken;
 
-    if (!rawToken) {
-      return res.status(401).json({
+      if (!rawToken) {
+        return res.status(401).json({
+          success: false,
+          error: {
+            code: 'ERR_NO_REFRESH_TOKEN',
+            message: 'جلسة الدخول منتهية، يرجى إعادة تسجيل الدخول',
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const rotationResult = await TokenService.verifyAndRotateRefreshToken(rawToken, {
+        userAgent: req.headers['user-agent'],
+        ipAddress: req.ip,
+      });
+
+      if (!rotationResult) {
+        res.clearCookie(REFRESH_COOKIE_NAME, { path: '/' });
+        return res.status(401).json({
+          success: false,
+          error: {
+            code: 'ERR_INVALID_REFRESH_TOKEN',
+            message: 'رمز الجلسة غير صالح أو منتهي الصلاحية',
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: rotationResult.userId },
+        include: {
+          role: true,
+          scopeAssignments: {
+            include: { stage: true, sector: true },
+          },
+        },
+      });
+
+      if (!user || user.status === 'SUSPENDED') {
+        res.clearCookie(REFRESH_COOKIE_NAME, { path: '/' });
+        return res.status(403).json({
+          success: false,
+          error: {
+            code: 'ERR_ACCOUNT_SUSPENDED',
+            message: 'هذا الحساب موقوف حالياً',
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const stageIds = user.scopeAssignments
+        .filter((a) => a.stageId)
+        .map((a) => a.stageId as string);
+      const sectorIds = user.scopeAssignments
+        .filter((a) => a.sectorId)
+        .map((a) => a.sectorId as string);
+
+      const accessToken = TokenService.generateAccessToken({
+        userId: user.id,
+        roleLevel: user.role.level,
+        roleCode: user.role.code,
+        orgId: user.organizationId,
+        stageIds,
+        sectorIds,
+      });
+
+      res.cookie(
+        REFRESH_COOKIE_NAME,
+        rotationResult.newRefreshToken,
+        getRefreshCookieOptions()
+      );
+
+      return res.status(200).json({
+        success: true,
+        accessToken,
+        user: {
+          id: user.id,
+          fullName: user.fullName,
+          phoneNumber: user.phoneNumber,
+          email: user.email,
+          status: user.status,
+          fatherConfessor: user.fatherConfessor,
+          dateOfBirth: user.dateOfBirth,
+          address: user.address,
+          maritalStatus: user.maritalStatus,
+          spouseName: user.spouseName,
+          educationOrCareer: user.educationOrCareer,
+          role: {
+            id: user.role.id,
+            code: user.role.code,
+            name: user.role.name,
+            level: user.role.level,
+          },
+          scopes: {
+            stages: user.scopeAssignments
+              .filter((a) => a.stage)
+              .map((a) => ({ id: a.stage!.id, name: a.stage!.name, code: a.stage!.code })),
+            sectors: user.scopeAssignments
+              .filter((a) => a.sector)
+              .map((a) => ({ id: a.sector!.id, name: a.sector!.name, code: a.sector!.code })),
+          },
+        },
+      });
+    } catch (err: any) {
+      console.error('AuthController.refresh unexpected error:', err);
+      return res.status(500).json({
         success: false,
         error: {
-          code: 'ERR_NO_REFRESH_TOKEN',
-          message: 'جلسة الدخول منتهية، يرجى إعادة تسجيل الدخول',
+          code: 'ERR_INTERNAL_SERVER_ERROR',
+          message: 'حدث خطأ غير متوقع أثناء معالجة الجلسة',
         },
         timestamp: new Date().toISOString(),
       });
     }
-
-    const rotationResult = await TokenService.verifyAndRotateRefreshToken(rawToken, {
-      userAgent: req.headers['user-agent'],
-      ipAddress: req.ip,
-    });
-
-    if (!rotationResult) {
-      res.clearCookie(REFRESH_COOKIE_NAME, { path: '/' });
-      return res.status(401).json({
-        success: false,
-        error: {
-          code: 'ERR_INVALID_REFRESH_TOKEN',
-          message: 'رمز الجلسة غير صالح أو منتهي الصلاحية',
-        },
-        timestamp: new Date().toISOString(),
-      });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { id: rotationResult.userId },
-      include: {
-        role: true,
-        scopeAssignments: {
-          include: { stage: true, sector: true },
-        },
-      },
-    });
-
-    if (!user || user.status === 'SUSPENDED') {
-      res.clearCookie(REFRESH_COOKIE_NAME, { path: '/' });
-      return res.status(403).json({
-        success: false,
-        error: {
-          code: 'ERR_ACCOUNT_SUSPENDED',
-          message: 'هذا الحساب موقوف حالياً',
-        },
-        timestamp: new Date().toISOString(),
-      });
-    }
-
-    const stageIds = user.scopeAssignments
-      .filter((a) => a.stageId)
-      .map((a) => a.stageId as string);
-    const sectorIds = user.scopeAssignments
-      .filter((a) => a.sectorId)
-      .map((a) => a.sectorId as string);
-
-    const accessToken = TokenService.generateAccessToken({
-      userId: user.id,
-      roleLevel: user.role.level,
-      roleCode: user.role.code,
-      orgId: user.organizationId,
-      stageIds,
-      sectorIds,
-    });
-
-    res.cookie(
-      REFRESH_COOKIE_NAME,
-      rotationResult.newRefreshToken,
-      getRefreshCookieOptions()
-    );
-
-    return res.status(200).json({
-      success: true,
-      accessToken,
-      user: {
-        id: user.id,
-        fullName: user.fullName,
-        phoneNumber: user.phoneNumber,
-        email: user.email,
-        status: user.status,
-        fatherConfessor: user.fatherConfessor,
-        dateOfBirth: user.dateOfBirth,
-        address: user.address,
-        maritalStatus: user.maritalStatus,
-        spouseName: user.spouseName,
-        educationOrCareer: user.educationOrCareer,
-        role: {
-          id: user.role.id,
-          code: user.role.code,
-          name: user.role.name,
-          level: user.role.level,
-        },
-        scopes: {
-          stages: user.scopeAssignments
-            .filter((a) => a.stage)
-            .map((a) => ({ id: a.stage!.id, name: a.stage!.name, code: a.stage!.code })),
-          sectors: user.scopeAssignments
-            .filter((a) => a.sector)
-            .map((a) => ({ id: a.sector!.id, name: a.sector!.name, code: a.sector!.code })),
-        },
-      },
-    });
   }
 
   /**
