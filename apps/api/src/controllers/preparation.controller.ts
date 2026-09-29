@@ -2,6 +2,34 @@ import { Request, Response } from 'express';
 import { prisma } from '../config/prisma';
 import { PrepStatus as PrismaPrepStatus } from '@prisma/client';
 
+export function formatPreparation(prep: any) {
+  if (!prep) return prep;
+  let visualAid = null;
+  let extraReferences = null;
+  let servantReflection = null;
+  let eventId = null;
+  let submittedAt = prep.createdAt;
+
+  if (prep.attachments && typeof prep.attachments === 'object' && !Array.isArray(prep.attachments)) {
+    visualAid = (prep.attachments as any).visualAid || null;
+    extraReferences = (prep.attachments as any).extraReferences || null;
+    servantReflection = (prep.attachments as any).servantReflection || null;
+    eventId = (prep.attachments as any).eventId || null;
+    if ((prep.attachments as any).submittedAt) {
+      submittedAt = (prep.attachments as any).submittedAt;
+    }
+  }
+
+  return {
+    ...prep,
+    visualAid,
+    extraReferences,
+    servantReflection,
+    eventId,
+    submittedAt,
+  };
+}
+
 export class PreparationController {
   /**
    * POST /api/v1/preparations (FR-5.1)
@@ -17,7 +45,7 @@ export class PreparationController {
       });
     }
 
-    const {
+    let {
       stageId,
       lessonDate,
       title,
@@ -26,7 +54,52 @@ export class PreparationController {
       content,
       attachments,
       status,
+      eventId,
+      visualAid,
+      extraReferences,
+      servantReflection,
     } = req.body;
+
+    // If linked to a plan lesson event, auto-resolve lesson properties from the event
+    if (eventId) {
+      const event = await prisma.calendarEvent.findUnique({
+        where: { id: eventId },
+      });
+      if (event) {
+        if (!stageId) stageId = event.stageId || (user.stageIds && user.stageIds[0]);
+        if (!lessonDate) lessonDate = event.startDate;
+        if (!title) title = event.title;
+        if (!scriptureRef && event.description && event.description.startsWith('{')) {
+          try {
+            const parsed = JSON.parse(event.description);
+            if (parsed.bibleVerse) scriptureRef = parsed.bibleVerse;
+          } catch {}
+        }
+      }
+
+      // Validate required preparation fields per business rules
+      if (!mainObjective || !mainObjective.trim()) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_REQUEST', message: 'الهدف إجباري في التحضير' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+      if (!visualAid || !visualAid.trim()) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_REQUEST', message: 'وسيلة الإيضاح إجبارية في التحضير' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+      if (!content || !content.trim()) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_REQUEST', message: 'المقدمة والدرس والتدريب الروحي خانة إجبارية' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
 
     if (!stageId || !lessonDate || !title || !content) {
       return res.status(400).json({
@@ -53,6 +126,16 @@ export class PreparationController {
 
     const parsedDate = new Date(lessonDate);
 
+    // Package structured fields into attachments
+    const structuredAttachments = {
+      ...(typeof attachments === 'object' && attachments !== null ? attachments : {}),
+      eventId: eventId || null,
+      visualAid: visualAid ? visualAid.trim() : null,
+      extraReferences: extraReferences ? extraReferences.trim() : null,
+      servantReflection: servantReflection ? servantReflection.trim() : null,
+      submittedAt: new Date().toISOString(),
+    };
+
     const prep = await prisma.lessonPreparation.create({
       data: {
         authorUserId: user.userId,
@@ -60,9 +143,9 @@ export class PreparationController {
         lessonDate: parsedDate,
         title,
         scriptureRef: scriptureRef || null,
-        mainObjective: mainObjective || null,
-        content,
-        attachments: attachments || null,
+        mainObjective: mainObjective ? mainObjective.trim() : null,
+        content: content.trim(),
+        attachments: structuredAttachments,
         status: (status as PrismaPrepStatus) || 'SUBMITTED',
       },
       include: {
@@ -73,7 +156,7 @@ export class PreparationController {
 
     return res.status(201).json({
       success: true,
-      data: prep,
+      data: formatPreparation(prep),
       timestamp: new Date().toISOString(),
     });
   }
@@ -154,7 +237,7 @@ export class PreparationController {
 
     return res.status(200).json({
       success: true,
-      data: preps,
+      data: preps.map(formatPreparation),
       timestamp: new Date().toISOString(),
     });
   }
@@ -193,7 +276,7 @@ export class PreparationController {
     // Permission check:
     // Author can always view
     if (prep.authorUserId === user.userId) {
-      return res.status(200).json({ success: true, data: prep });
+      return res.status(200).json({ success: true, data: formatPreparation(prep) });
     }
 
     // Fellow servants cannot view drafts or other servants' preps unless Level 3+
@@ -219,7 +302,7 @@ export class PreparationController {
 
     return res.status(200).json({
       success: true,
-      data: prep,
+      data: formatPreparation(prep),
       timestamp: new Date().toISOString(),
     });
   }
@@ -293,9 +376,209 @@ export class PreparationController {
 
     return res.status(200).json({
       success: true,
-      data: updated,
+      data: formatPreparation(updated),
       timestamp: new Date().toISOString(),
     });
+  }
+
+  /**
+   * GET /api/v1/preparations/lesson-inspection/:eventId
+   * Stage Secretary inspects who among stage servants prepared and who did not (FR-5.1, FR-5.2)
+   */
+  static async getLessonInspection(req: Request, res: Response) {
+    try {
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          error: { code: 'AUTH_REQUIRED', message: 'Authentication required' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const { eventId } = req.params;
+      const event = await prisma.calendarEvent.findUnique({
+        where: { id: eventId },
+        include: { stage: { select: { id: true, name: true } } },
+      });
+
+      if (!event) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'Lesson event not found' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const stageId = event.stageId || (user.stageIds && user.stageIds[0]);
+
+      // Retrieve all stage servants
+      const scopeAssignments = await prisma.scopeAssignment.findMany({
+        where: stageId ? { stageId } : {},
+        include: {
+          user: {
+            select: {
+              id: true,
+              fullName: true,
+              phoneNumber: true,
+              email: true,
+              status: true,
+              role: { select: { level: true, name: true, code: true } },
+            },
+          },
+        },
+      });
+
+      const userMap = new Map<string, any>();
+      for (const sa of scopeAssignments) {
+        if (sa.user && sa.user.status === 'ACTIVE' && !userMap.has(sa.user.id)) {
+          // Servants (level 1 & 2) or all stage members
+          if (!sa.user.role || sa.user.role.level <= 2) {
+            userMap.set(sa.user.id, sa.user);
+          }
+        }
+      }
+
+      if (userMap.size === 0) {
+        for (const sa of scopeAssignments) {
+          if (sa.user && sa.user.status === 'ACTIVE' && !userMap.has(sa.user.id)) {
+            userMap.set(sa.user.id, sa.user);
+          }
+        }
+      }
+
+      const allServants = Array.from(userMap.values());
+
+      // Retrieve all preparations for this stage
+      const stagePreps = await prisma.lessonPreparation.findMany({
+        where: {
+          stageId,
+        },
+        include: {
+          author: { select: { id: true, fullName: true, phoneNumber: true } },
+          reviewedBy: { select: { id: true, fullName: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      // Filter preparations matching this event
+      const matchingPreps = stagePreps.filter((p) => {
+        const pEventId =
+          p.attachments && typeof p.attachments === 'object' && !Array.isArray(p.attachments)
+            ? (p.attachments as any).eventId
+            : null;
+        if (pEventId && pEventId === event.id) return true;
+        if (p.title && event.title && p.title.trim().toLowerCase() === event.title.trim().toLowerCase()) {
+          return true;
+        }
+        return false;
+      });
+
+      const prepByAuthor = new Map<string, any>();
+      for (const p of matchingPreps) {
+        if (!prepByAuthor.has(p.authorUserId)) {
+          prepByAuthor.set(p.authorUserId, formatPreparation(p));
+        }
+      }
+
+      const preparedServants: any[] = [];
+      const unpreparedServants: any[] = [];
+
+      for (const s of allServants) {
+        const prep = prepByAuthor.get(s.id);
+        if (prep) {
+          preparedServants.push({
+            servant: {
+              id: s.id,
+              fullName: s.fullName,
+              phoneNumber: s.phoneNumber,
+              email: s.email,
+              role: s.role?.name || 'خادم',
+            },
+            preparation: prep,
+          });
+        } else {
+          unpreparedServants.push({
+            id: s.id,
+            fullName: s.fullName,
+            phoneNumber: s.phoneNumber,
+            email: s.email,
+            role: s.role?.name || 'خادم',
+          });
+        }
+      }
+
+      // Check if any outside servants prepared
+      for (const [authorId, prep] of prepByAuthor.entries()) {
+        if (!allServants.some((s) => s.id === authorId)) {
+          preparedServants.push({
+            servant: {
+              id: authorId,
+              fullName: prep.author?.fullName || 'خادم',
+              phoneNumber: prep.author?.phoneNumber || null,
+              email: null,
+              role: 'خادم',
+            },
+            preparation: prep,
+          });
+        }
+      }
+
+      const callerPreparation = prepByAuthor.get(user.userId) || null;
+
+      // Extract bibleVerse and references from event description
+      let bibleVerse = null;
+      let references = null;
+      let overview = event.description;
+      if (event.description && event.description.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(event.description);
+          bibleVerse = parsed.bibleVerse || null;
+          references = parsed.references || null;
+          overview = parsed.overview || '';
+        } catch {}
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          lesson: {
+            id: event.id,
+            title: event.title,
+            startDate: event.startDate,
+            endDate: event.endDate,
+            category: event.category,
+            stageId: event.stageId,
+            stageName: event.stage?.name || 'المرحلة',
+            bibleVerse,
+            references,
+            overview,
+          },
+          summary: {
+            totalServants: preparedServants.length + unpreparedServants.length,
+            preparedCount: preparedServants.length,
+            unpreparedCount: unpreparedServants.length,
+            preparationRate:
+              preparedServants.length + unpreparedServants.length > 0
+                ? Math.round(
+                    (preparedServants.length / (preparedServants.length + unpreparedServants.length)) * 100
+                  )
+                : 0,
+          },
+          preparedServants,
+          unpreparedServants,
+          callerPreparation,
+        },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      console.error('Error in getLessonInspection:', err);
+      return res.status(500).json({
+        success: false,
+        error: { code: 'INTERNAL_SERVER_ERROR', message: err.message },
+        timestamp: new Date().toISOString(),
+      });
+    }
   }
 
   /**

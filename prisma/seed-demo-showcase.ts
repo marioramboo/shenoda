@@ -619,6 +619,59 @@ async function main() {
     },
   });
 
+  // 1. تدبير اجتماع خدام
+  await prisma.calendarEvent.create({
+    data: {
+      yearPlanId: yearPlan.id,
+      stageId: stagePrepBoys.id,
+      title: 'اجتماع الخدمة الأسبوعي — ورشة عمل وسائل الإيضاح والافتقاد الحديث',
+      description: 'مناقشة منهج التربية الكنسية وأساليب إعداد وسائل إيضاح تفاعلية مناسبة لسن المراهقة والفتيان',
+      category: EventCategory.SERVICE_MEETING,
+      startDate: new Date('2026-10-09T17:00:00Z'),
+      endDate: new Date('2026-10-09T19:00:00Z'),
+      location: 'قاعة كنيسة أنبا شنودة بمصر القديمة',
+      maxVolunteers: 4,
+      createdById: stageSec.id,
+    },
+  });
+
+  // 2. تحضير الدروس (دروس المنهج المقررة من التدبير)
+  const lesson1 = await prisma.calendarEvent.create({
+    data: {
+      yearPlanId: yearPlan.id,
+      stageId: stagePrepBoys.id,
+      title: 'داود النبي ومواجهة جليات — الإيمان الذي يغلب العالم',
+      description: JSON.stringify({
+        overview: 'كيف يتغلب المخدوم على حروب الشك والضغوط المجتمعية بالاتكال التام على قوة الله',
+        bibleVerse: '«أَنْتَ تَأْتِي إِلَيَّ بِسَيْفٍ وَبِرُمْحٍ... وَأَنَا آتِي إِلَيْكَ بِاسْمِ رَبِّ الْجُنُودِ» (1صم 17: 45)',
+        references: 'تفسير القمص تادرس يعقوب ملطي، كتاب حياة داود النبي لقداسة البابا شنودة الثالث',
+      }),
+      category: EventCategory.SPIRITUAL_LESSON,
+      startDate: new Date('2026-10-02T09:00:00Z'),
+      endDate: new Date('2026-10-02T11:00:00Z'),
+      location: 'فصول التربية الكنسية — مبنى الخدمات',
+      createdById: stageSec.id,
+    },
+  });
+
+  const lesson2 = await prisma.calendarEvent.create({
+    data: {
+      yearPlanId: yearPlan.id,
+      stageId: stagePrepBoys.id,
+      title: 'سر التناول وثمار الاتحاد بالمسيح',
+      description: JSON.stringify({
+        overview: 'الاستعداد الروحي والجسدي قبل التقدم لسر التناول المقدس وحفظ حواس المخدوم',
+        bibleVerse: '«مَنْ يَأْكُلْ جَسَدِي وَيَشْرَبْ دَمِي يَثْبُتْ فِيَّ وَأَنَا فِيهِ» (يو 6: 56)',
+        references: 'كتاب الإفخارستيا سر الملكوت للأب متى المسكين، السنكسار، خلاصة طقوس الأسرار',
+      }),
+      category: EventCategory.SPIRITUAL_LESSON,
+      startDate: new Date('2026-10-09T09:00:00Z'),
+      endDate: new Date('2026-10-09T11:00:00Z'),
+      location: 'فصول التربية الكنسية — مبنى الخدمات',
+      createdById: stageSec.id,
+    },
+  });
+
   // Link Servant Volunteer for Conference
   await prisma.eventVolunteer.create({
     data: {
@@ -627,7 +680,7 @@ async function main() {
       roleInEvent: 'مسؤول تنظيم ورش العمل الروحية ومجموعات التلمذة',
     },
   });
-  console.log('✅ Year Plan with 3 Events & Servant Volunteer registration created');
+  console.log('✅ Year Plan with 6 Events (Meetings, Service, Lessons) & Volunteer registration created');
 
   // 13. Servant Post (منشور خادم مستقل بالمرحلة)
   await prisma.yearPlanServantPost.create({

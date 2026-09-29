@@ -2,6 +2,31 @@ import { Request, Response } from 'express';
 import { prisma } from '../config/prisma';
 import { PlanScopeType as PrismaPlanScopeType } from '@prisma/client';
 
+export function formatCalendarEvent(event: any) {
+  if (!event) return event;
+  let bibleVerse = null;
+  let references = null;
+  let overview = event.description;
+
+  if (event.description && typeof event.description === 'string' && event.description.trim().startsWith('{')) {
+    try {
+      const parsed = JSON.parse(event.description);
+      bibleVerse = parsed.bibleVerse || null;
+      references = parsed.references || null;
+      overview = parsed.overview || '';
+    } catch {
+      // plain text fallback
+    }
+  }
+
+  return {
+    ...event,
+    bibleVerse,
+    references,
+    overview,
+  };
+}
+
 export class YearPlanController {
   /**
    * POST /api/v1/year-plans (FR-7.1)
@@ -274,10 +299,13 @@ export class YearPlanController {
         orderBy: { createdAt: 'desc' },
       });
 
+      const formattedEvents = (plan.events || []).map(formatCalendarEvent);
+
       return res.status(200).json({
         success: true,
         data: {
           ...plan,
+          events: formattedEvents,
           servantPosts,
         },
         timestamp: new Date().toISOString(),
@@ -343,6 +371,9 @@ export class YearPlanController {
         endDate,
         location,
         maxVolunteers,
+        bibleVerse,
+        references,
+        isLessonPlanCreation,
         stageId = plan.stageId,
         sectorId = plan.sectorId,
       } = req.body;
@@ -357,13 +388,34 @@ export class YearPlanController {
         });
       }
 
+      // If created as a curriculum lesson, validate references is provided as required by business rules
+      if (category === 'SPIRITUAL_LESSON' && isLessonPlanCreation && !references) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'ERR_REFERENCES_REQUIRED',
+            message: 'المراجع الكنسية إجبارية عند تدبير درس جديد للمنهج',
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      let resolvedDescription = description || null;
+      if (category === 'SPIRITUAL_LESSON' && (bibleVerse || references)) {
+        resolvedDescription = JSON.stringify({
+          overview: description || '',
+          bibleVerse: bibleVerse || '',
+          references: references || '',
+        });
+      }
+
       const event = await prisma.calendarEvent.create({
         data: {
           yearPlanId,
           stageId: stageId || null,
           sectorId: sectorId || null,
           title,
-          description: description || null,
+          description: resolvedDescription,
           category: category as any,
           startDate: new Date(startDate),
           endDate: new Date(resolvedEndDate),
@@ -378,7 +430,7 @@ export class YearPlanController {
 
       return res.status(201).json({
         success: true,
-        data: event,
+        data: formatCalendarEvent(event),
         timestamp: new Date().toISOString(),
       });
     } catch (err: any) {

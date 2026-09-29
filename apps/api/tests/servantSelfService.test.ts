@@ -528,4 +528,81 @@ describe('Phase 5 — Servant Self-Service: تحضير & Spiritual Life Comprehe
       assert.strictEqual(data.data.urgentAbsenceAlerts[0].memberId, 'member-101');
     });
   });
+
+  // ------------------------------------------------------------------------
+  // 4. LESSON INSPECTION & STRUCTURED PREPARATION WORKFLOW
+  // ------------------------------------------------------------------------
+  describe('4. Lesson Inspection & Structured Preparation Workflow', () => {
+    test('4.1 Servant submits structured preparation linked to lesson event and Stage Secretary inspects who prepared', async () => {
+      // 1. Create a lesson event in the plan
+      const lessonEvent = await mockDb.calendarEvent.create({
+        data: {
+          stageId: 'stage-prep-boys',
+          title: 'درس مثل الابن الضال',
+          description: JSON.stringify({
+            overview: 'درس روحي عن الرجوع والتوبة',
+            bibleVerse: 'لوقا 15: 11-32',
+            references: 'تفسير أبونا تادرس يعقوب، بستان الرهبان',
+          }),
+          category: 'SPIRITUAL_LESSON',
+          startDate: '2026-10-16T18:00:00.000Z',
+          endDate: '2026-10-16T20:00:00.000Z',
+          createdById: 'user-stagesec-boys',
+        },
+      });
+
+      const servantToken = makeToken({
+        userId: 'user-servant-a',
+        roleLevel: 1,
+        roleCode: 'SERVANT',
+        stageIds: ['stage-prep-boys'],
+        sectorIds: [],
+      });
+
+      // 2. Servant submits preparation linked to lesson event
+      const submitRes = await fetch(`${baseUrl}/api/v1/preparations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${servantToken}`,
+        },
+        body: JSON.stringify({
+          eventId: lessonEvent.id,
+          mainObjective: 'إدراك محبة الآب غير المشروطة وقبول الخطاة التائبين',
+          visualAid: 'لوحة مجسمة ومقطع فيديو رمزي عن الرجوع',
+          content: 'المقدمة: الحديث عن معنى الاشتياق للأب.\nالدرس: تفاصيل مثل الابن الضال وخنازير الكورة البعيدة.\nالتدريب الروحي: قراءة مزمور التوبة وصلاة خاصة.',
+          extraReferences: 'عظة البابا شنودة الثالث عن التوبة والرجوع',
+          servantReflection: 'تأمل خاص في مشاعر الأب وهو ينتظر ابنه من بعيد',
+        }),
+      });
+
+      assert.strictEqual(submitRes.status, 201);
+      const submitData = await submitRes.json();
+      assert.strictEqual(submitData.success, true);
+      assert.strictEqual(submitData.data.visualAid, 'لوحة مجسمة ومقطع فيديو رمزي عن الرجوع');
+      assert.ok(submitData.data.submittedAt, 'Should automatically record submission date');
+
+      // 3. Stage Secretary inspects the lesson to see who prepared and who did not
+      const stageSecToken = makeToken({
+        userId: 'user-stagesec-boys',
+        roleLevel: 3,
+        roleCode: 'STAGE_SECRETARY',
+        stageIds: ['stage-prep-boys'],
+        sectorIds: ['sector-youth'],
+      });
+
+      const inspectRes = await fetch(`${baseUrl}/api/v1/preparations/lesson-inspection/${lessonEvent.id}`, {
+        headers: { Authorization: `Bearer ${stageSecToken}` },
+      });
+
+      assert.strictEqual(inspectRes.status, 200);
+      const inspectData = await inspectRes.json();
+      assert.strictEqual(inspectData.success, true);
+      assert.strictEqual(inspectData.data.lesson.title, 'درس مثل الابن الضال');
+      assert.strictEqual(inspectData.data.lesson.bibleVerse, 'لوقا 15: 11-32');
+      assert.strictEqual(inspectData.data.summary.preparedCount, 1);
+      assert.strictEqual(inspectData.data.preparedServants[0].servant.fullName, 'خادم بيتر');
+      assert.strictEqual(inspectData.data.preparedServants[0].preparation.mainObjective, 'إدراك محبة الآب غير المشروطة وقبول الخطاة التائبين');
+    });
+  });
 });
