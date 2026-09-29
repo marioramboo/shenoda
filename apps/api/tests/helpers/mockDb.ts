@@ -1448,11 +1448,25 @@ export function createMockPrisma() {
             const stage = stages.find((s) => s.id === p.stageId);
             const author = users.find((u) => u.id === p.authorUserId);
             const rev = p.reviewedById ? users.find((u) => u.id === p.reviewedById) : null;
+            const revRole = rev ? roles.find((r) => r.id === rev.roleId) : null;
+            const authorRole = author ? roles.find((r) => r.id === author.roleId) : null;
             return {
               ...p,
               stage: stage ? { id: stage.id, name: stage.name, sectorId: stage.sectorId } : null,
-              author: author ? { id: author.id, fullName: author.fullName } : null,
-              reviewedBy: rev ? { id: rev.id, fullName: rev.fullName } : null,
+              author: author
+                ? {
+                    id: author.id,
+                    fullName: author.fullName,
+                    role: authorRole ? { id: authorRole.id, name: authorRole.name, level: authorRole.level, code: authorRole.code } : null,
+                  }
+                : null,
+              reviewedBy: rev
+                ? {
+                    id: rev.id,
+                    fullName: rev.fullName,
+                    role: revRole ? { id: revRole.id, name: revRole.name, level: revRole.level, code: revRole.code } : null,
+                  }
+                : null,
             };
           });
         }
@@ -1467,11 +1481,25 @@ export function createMockPrisma() {
         const stage = stages.find((s) => s.id === p.stageId);
         const author = users.find((u) => u.id === p.authorUserId);
         const rev = p.reviewedById ? users.find((u) => u.id === p.reviewedById) : null;
+        const revRole = rev ? roles.find((r) => r.id === rev.roleId) : null;
+        const authorRole = author ? roles.find((r) => r.id === author.roleId) : null;
         return {
           ...p,
           stage: stage ? { id: stage.id, name: stage.name, sectorId: stage.sectorId } : null,
-          author: author ? { id: author.id, fullName: author.fullName } : null,
-          reviewedBy: rev ? { id: rev.id, fullName: rev.fullName } : null,
+          author: author
+            ? {
+                id: author.id,
+                fullName: author.fullName,
+                role: authorRole ? { id: authorRole.id, name: authorRole.name, level: authorRole.level, code: authorRole.code } : null,
+              }
+            : null,
+          reviewedBy: rev
+            ? {
+                id: rev.id,
+                fullName: rev.fullName,
+                role: revRole ? { id: revRole.id, name: revRole.name, level: revRole.level, code: revRole.code } : null,
+              }
+            : null,
         };
       },
 
@@ -1504,11 +1532,25 @@ export function createMockPrisma() {
         const stage = stages.find((s) => s.id === p.stageId);
         const author = users.find((u) => u.id === p.authorUserId);
         const rev = p.reviewedById ? users.find((u) => u.id === p.reviewedById) : null;
+        const revRole = rev ? roles.find((r) => r.id === rev.roleId) : null;
+        const authorRole = author ? roles.find((r) => r.id === author.roleId) : null;
         return {
           ...p,
           stage: stage ? { id: stage.id, name: stage.name, sectorId: stage.sectorId } : null,
-          author: author ? { id: author.id, fullName: author.fullName } : null,
-          reviewedBy: rev ? { id: rev.id, fullName: rev.fullName } : null,
+          author: author
+            ? {
+                id: author.id,
+                fullName: author.fullName,
+                role: authorRole ? { id: authorRole.id, name: authorRole.name, level: authorRole.level, code: authorRole.code } : null,
+              }
+            : null,
+          reviewedBy: rev
+            ? {
+                id: rev.id,
+                fullName: rev.fullName,
+                role: revRole ? { id: revRole.id, name: revRole.name, level: revRole.level, code: revRole.code } : null,
+              }
+            : null,
         };
       },
 

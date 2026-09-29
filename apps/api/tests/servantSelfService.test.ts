@@ -180,6 +180,25 @@ describe('Phase 5 — Servant Self-Service: تحضير & Spiritual Life Comprehe
       sectorId: null,
     });
 
+    // 6. Sector Secretary (Level 4 - Youth Sector)
+    await mockDb.user.create({
+      data: {
+        id: 'user-sectorsec-youth',
+        organizationId: 'org-1',
+        roleId: 'role-sectorsec',
+        fullName: 'أمين قطاع الشباب',
+        phoneNumber: '01066666666',
+        passwordHash: 'dummy',
+        status: 'ACTIVE',
+      },
+    });
+    mockDb._data.scopeAssignments.push({
+      id: 'sa-sectorsec-youth',
+      userId: 'user-sectorsec-youth',
+      stageId: null,
+      sectorId: 'sector-youth',
+    });
+
     // Seed Member for Servant A
     await mockDb.servedMember.create({
       data: {
@@ -382,6 +401,180 @@ describe('Phase 5 — Servant Self-Service: تحضير & Spiritual Life Comprehe
         'يرجى مراجعة وتعديل الشواهد الكتابية وإعادة تقديم الدرس'
       );
       assert.strictEqual(patchData.data.reviewedById, 'user-stagesec-boys');
+    });
+
+    test('1.6 Stage Secretary CANNOT approve/review their own preparation -> 403 ERR_CANNOT_SELF_REVIEW', async () => {
+      const prep = await mockDb.lessonPreparation.create({
+        data: {
+          authorUserId: 'user-stagesec-boys',
+          stageId: 'stage-prep-boys',
+          lessonDate: new Date('2026-10-23'),
+          title: 'درس أمين الخدمة',
+          content: 'محتوى درس ألقاه أمين الخدمة بنفسه...',
+          status: 'SUBMITTED',
+        },
+      });
+
+      const stageSecToken = makeToken({
+        userId: 'user-stagesec-boys',
+        roleLevel: 3,
+        roleCode: 'STAGE_SECRETARY',
+        stageIds: ['stage-prep-boys'],
+        sectorIds: [],
+      });
+
+      const patchRes = await fetch(`${baseUrl}/api/v1/preparations/${prep.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${stageSecToken}`,
+        },
+        body: JSON.stringify({
+          status: 'REVIEWED',
+          reviewerNotes: 'محاولة اعتماد ذاتي',
+        }),
+      });
+
+      assert.strictEqual(patchRes.status, 403);
+      const data = await patchRes.json();
+      assert.strictEqual(data.error.code, 'ERR_CANNOT_SELF_REVIEW');
+    });
+
+    test('1.7 Sector Secretary CAN approve Stage Secretary preparation -> 200 OK with reviewer metadata', async () => {
+      const prep = await mockDb.lessonPreparation.create({
+        data: {
+          authorUserId: 'user-stagesec-boys',
+          stageId: 'stage-prep-boys',
+          lessonDate: new Date('2026-10-30'),
+          title: 'درس متقدم لأمين الخدمة',
+          content: 'تحضير أمين الخدمة المكتمل...',
+          status: 'SUBMITTED',
+        },
+      });
+
+      const sectorSecToken = makeToken({
+        userId: 'user-sectorsec-youth',
+        roleLevel: 4,
+        roleCode: 'SECTOR_SECRETARY',
+        stageIds: [],
+        sectorIds: ['sector-youth'],
+      });
+
+      const patchRes = await fetch(`${baseUrl}/api/v1/preparations/${prep.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${sectorSecToken}`,
+        },
+        body: JSON.stringify({
+          status: 'REVIEWED',
+          reviewerNotes: 'معتمد ومقبول من أمانة القطاع',
+        }),
+      });
+
+      assert.strictEqual(patchRes.status, 200);
+      const data = await patchRes.json();
+      assert.strictEqual(data.data.status, 'REVIEWED');
+      assert.strictEqual(data.data.reviewedById, 'user-sectorsec-youth');
+      assert.strictEqual(data.data.reviewedByName, 'أمين قطاع الشباب');
+      assert.strictEqual(data.data.reviewedByRole, 'امين قطاع');
+      assert.strictEqual(data.data.reviewedByLevel, 4);
+    });
+
+    test('1.8 Stage Secretary CANNOT override Sector Secretary approval/rejection -> 403 ERR_SUPERVISOR_OVERRIDE_PROHIBITED', async () => {
+      // First, Sector Secretary approves a servant preparation
+      const prep = await mockDb.lessonPreparation.create({
+        data: {
+          authorUserId: 'user-servant-a',
+          stageId: 'stage-prep-boys',
+          lessonDate: new Date('2026-11-06'),
+          title: 'درس الخادم المعتمد قطاعياً',
+          content: 'محتوى الدرس...',
+          status: 'SUBMITTED',
+        },
+      });
+
+      const sectorSecToken = makeToken({
+        userId: 'user-sectorsec-youth',
+        roleLevel: 4,
+        roleCode: 'SECTOR_SECRETARY',
+        stageIds: [],
+        sectorIds: ['sector-youth'],
+      });
+
+      await fetch(`${baseUrl}/api/v1/preparations/${prep.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${sectorSecToken}`,
+        },
+        body: JSON.stringify({
+          status: 'REVIEWED',
+          reviewerNotes: 'معتمد من أمين القطاع مباشرة',
+        }),
+      });
+
+      // Now Stage Secretary tries to override it to DRAFT
+      const stageSecToken = makeToken({
+        userId: 'user-stagesec-boys',
+        roleLevel: 3,
+        roleCode: 'STAGE_SECRETARY',
+        stageIds: ['stage-prep-boys'],
+        sectorIds: [],
+      });
+
+      const overrideRes = await fetch(`${baseUrl}/api/v1/preparations/${prep.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${stageSecToken}`,
+        },
+        body: JSON.stringify({
+          status: 'DRAFT',
+          reviewerNotes: 'محاولة تعديل قرار أمين القطاع',
+        }),
+      });
+
+      assert.strictEqual(overrideRes.status, 403);
+      const data = await overrideRes.json();
+      assert.strictEqual(data.error.code, 'ERR_SUPERVISOR_OVERRIDE_PROHIBITED');
+    });
+
+    test('1.9 Sector Secretary CANNOT review preparation in an unassigned sector -> 403 FORBIDDEN_SECTOR_SCOPE', async () => {
+      const prep = await mockDb.lessonPreparation.create({
+        data: {
+          authorUserId: 'user-servant-a',
+          stageId: 'stage-prep-boys',
+          lessonDate: new Date('2026-11-13'),
+          title: 'درس في قطاع الشباب',
+          content: 'محتوى...',
+          status: 'SUBMITTED',
+        },
+      });
+
+      // A sector secretary assigned to a DIFFERENT sector (e.g. sector-children)
+      const foreignSectorSecToken = makeToken({
+        userId: 'user-sectorsec-foreign',
+        roleLevel: 4,
+        roleCode: 'SECTOR_SECRETARY',
+        stageIds: [],
+        sectorIds: ['sector-children'],
+      });
+
+      const patchRes = await fetch(`${baseUrl}/api/v1/preparations/${prep.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${foreignSectorSecToken}`,
+        },
+        body: JSON.stringify({
+          status: 'REVIEWED',
+        }),
+      });
+
+      assert.strictEqual(patchRes.status, 403);
+      const data = await patchRes.json();
+      assert.strictEqual(data.error.code, 'FORBIDDEN_SECTOR_SCOPE');
     });
   });
 

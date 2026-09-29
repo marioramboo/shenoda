@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/prisma';
 import { calculateServantAttendanceRate } from '../services/attendanceAnalytics.service';
+import { formatPreparation } from './preparation.controller';
 
 export class DashboardController {
   /**
@@ -35,6 +36,13 @@ export class DashboardController {
         take: 3,
         include: {
           stage: { select: { id: true, name: true } },
+          reviewedBy: {
+            select: {
+              id: true,
+              fullName: true,
+              role: { select: { id: true, name: true, level: true, code: true } },
+            },
+          },
         },
       });
 
@@ -114,7 +122,7 @@ export class DashboardController {
             assignedMembersCount: assignedMembers.length,
             daysSinceLastConfession,
           },
-          upcomingLessons: upcomingPreps,
+          upcomingLessons: upcomingPreps.map(formatPreparation),
           assignedMembers,
           urgentAbsenceAlerts: alerts,
         },

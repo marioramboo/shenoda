@@ -38,6 +38,7 @@ import {
   Bookmark,
   CheckCircle,
   Clock3,
+  Info,
 } from 'lucide-react';
 
 enum EventCategory {
@@ -112,6 +113,11 @@ interface LessonPreparationData {
   reviewerNotes?: string | null;
   createdAt: string;
   submittedAt?: string;
+  reviewedByName?: string | null;
+  reviewedByRole?: string | null;
+  reviewedByLevel?: number | null;
+  authorRole?: string | null;
+  authorLevel?: number | null;
   author?: { id: string; fullName: string; phoneNumber?: string };
 }
 
@@ -963,42 +969,29 @@ export default function StagePlanPage() {
                           </div>
                         )}
 
-                        {/* Action Buttons: Supervisor vs Servant */}
-                        <div className="pt-2 border-t border-border-default flex items-center gap-2">
-                          {isSupervisor ? (
-                            /* أمين الخدمة يخش على الدرس يشوف مين المحضر ومين مش محضر */
+                        {/* Action Buttons: Preparation is required for Servant, Assistant Secretary, and Stage Secretary */}
+                        <div className="pt-2 border-t border-border-default flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() => handleOpenPrepModal(evt)}
+                            className="flex-1 h-8 text-caption font-bold gap-1.5 bg-status-success hover:bg-status-success/90 shadow-sm"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>إضافة تحضيري للدرس</span>
+                          </Button>
+
+                          {isSupervisor && (
                             <Button
-                              variant="primary"
+                              variant="outline"
                               size="sm"
                               onClick={() => handleInspectLesson(evt)}
-                              className="w-full h-8 text-caption font-bold gap-1.5 shadow-sm"
+                              className="flex-1 sm:flex-initial h-8 px-3 text-caption font-bold gap-1 text-brand-primary border-brand-primary/30 hover:bg-brand-primary-soft"
+                              title="متابعة كشف تحضيرات خدام المرحلة واعتمادها"
                             >
                               <Users className="w-3.5 h-3.5" />
-                              <span>متابعة تحضيرات الخدام (مين حضّر ومين ما حضّرش)</span>
+                              <span>كشف تحضيرات المرحلة</span>
                             </Button>
-                          ) : (
-                            /* Servant: Add or View Preparation */
-                            <div className="w-full flex items-center gap-2">
-                              <Button
-                                variant="primary"
-                                size="sm"
-                                onClick={() => handleOpenPrepModal(evt)}
-                                className="flex-1 h-8 text-caption font-bold gap-1.5 bg-status-success hover:bg-status-success/90"
-                              >
-                                <Plus className="w-3.5 h-3.5" />
-                                <span>إضافة تحضيري لهذا الدرس</span>
-                              </Button>
-
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleInspectLesson(evt)}
-                                className="h-8 px-2.5 text-caption font-semibold"
-                                title="عرض كشف التحضيرات للمرحلة"
-                              >
-                                <Eye className="w-3.5 h-3.5" />
-                              </Button>
-                            </div>
                           )}
                         </div>
                       </div>
@@ -1311,26 +1304,47 @@ export default function StagePlanPage() {
                             })
                           : 'مسجل تلقائياً';
 
+                        const isOwnPrep = Boolean(user && prep.authorUserId === user.id);
+
                         return (
                           <div
                             key={prep.id}
                             className="bg-bg-muted/50 border border-border-default rounded-card p-3 flex items-center justify-between gap-2"
                           >
                             <div className="text-right">
-                              <h4 className="text-body-small font-bold text-text-primary">
-                                {item.servant.fullName}
-                              </h4>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <h4 className="text-body-small font-bold text-text-primary">
+                                  {item.servant.fullName}
+                                </h4>
+                                <span className="text-[10px] font-semibold text-text-secondary bg-bg-muted px-1.5 py-0.2 rounded border border-border-default">
+                                  {item.servant.role || 'خادم'}
+                                </span>
+                                {isOwnPrep && (
+                                  <span className="text-[10px] font-bold text-brand-primary bg-brand-primary-soft px-1.5 py-0.2 rounded">
+                                    تحضيرك الشخصي
+                                  </span>
+                                )}
+                              </div>
                               <p className="text-[11px] text-text-secondary flex items-center gap-1 mt-0.5">
                                 <Clock className="w-3 h-3 text-status-success" />
                                 <span>تاريخ التحضير: {formattedSubmitTime}</span>
                               </p>
                               {prep.status === 'REVIEWED' ? (
-                                <span className="inline-block mt-1 text-[10px] font-bold text-status-success bg-status-success-soft px-1.5 py-0.2 rounded">
-                                  مُعتمد ومقبول
-                                </span>
-                              ) : prep.status === 'DRAFT' ? (
-                                <span className="inline-block mt-1 text-[10px] font-bold text-status-danger bg-status-danger-soft px-1.5 py-0.2 rounded">
-                                  مطلوب إعادة تعديل
+                                <div className="mt-1 flex items-center gap-1 text-[10px] font-bold text-status-success bg-status-success-soft px-2 py-0.5 rounded w-fit">
+                                  <Check className="w-3 h-3" />
+                                  <span>
+                                    مُعتمد ومقبول {prep.reviewedByName ? `(بواسطة: ${prep.reviewedByName} - ${prep.reviewedByRole || 'أمين'})` : ''}
+                                  </span>
+                                </div>
+                              ) : prep.status === 'DRAFT' && prep.reviewerNotes ? (
+                                <div className="mt-1 flex items-center gap-1 text-[10px] font-bold text-status-danger bg-status-danger-soft px-2 py-0.5 rounded w-fit">
+                                  <span>
+                                    مطلوب إعادة تعديل {prep.reviewedByName ? `(بواسطة: ${prep.reviewedByName} - ${prep.reviewedByRole || 'أمين'})` : ''}
+                                  </span>
+                                </div>
+                              ) : isOwnPrep ? (
+                                <span className="inline-block mt-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.2 rounded">
+                                  بانتظار اعتماد أمين القطاع
                                 </span>
                               ) : (
                                 <span className="inline-block mt-1 text-[10px] font-bold text-status-warning bg-status-warning-soft px-1.5 py-0.2 rounded">
@@ -1370,9 +1384,19 @@ export default function StagePlanPage() {
                           className="bg-bg-muted/50 border border-border-default rounded-card p-3 flex items-center justify-between gap-2"
                         >
                           <div className="text-right">
-                            <h4 className="text-body-small font-bold text-text-primary">
-                              {s.fullName}
-                            </h4>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <h4 className="text-body-small font-bold text-text-primary">
+                                {s.fullName}
+                              </h4>
+                              <span className="text-[10px] font-semibold text-text-secondary bg-bg-muted px-1.5 py-0.2 rounded border border-border-default">
+                                {s.role || 'خادم'}
+                              </span>
+                              {user && s.id === user.id && (
+                                <span className="text-[10px] font-bold text-status-danger bg-status-danger-soft px-1.5 py-0.2 rounded">
+                                  أنت لم تحضّر بعد
+                                </span>
+                              )}
+                            </div>
                             <p className="text-[11px] text-status-danger font-medium mt-0.5">
                               لم يتم رفع التحضير حتى الآن
                             </p>
@@ -1575,9 +1599,14 @@ export default function StagePlanPage() {
                 {/* Header */}
                 <div className="flex items-center justify-between pb-2 border-b border-border-default">
                   <div>
-                    <h3 className="text-h2 font-bold text-text-primary">
-                      تحضير الخادم: {selectedPrepDetail.author?.fullName || 'خادم'}
-                    </h3>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <h3 className="text-h2 font-bold text-text-primary">
+                        تحضير: {selectedPrepDetail.author?.fullName || 'خادم'}
+                      </h3>
+                      <span className="text-[10px] font-semibold text-text-secondary bg-bg-muted px-2 py-0.5 rounded border border-border-default">
+                        {selectedPrepDetail.authorRole || 'خادم'}
+                      </span>
+                    </div>
                     <p className="text-caption text-text-secondary mt-0.5">
                       تاريخ التحضير: {new Date(selectedPrepDetail.createdAt).toLocaleString('ar-EG')}
                     </p>
@@ -1593,6 +1622,35 @@ export default function StagePlanPage() {
 
                 {/* Details */}
                 <div className="space-y-3 text-body-small">
+                  {/* Status Banner with Reviewer Info (FR-5.2 & User Spec) */}
+                  {selectedPrepDetail.status === 'REVIEWED' && (
+                    <div className="bg-status-success-soft border border-status-success/30 p-2.5 rounded-card text-caption text-status-success flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <Check className="w-4 h-4 shrink-0" />
+                        <span className="font-semibold">تم اعتماد وقبول التحضير بواسطة:</span>
+                      </div>
+                      <span className="font-bold">
+                        {selectedPrepDetail.reviewedByName
+                          ? `${selectedPrepDetail.reviewedByName} (${selectedPrepDetail.reviewedByRole || 'أمين'})`
+                          : 'أمين الخدمة'}
+                      </span>
+                    </div>
+                  )}
+
+                  {selectedPrepDetail.status === 'DRAFT' && selectedPrepDetail.reviewerNotes && (
+                    <div className="bg-status-danger-soft border border-status-danger/30 p-2.5 rounded-card text-caption text-status-danger flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <AlertCircle className="w-4 h-4 shrink-0" />
+                        <span className="font-semibold">طلب إعادة تعديل التحضير بواسطة:</span>
+                      </div>
+                      <span className="font-bold">
+                        {selectedPrepDetail.reviewedByName
+                          ? `${selectedPrepDetail.reviewedByName} (${selectedPrepDetail.reviewedByRole || 'أمين'})`
+                          : 'أمين الخدمة'}
+                      </span>
+                    </div>
+                  )}
+
                   {/* Objective */}
                   {selectedPrepDetail.mainObjective && (
                     <div className="bg-bg-muted/50 p-2.5 rounded-card">
@@ -1643,20 +1701,59 @@ export default function StagePlanPage() {
                     </div>
                   )}
 
-                  {/* Supervisor Review Feedback Input */}
-                  {isSupervisor && (
-                    <div className="pt-2 border-t border-border-default">
-                      <label className="text-caption font-semibold text-text-secondary block mb-1">
-                        ملاحظات وتوجيهات أمين الخدمة للتحضير
-                      </label>
-                      <textarea
-                        rows={2}
-                        value={reviewerNotesInput}
-                        onChange={(e) => setReviewerNotesInput(e.target.value)}
-                        placeholder="اكتب ملاحظاتك التشجيعية أو نقاط التعديل المطلوبة..."
-                        className="w-full bg-bg-muted border border-border-default rounded-card p-2 text-body-small text-text-primary focus:outline-none focus:border-brand-primary resize-none"
-                      />
+                  {/* Previous Reviewer Notes */}
+                  {selectedPrepDetail.reviewerNotes && (
+                    <div className="bg-bg-muted/80 border border-border-default p-2.5 rounded-card text-caption">
+                      <span className="font-bold text-text-primary block mb-0.5">
+                        ملاحظات المراجعة المسجلة:
+                      </span>
+                      <p className="text-text-secondary">{selectedPrepDetail.reviewerNotes}</p>
                     </div>
+                  )}
+
+                  {/* Rules Notifications:
+                      1. Own preparation -> Self-approval forbidden
+                      2. Reviewed by Sector Secretary -> Stage Secretary override forbidden
+                  */}
+                  {Boolean(user && selectedPrepDetail.authorUserId === user.id) ? (
+                    <div className="bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 p-2.5 rounded-card text-caption font-semibold flex items-center gap-1.5">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <span>
+                        هذا تحضيرك الخاص — لا يمكنك اعتماد تحضيرك بنفسك، ويجب اعتماده بواسطة أمين القطاع.
+                      </span>
+                    </div>
+                  ) : Boolean(
+                      user &&
+                        user.role &&
+                        user.role.level < 4 &&
+                        selectedPrepDetail.reviewedByLevel &&
+                        selectedPrepDetail.reviewedByLevel >= 4
+                    ) ? (
+                    <div className="bg-blue-500/10 border border-blue-500/20 text-blue-700 dark:text-blue-400 p-2.5 rounded-card text-caption font-semibold flex items-center gap-1.5">
+                      <Info className="w-4 h-4 shrink-0" />
+                      <span>
+                        تمت مراجعة هذا التحضير واعتماده بواسطة أمين القطاع (
+                        {selectedPrepDetail.reviewedByName || 'أمين القطاع'}). لا يحق لأمين الخدمة تعديل هذا القرار.
+                      </span>
+                    </div>
+                  ) : (
+                    /* Supervisor Review Feedback Input (Enabled only when authorized) */
+                    isSupervisor && (
+                      <div className="pt-2 border-t border-border-default">
+                        <label className="text-caption font-semibold text-text-secondary block mb-1">
+                          {user?.role?.level && user.role.level >= 4
+                            ? 'ملاحظات وتوجيهات أمين القطاع للتحضير'
+                            : 'ملاحظات وتوجيهات أمين الخدمة للتحضير'}
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={reviewerNotesInput}
+                          onChange={(e) => setReviewerNotesInput(e.target.value)}
+                          placeholder="اكتب ملاحظاتك التشجيعية أو نقاط التعديل المطلوبة..."
+                          className="w-full bg-bg-muted border border-border-default rounded-card p-2 text-body-small text-text-primary focus:outline-none focus:border-brand-primary resize-none"
+                        />
+                      </div>
+                    )
                   )}
                 </div>
 
@@ -1676,34 +1773,43 @@ export default function StagePlanPage() {
                     إلغاء
                   </Button>
 
-                  {isSupervisor && (
-                    <div className="flex items-center gap-2">
-                      {/* زر الرفض / طلب التعديل */}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        isLoading={reviewActionLoading}
-                        onClick={() => handleReviewPrep('REJECT')}
-                        className="text-caption font-bold text-status-danger border-status-danger/40 hover:bg-status-danger-soft"
-                      >
-                        طلب تعديل / رفض
-                      </Button>
+                  {/* Action buttons shown only if supervisor AND NOT own prep AND NOT locked by sector secretary */}
+                  {isSupervisor &&
+                    !(user && selectedPrepDetail.authorUserId === user.id) &&
+                    !(
+                      user &&
+                      user.role &&
+                      user.role.level < 4 &&
+                      selectedPrepDetail.reviewedByLevel &&
+                      selectedPrepDetail.reviewedByLevel >= 4
+                    ) && (
+                      <div className="flex items-center gap-2">
+                        {/* زر الرفض / طلب التعديل */}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          isLoading={reviewActionLoading}
+                          onClick={() => handleReviewPrep('REJECT')}
+                          className="text-caption font-bold text-status-danger border-status-danger/40 hover:bg-status-danger-soft"
+                        >
+                          طلب تعديل / رفض
+                        </Button>
 
-                      {/* زر الموافقة والاعتماد */}
-                      <Button
-                        type="button"
-                        variant="primary"
-                        size="sm"
-                        isLoading={reviewActionLoading}
-                        onClick={() => handleReviewPrep('APPROVE')}
-                        className="text-caption font-bold bg-status-success hover:bg-status-success/90"
-                      >
-                        <Check className="w-3.5 h-3.5 ml-1" />
-                        <span>موافقة على التحضير</span>
-                      </Button>
-                    </div>
-                  )}
+                        {/* زر الموافقة والاعتماد */}
+                        <Button
+                          type="button"
+                          variant="primary"
+                          size="sm"
+                          isLoading={reviewActionLoading}
+                          onClick={() => handleReviewPrep('APPROVE')}
+                          className="text-caption font-bold bg-status-success hover:bg-status-success/90"
+                        >
+                          <Check className="w-3.5 h-3.5 ml-1" />
+                          <span>موافقة على التحضير</span>
+                        </Button>
+                      </div>
+                    )}
                 </div>
               </div>
             </div>

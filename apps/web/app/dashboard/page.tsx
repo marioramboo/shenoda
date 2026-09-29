@@ -18,6 +18,7 @@ import {
   LogOut,
   UserPlus,
   CheckCircle2,
+  Check,
   AlertCircle,
   X,
   Phone,
@@ -55,6 +56,10 @@ interface ServantDashboardData {
     lessonDate: string;
     scriptureRef: string | null;
     status: string;
+    reviewerNotes?: string | null;
+    reviewedByName?: string | null;
+    reviewedByRole?: string | null;
+    reviewedByLevel?: number | null;
     stage?: { id: string; name: string };
   }>;
   assignedMembers: Array<{
@@ -382,8 +387,8 @@ export default function DashboardPage() {
                       month: 'short',
                     })}
                   </span>
-                  <Badge variant={dashboardData.upcomingLessons[0].status === 'REVIEWED' ? 'success' : 'accent'}>
-                    {dashboardData.upcomingLessons[0].status === 'REVIEWED' ? 'تمت المراجعة' : 'مقدم'}
+                  <Badge variant={dashboardData.upcomingLessons[0].status === 'REVIEWED' ? 'success' : dashboardData.upcomingLessons[0].status === 'DRAFT' && dashboardData.upcomingLessons[0].reviewerNotes ? 'danger' : 'accent'}>
+                    {dashboardData.upcomingLessons[0].status === 'REVIEWED' ? 'تمت المراجعة والاعتماد' : dashboardData.upcomingLessons[0].status === 'DRAFT' && dashboardData.upcomingLessons[0].reviewerNotes ? 'مطلوب تعديل' : 'مقدم'}
                   </Badge>
                 </div>
                 <h4 className="text-body-default font-bold text-text-primary">
@@ -394,6 +399,33 @@ export default function DashboardPage() {
                     الشاهد: {dashboardData.upcomingLessons[0].scriptureRef}
                   </p>
                 )}
+
+                {/* Reviewer Details Display (FR-5.2 & User Spec) */}
+                {dashboardData.upcomingLessons[0].status === 'REVIEWED' ? (
+                  <div className="mt-1 pt-2 border-t border-border-default flex items-center justify-between text-[11px] text-status-success font-semibold">
+                    <span className="flex items-center gap-1">
+                      <Check className="w-3.5 h-3.5" />
+                      <span>تم الاعتماد بواسطة:</span>
+                    </span>
+                    <span className="font-bold">
+                      {dashboardData.upcomingLessons[0].reviewedByName
+                        ? `${dashboardData.upcomingLessons[0].reviewedByName} (${dashboardData.upcomingLessons[0].reviewedByRole || 'أمين'})`
+                        : 'أمين الخدمة'}
+                    </span>
+                  </div>
+                ) : dashboardData.upcomingLessons[0].status === 'DRAFT' && dashboardData.upcomingLessons[0].reviewerNotes ? (
+                  <div className="mt-1 pt-2 border-t border-border-default flex items-center justify-between text-[11px] text-status-danger font-semibold">
+                    <span className="flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      <span>طلب تعديل بواسطة:</span>
+                    </span>
+                    <span className="font-bold">
+                      {dashboardData.upcomingLessons[0].reviewedByName
+                        ? `${dashboardData.upcomingLessons[0].reviewedByName} (${dashboardData.upcomingLessons[0].reviewedByRole || 'أمين'})`
+                        : 'أمين الخدمة'}
+                    </span>
+                  </div>
+                ) : null}
               </div>
             ) : (
               <div className="p-4 bg-bg-app rounded-lg border border-dashed border-border-default text-center flex flex-col items-center gap-2">
@@ -403,10 +435,10 @@ export default function DashboardPage() {
                 <Button
                   variant="primary"
                   size="sm"
-                  onClick={() => router.push('/preparations')}
+                  onClick={() => router.push('/plan')}
                   className="font-semibold"
                 >
-                  كتابة تحضير جديد
+                  تحضير الدرس بالخطة
                 </Button>
               </div>
             )}

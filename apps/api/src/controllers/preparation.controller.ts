@@ -20,6 +20,12 @@ export function formatPreparation(prep: any) {
     }
   }
 
+  const reviewedByName = prep.reviewedBy?.fullName || null;
+  const reviewedByRole = prep.reviewedBy?.role?.name || null;
+  const reviewedByLevel = prep.reviewedBy?.role?.level || null;
+  const authorRole = prep.author?.role?.name || null;
+  const authorLevel = prep.author?.role?.level || 1;
+
   return {
     ...prep,
     visualAid,
@@ -27,6 +33,11 @@ export function formatPreparation(prep: any) {
     servantReflection,
     eventId,
     submittedAt,
+    reviewedByName,
+    reviewedByRole,
+    reviewedByLevel,
+    authorRole,
+    authorLevel,
   };
 }
 
@@ -150,7 +161,7 @@ export class PreparationController {
       },
       include: {
         stage: { select: { id: true, name: true } },
-        author: { select: { id: true, fullName: true } },
+        author: { select: { id: true, fullName: true, role: { select: { id: true, name: true, level: true, code: true } } } },
       },
     });
 
@@ -212,12 +223,11 @@ export class PreparationController {
         whereClause.stageId = { in: user.stageIds };
       }
     }
-    // 3. Level 4 (امين قطاع) -> preps in sector stages
+    // 3. Level 4 (امين قطاع) -> preps in sector stages only
     else if (user.roleLevel === 4) {
+      whereClause.stage = { sectorId: { in: user.sectorIds } };
       if (stageId) {
         whereClause.stageId = stageId;
-      } else {
-        whereClause.stage = { sectorId: { in: user.sectorIds } };
       }
     }
     // 4. Level 5 (امين عام) -> org-wide
@@ -228,9 +238,9 @@ export class PreparationController {
     const preps = await prisma.lessonPreparation.findMany({
       where: whereClause,
       include: {
-        author: { select: { id: true, fullName: true } },
-        stage: { select: { id: true, name: true } },
-        reviewedBy: { select: { id: true, fullName: true } },
+        author: { select: { id: true, fullName: true, role: { select: { id: true, name: true, level: true, code: true } } } },
+        stage: { select: { id: true, name: true, sectorId: true } },
+        reviewedBy: { select: { id: true, fullName: true, role: { select: { id: true, name: true, level: true, code: true } } } },
       },
       orderBy: { lessonDate: 'desc' },
     });
@@ -259,9 +269,9 @@ export class PreparationController {
     const prep = await prisma.lessonPreparation.findUnique({
       where: { id: req.params.id },
       include: {
-        author: { select: { id: true, fullName: true } },
+        author: { select: { id: true, fullName: true, role: { select: { id: true, name: true, level: true, code: true } } } },
         stage: { select: { id: true, name: true, sectorId: true } },
-        reviewedBy: { select: { id: true, fullName: true } },
+        reviewedBy: { select: { id: true, fullName: true, role: { select: { id: true, name: true, level: true, code: true } } } },
       },
     });
 
@@ -300,6 +310,15 @@ export class PreparationController {
       });
     }
 
+    // Level 4 must match sector
+    if (user.roleLevel === 4 && prep.stage?.sectorId && !user.sectorIds.includes(prep.stage.sectorId)) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN_SECTOR_SCOPE', message: 'لا يمكنك الاطلاع على تحضيرات خارج نطاق قطاعك' },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     return res.status(200).json({
       success: true,
       data: formatPreparation(prep),
@@ -323,6 +342,11 @@ export class PreparationController {
 
     const prep = await prisma.lessonPreparation.findUnique({
       where: { id: req.params.id },
+      include: {
+        stage: { select: { id: true, name: true, sectorId: true } },
+        author: { select: { id: true, fullName: true, role: { select: { id: true, name: true, level: true, code: true } } } },
+        reviewedBy: { select: { id: true, fullName: true, role: { select: { id: true, name: true, level: true, code: true } } } },
+      },
     });
 
     if (!prep) {
@@ -334,9 +358,22 @@ export class PreparationController {
     }
 
     const isAuthor = prep.authorUserId === user.userId;
-    const isSupervisor = user.roleLevel >= 3 && user.stageIds.includes(prep.stageId);
+    const isStageSupervisor = user.roleLevel === 3 && user.stageIds.includes(prep.stageId);
+    const isSectorSupervisor = user.roleLevel === 4 && (!prep.stage?.sectorId || user.sectorIds.includes(prep.stage.sectorId));
+    const isGeneralSupervisor = user.roleLevel >= 5;
+    const isSupervisor = isStageSupervisor || isSectorSupervisor || isGeneralSupervisor;
 
-    if (!isAuthor && !isSupervisor && user.roleLevel < 4) {
+    // Sector scope constraint for Sector Secretary (Level 4)
+    if (user.roleLevel === 4 && prep.stage?.sectorId && !user.sectorIds.includes(prep.stage.sectorId)) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN_SECTOR_SCOPE', message: 'لا يمكنك مراجعة أو اعتماد تحضيرات خارج نطاق قطاعك' },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // Must be either author or authorized supervisor
+    if (!isAuthor && !isSupervisor) {
       return res.status(403).json({
         success: false,
         error: { code: 'FORBIDDEN_UPDATE', message: 'Not authorized to update this preparation' },
@@ -344,9 +381,40 @@ export class PreparationController {
       });
     }
 
+    const isReviewAction = req.body.status !== undefined || req.body.reviewerNotes !== undefined;
+
+    // Rule 1: Self-Approval Prohibition (User Spec)
+    // "بس أمين الخدمة ميقدرش يوافق على التحضير بتاعه"
+    if (isAuthor && isReviewAction) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'ERR_CANNOT_SELF_REVIEW',
+          message: 'لا يمكنك مراجعة أو اعتماد تحضيرك الخاص؛ يجب اعتماده بواسطة أمين القطاع',
+        },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // Rule 2: Irrevocable Override Ban (User Spec)
+    // "لو أمين القطاع رفض او وافق على حاجة مينفعش أمين الخدمة يعدل عليه"
+    const wasReviewedBySectorOrHigher = Boolean(
+      prep.reviewedBy?.role?.level && prep.reviewedBy.role.level >= 4
+    );
+    if (user.roleLevel < 4 && wasReviewedBySectorOrHigher && isReviewAction) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'ERR_SUPERVISOR_OVERRIDE_PROHIBITED',
+          message: 'تمت مراجعة هذا التحضير واعتماده بواسطة أمين القطاع؛ لا يحق لأمين الخدمة تعديل هذا القرار',
+        },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     const dataToUpdate: any = {};
 
-    // Author edits
+    // Author edits content
     if (isAuthor) {
       if (req.body.title !== undefined) dataToUpdate.title = req.body.title;
       if (req.body.scriptureRef !== undefined) dataToUpdate.scriptureRef = req.body.scriptureRef;
@@ -354,11 +422,10 @@ export class PreparationController {
       if (req.body.content !== undefined) dataToUpdate.content = req.body.content;
       if (req.body.attachments !== undefined) dataToUpdate.attachments = req.body.attachments;
       if (req.body.lessonDate !== undefined) dataToUpdate.lessonDate = new Date(req.body.lessonDate);
-      if (req.body.status !== undefined) dataToUpdate.status = req.body.status as PrismaPrepStatus;
     }
 
     // Supervisor reviews
-    if (isSupervisor || user.roleLevel >= 4) {
+    if (isSupervisor && !isAuthor) {
       if (req.body.reviewerNotes !== undefined) dataToUpdate.reviewerNotes = req.body.reviewerNotes;
       if (req.body.status !== undefined) dataToUpdate.status = req.body.status as PrismaPrepStatus;
       dataToUpdate.reviewedById = user.userId;
@@ -368,9 +435,9 @@ export class PreparationController {
       where: { id: req.params.id },
       data: dataToUpdate,
       include: {
-        author: { select: { id: true, fullName: true } },
-        stage: { select: { id: true, name: true } },
-        reviewedBy: { select: { id: true, fullName: true } },
+        author: { select: { id: true, fullName: true, role: { select: { id: true, name: true, level: true, code: true } } } },
+        stage: { select: { id: true, name: true, sectorId: true } },
+        reviewedBy: { select: { id: true, fullName: true, role: { select: { id: true, name: true, level: true, code: true } } } },
       },
     });
 
@@ -432,8 +499,8 @@ export class PreparationController {
       const userMap = new Map<string, any>();
       for (const sa of scopeAssignments) {
         if (sa.user && sa.user.status === 'ACTIVE' && !userMap.has(sa.user.id)) {
-          // Servants (level 1 & 2) or all stage members
-          if (!sa.user.role || sa.user.role.level <= 2) {
+          // Servants (level 1, 2, and 3: خادم، مساعد أمين، أمين خدمة) are all required to prepare!
+          if (!sa.user.role || sa.user.role.level <= 3) {
             userMap.set(sa.user.id, sa.user);
           }
         }
@@ -455,8 +522,9 @@ export class PreparationController {
           stageId,
         },
         include: {
-          author: { select: { id: true, fullName: true, phoneNumber: true } },
-          reviewedBy: { select: { id: true, fullName: true } },
+          author: { select: { id: true, fullName: true, phoneNumber: true, role: { select: { id: true, name: true, level: true, code: true } } } },
+          stage: { select: { id: true, name: true, sectorId: true } },
+          reviewedBy: { select: { id: true, fullName: true, role: { select: { id: true, name: true, level: true, code: true } } } },
         },
         orderBy: { createdAt: 'desc' },
       });
@@ -493,7 +561,7 @@ export class PreparationController {
               fullName: s.fullName,
               phoneNumber: s.phoneNumber,
               email: s.email,
-              role: s.role?.name || 'خادم',
+              role: s.role?.name || (s.role?.level === 3 ? 'أمين خدمة' : s.role?.level === 2 ? 'مساعد أمين' : 'خادم'),
             },
             preparation: prep,
           });
@@ -503,7 +571,7 @@ export class PreparationController {
             fullName: s.fullName,
             phoneNumber: s.phoneNumber,
             email: s.email,
-            role: s.role?.name || 'خادم',
+            role: s.role?.name || (s.role?.level === 3 ? 'أمين خدمة' : s.role?.level === 2 ? 'مساعد أمين' : 'خادم'),
           });
         }
       }
@@ -517,7 +585,7 @@ export class PreparationController {
               fullName: prep.author?.fullName || 'خادم',
               phoneNumber: prep.author?.phoneNumber || null,
               email: null,
-              role: 'خادم',
+              role: prep.authorRole || 'خادم',
             },
             preparation: prep,
           });
