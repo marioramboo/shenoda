@@ -414,17 +414,16 @@ describe('Phase 2 — Authentication & Account Management Comprehensive Test Sui
     assert.strictEqual(res.status, 403);
   });
 
-  test('3.4 Level 3 Stage Secretary CANNOT create an account outside their assigned stage -> 403', async () => {
+  test('3.4 Level 3 Stage Secretary CANNOT create an account -> 403 Forbidden', async () => {
     const stageSecToken = TokenService.generateAccessToken({
       userId: 'user-stage-sec',
       roleLevel: 3,
       roleCode: 'STAGE_SECRETARY',
       orgId: 'org-1',
-      stageIds: ['stage-prep-boys'], // Only prep boys
+      stageIds: ['stage-prep-boys'],
       sectorIds: ['sector-youth'],
     });
 
-    // Attempting to create servant in prep girls
     const res = await fetch(`${baseUrl}/api/v1/accounts/create`, {
       method: 'POST',
       headers: {
@@ -435,54 +434,19 @@ describe('Phase 2 — Authentication & Account Management Comprehensive Test Sui
         fullName: 'مريم جرجس',
         phoneNumber: '01033334444',
         roleId: 'role-servant',
-        stageId: 'stage-prep-girls', // Outside assigned stage
-        temporaryPassword: 'TempPassword123!',
-      }),
-    });
-
-    assert.strictEqual(res.status, 403);
-    const body = await res.json();
-    assert.ok(
-      body.error.code === 'ACCESS_DENIED_STAGE_MISMATCH' ||
-      body.error.code === 'ACCESS_DENIED_SCOPE'
-    );
-  });
-
-  test('3.5 Level 3 Stage Secretary CANNOT create a role at or above self (e.g. Sector Secretary) -> 403', async () => {
-    const stageSecToken = TokenService.generateAccessToken({
-      userId: 'user-stage-sec',
-      roleLevel: 3,
-      roleCode: 'STAGE_SECRETARY',
-      orgId: 'org-1',
-      stageIds: ['stage-prep-boys'],
-      sectorIds: ['sector-youth'],
-    });
-
-    const res = await fetch(`${baseUrl}/api/v1/accounts/create`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${stageSecToken}`,
-      },
-      body: JSON.stringify({
-        fullName: 'أمين قطاع جديد',
-        phoneNumber: '01055556666',
-        roleId: 'role-sectorsec', // Level 4
         stageId: 'stage-prep-boys',
         temporaryPassword: 'TempPassword123!',
       }),
     });
 
     assert.strictEqual(res.status, 403);
-    const body = await res.json();
-    assert.strictEqual(body.error.code, 'ACCESS_DENIED_ROLE_HIERARCHY');
   });
 
-  test('3.6 Level 3 Stage Secretary successfully creates Servant (Level 1) within assigned stage -> 201 Created', async () => {
-    const stageSecToken = TokenService.generateAccessToken({
-      userId: 'user-stage-sec',
-      roleLevel: 3,
-      roleCode: 'STAGE_SECRETARY',
+  test('3.5 Level 4 Sector Secretary CANNOT create an account -> 403 Forbidden', async () => {
+    const sectorSecToken = TokenService.generateAccessToken({
+      userId: 'user-sector-sec',
+      roleLevel: 4,
+      roleCode: 'SECTOR_SECRETARY',
       orgId: 'org-1',
       stageIds: ['stage-prep-boys'],
       sectorIds: ['sector-youth'],
@@ -492,7 +456,35 @@ describe('Phase 2 — Authentication & Account Management Comprehensive Test Sui
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${stageSecToken}`,
+        Authorization: `Bearer ${sectorSecToken}`,
+      },
+      body: JSON.stringify({
+        fullName: 'أمين مرحلة جديد',
+        phoneNumber: '01055556666',
+        roleId: 'role-stage-sec',
+        stageId: 'stage-prep-boys',
+        temporaryPassword: 'TempPassword123!',
+      }),
+    });
+
+    assert.strictEqual(res.status, 403);
+  });
+
+  test('3.6 Level 5 General Secretary successfully creates Servant (Level 1) within stage -> 201 Created', async () => {
+    const generalSecToken = TokenService.generateAccessToken({
+      userId: 'user-gen-sec',
+      roleLevel: 5,
+      roleCode: 'GENERAL_SECRETARY',
+      orgId: 'org-1',
+      stageIds: [],
+      sectorIds: [],
+    });
+
+    const res = await fetch(`${baseUrl}/api/v1/accounts/create`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${generalSecToken}`,
       },
       body: JSON.stringify({
         fullName: 'مينا فريد تادرس',
@@ -524,20 +516,20 @@ describe('Phase 2 — Authentication & Account Management Comprehensive Test Sui
   });
 
   test('3.7 Duplicate phone number returns 409 Conflict (ERR_USER_EXISTS)', async () => {
-    const stageSecToken = TokenService.generateAccessToken({
-      userId: 'user-stage-sec',
-      roleLevel: 3,
-      roleCode: 'STAGE_SECRETARY',
+    const generalSecToken = TokenService.generateAccessToken({
+      userId: 'user-gen-sec',
+      roleLevel: 5,
+      roleCode: 'GENERAL_SECRETARY',
       orgId: 'org-1',
-      stageIds: ['stage-prep-boys'],
-      sectorIds: ['sector-youth'],
+      stageIds: [],
+      sectorIds: [],
     });
 
     const res = await fetch(`${baseUrl}/api/v1/accounts/create`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${stageSecToken}`,
+        Authorization: `Bearer ${generalSecToken}`,
       },
       body: JSON.stringify({
         fullName: 'بيتر مكرر',
@@ -551,6 +543,84 @@ describe('Phase 2 — Authentication & Account Management Comprehensive Test Sui
     assert.strictEqual(res.status, 409);
     const body = await res.json();
     assert.strictEqual(body.error.code, 'ERR_USER_EXISTS');
+  });
+
+  test('3.9 Level 3 Stage Secretary CAN edit a servant under their stage -> 200 OK', async () => {
+    const stageSecToken = TokenService.generateAccessToken({
+      userId: 'user-stage-sec',
+      roleLevel: 3,
+      roleCode: 'STAGE_SECRETARY',
+      orgId: 'org-1',
+      stageIds: ['stage-prep-boys'],
+      sectorIds: ['sector-youth'],
+    });
+
+    const res = await fetch(`${baseUrl}/api/v1/accounts/user-servant`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${stageSecToken}`,
+      },
+      body: JSON.stringify({
+        fullName: 'بيتر يوسف عادل',
+        phoneNumber: '01012345678',
+        email: 'peter.updated@church.com',
+      }),
+    });
+
+    assert.strictEqual(res.status, 200);
+    const body = await res.json();
+    assert.strictEqual(body.success, true);
+    assert.strictEqual(body.user.fullName, 'بيتر يوسف عادل');
+    assert.strictEqual(body.user.phoneNumber, '01012345678');
+  });
+
+  test('3.10 Level 3 Stage Secretary CANNOT edit a servant outside their stage -> 403 Forbidden', async () => {
+    const stageSecToken = TokenService.generateAccessToken({
+      userId: 'user-stage-sec',
+      roleLevel: 3,
+      roleCode: 'STAGE_SECRETARY',
+      orgId: 'org-1',
+      stageIds: ['stage-prep-girls'],
+      sectorIds: ['sector-youth'],
+    });
+
+    const res = await fetch(`${baseUrl}/api/v1/accounts/user-servant`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${stageSecToken}`,
+      },
+      body: JSON.stringify({
+        fullName: 'تعديل غير مصرح',
+      }),
+    });
+
+    assert.strictEqual(res.status, 403);
+  });
+
+  test('3.11 Level 3 Stage Secretary CANNOT edit an equal or superior role (Level >= 3) -> 403 Forbidden', async () => {
+    const stageSecToken = TokenService.generateAccessToken({
+      userId: 'user-stage-sec',
+      roleLevel: 3,
+      roleCode: 'STAGE_SECRETARY',
+      orgId: 'org-1',
+      stageIds: ['stage-prep-boys'],
+      sectorIds: ['sector-youth'],
+    });
+
+    const res = await fetch(`${baseUrl}/api/v1/accounts/user-sector-sec`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${stageSecToken}`,
+      },
+      body: JSON.stringify({
+        fullName: 'محاولة تعديل أمين القطاع',
+      }),
+    });
+
+    assert.strictEqual(res.status, 403);
   });
 
   // =========================================================================

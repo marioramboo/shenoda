@@ -7,6 +7,7 @@ export function formatCalendarEvent(event: any) {
   let bibleVerse = null;
   let references = null;
   let overview = event.description;
+  let requiresAllServants = false;
 
   if (event.description && typeof event.description === 'string' && event.description.trim().startsWith('{')) {
     try {
@@ -14,6 +15,7 @@ export function formatCalendarEvent(event: any) {
       bibleVerse = parsed.bibleVerse || null;
       references = parsed.references || null;
       overview = parsed.overview || '';
+      requiresAllServants = Boolean(parsed.requiresAllServants);
     } catch {
       // plain text fallback
     }
@@ -21,9 +23,11 @@ export function formatCalendarEvent(event: any) {
 
   return {
     ...event,
+    description: overview,
     bibleVerse,
     references,
     overview,
+    requiresAllServants,
   };
 }
 
@@ -275,7 +279,14 @@ export class YearPlanController {
             include: {
               volunteers: {
                 include: {
-                  user: { select: { id: true, fullName: true, phoneNumber: true } },
+                  user: {
+                    select: {
+                      id: true,
+                      fullName: true,
+                      phoneNumber: true,
+                      role: { select: { id: true, name: true, code: true } },
+                    },
+                  },
                 },
               },
             },
@@ -389,6 +400,7 @@ export class YearPlanController {
         bibleVerse,
         references,
         isLessonPlanCreation,
+        requiresAllServants,
         stageId = plan.stageId,
         sectorId = plan.sectorId,
       } = req.body;
@@ -429,11 +441,12 @@ export class YearPlanController {
       }
 
       let resolvedDescription = description || null;
-      if (category === 'SPIRITUAL_LESSON' && (bibleVerse || references)) {
+      if (requiresAllServants !== undefined || (category === 'SPIRITUAL_LESSON' && (bibleVerse || references))) {
         resolvedDescription = JSON.stringify({
           overview: description || '',
           bibleVerse: bibleVerse || '',
           references: references || '',
+          requiresAllServants: Boolean(requiresAllServants),
         });
       }
 
@@ -448,13 +461,42 @@ export class YearPlanController {
           startDate: new Date(startDate),
           endDate: new Date(resolvedEndDate),
           location: location || null,
-          maxVolunteers: maxVolunteers ? Number(maxVolunteers) : null,
+          maxVolunteers: requiresAllServants ? null : (maxVolunteers ? Number(maxVolunteers) : null),
           createdById: user.userId,
         },
         include: {
           stage: { select: { id: true, name: true } },
         },
       });
+
+      // If requiresAllServants is enabled, automatically enroll all active stage servants
+      if (requiresAllServants && stageId) {
+        const stageAssignments = await prisma.scopeAssignment.findMany({
+          where: { stageId },
+          include: { user: true },
+        });
+
+        for (const sa of stageAssignments) {
+          if (sa.user && sa.user.status === 'ACTIVE') {
+            await prisma.eventVolunteer.upsert({
+              where: {
+                eventId_userId: {
+                  eventId: event.id,
+                  userId: sa.user.id,
+                },
+              },
+              create: {
+                eventId: event.id,
+                userId: sa.user.id,
+                roleInEvent: 'حضور إلزامي لجميع الخدام',
+              },
+              update: {
+                roleInEvent: 'حضور إلزامي لجميع الخدام',
+              },
+            });
+          }
+        }
+      }
 
       return res.status(201).json({
         success: true,
@@ -508,7 +550,7 @@ export class YearPlanController {
           success: false,
           error: {
             code: 'FORBIDDEN_GENERAL_SECRETARY_ONLY',
-            message: 'عفواً، تعديل مواعيد اجتماعات الخدام مقتصر حصرياً على الأمين العام',
+            message: 'عفواً، تعديل مواعيد اجتماعات الخدام مقتصرة حصرياً على الأمين العام',
           },
           timestamp: new Date().toISOString(),
         });
@@ -540,16 +582,21 @@ export class YearPlanController {
         maxVolunteers,
         bibleVerse,
         references,
+        requiresAllServants,
       } = req.body;
 
       const updatedCategory = category || event.category;
+      const existingParsed = formatCalendarEvent(event);
+      const finalRequiresAll = requiresAllServants !== undefined ? Boolean(requiresAllServants) : Boolean(existingParsed.requiresAllServants);
+
       let resolvedDescription = description !== undefined ? description : event.description;
 
-      if (updatedCategory === 'SPIRITUAL_LESSON' && (bibleVerse || references)) {
+      if (requiresAllServants !== undefined || (updatedCategory === 'SPIRITUAL_LESSON' && (bibleVerse || references))) {
         resolvedDescription = JSON.stringify({
-          overview: description !== undefined ? description : (formatCalendarEvent(event).overview || ''),
-          bibleVerse: bibleVerse || '',
-          references: references || '',
+          overview: description !== undefined ? description : (existingParsed.overview || ''),
+          bibleVerse: bibleVerse || existingParsed.bibleVerse || '',
+          references: references || existingParsed.references || '',
+          requiresAllServants: finalRequiresAll,
         });
       }
 
@@ -562,12 +609,42 @@ export class YearPlanController {
           startDate: startDate ? new Date(startDate) : event.startDate,
           endDate: endDate ? new Date(endDate) : (startDate ? new Date(startDate) : event.endDate),
           location: location !== undefined ? location : event.location,
-          maxVolunteers: maxVolunteers !== undefined ? (maxVolunteers ? Number(maxVolunteers) : null) : event.maxVolunteers,
+          maxVolunteers: finalRequiresAll ? null : (maxVolunteers !== undefined ? (maxVolunteers ? Number(maxVolunteers) : null) : event.maxVolunteers),
         },
         include: {
           stage: { select: { id: true, name: true } },
         },
       });
+
+      // If requiresAllServants is enabled on update, enroll all active stage servants
+      const targetStageId = updatedEvent.stageId || event.stageId;
+      if (finalRequiresAll && targetStageId) {
+        const stageAssignments = await prisma.scopeAssignment.findMany({
+          where: { stageId: targetStageId },
+          include: { user: true },
+        });
+
+        for (const sa of stageAssignments) {
+          if (sa.user && sa.user.status === 'ACTIVE') {
+            await prisma.eventVolunteer.upsert({
+              where: {
+                eventId_userId: {
+                  eventId: updatedEvent.id,
+                  userId: sa.user.id,
+                },
+              },
+              create: {
+                eventId: updatedEvent.id,
+                userId: sa.user.id,
+                roleInEvent: 'حضور إلزامي لجميع الخدام',
+              },
+              update: {
+                roleInEvent: 'حضور إلزامي لجميع الخدام',
+              },
+            });
+          }
+        }
+      }
 
       return res.status(200).json({
         success: true,

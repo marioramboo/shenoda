@@ -3,6 +3,7 @@ import { prisma } from '../config/prisma';
 import { VolunteerService } from '../services/volunteer.service';
 import { EventAttendanceSyncService } from '../services/eventAttendanceSync.service';
 import { EventCategory as PrismaEventCategory } from '@prisma/client';
+import { formatCalendarEvent } from './yearPlan.controller';
 
 export class CalendarController {
   /**
@@ -80,7 +81,12 @@ export class CalendarController {
           volunteers: {
             include: {
               user: {
-                select: { id: true, fullName: true, phoneNumber: true },
+                select: {
+                  id: true,
+                  fullName: true,
+                  phoneNumber: true,
+                  role: { select: { id: true, name: true, code: true } },
+                },
               },
             },
           },
@@ -93,7 +99,7 @@ export class CalendarController {
 
       return res.status(200).json({
         success: true,
-        data: events,
+        data: events.map(formatCalendarEvent),
         timestamp: new Date().toISOString(),
       });
     } catch (err: any) {
@@ -129,7 +135,14 @@ export class CalendarController {
           createdBy: { select: { id: true, fullName: true } },
           volunteers: {
             include: {
-              user: { select: { id: true, fullName: true, phoneNumber: true } },
+              user: {
+                select: {
+                  id: true,
+                  fullName: true,
+                  phoneNumber: true,
+                  role: { select: { id: true, name: true, code: true } },
+                },
+              },
             },
           },
           eventAttendances: {
@@ -151,7 +164,7 @@ export class CalendarController {
 
       return res.status(200).json({
         success: true,
-        data: event,
+        data: formatCalendarEvent(event),
         timestamp: new Date().toISOString(),
       });
     } catch (err: any) {
@@ -318,6 +331,137 @@ export class CalendarController {
       });
     } catch (err: any) {
       console.error('Error confirming event attendance:', err);
+      return res.status(500).json({
+        success: false,
+        error: { code: 'INTERNAL_SERVER_ERROR', message: err.message },
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
+  /**
+   * POST /api/v1/events/:id/enroll-all
+   * Enrolls all active servants in the stage to attend this event.
+   */
+  static async enrollAllServants(req: Request, res: Response) {
+    try {
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          error: { code: 'AUTH_REQUIRED', message: 'Authentication required' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      if (user.roleLevel < 3) {
+        return res.status(403).json({
+          success: false,
+          error: {
+            code: 'FORBIDDEN',
+            message: 'صلاحية إلزام الخدام بالحضور مقتصرة على أمناء الخدمة والمشرفين',
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const { id: eventId } = req.params;
+      const event = await prisma.calendarEvent.findUnique({
+        where: { id: eventId },
+        include: { yearPlan: true },
+      });
+
+      if (!event) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'Event not found' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const stageId = event.stageId || event.yearPlan?.stageId || (user.stageIds && user.stageIds[0]);
+      if (!stageId) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'ERR_STAGE_REQUIRED', message: 'المرحلة غير محددة لهذه الفعالية' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const stageAssignments = await prisma.scopeAssignment.findMany({
+        where: { stageId },
+        include: { user: true },
+      });
+
+      let enrolledCount = 0;
+      for (const sa of stageAssignments) {
+        if (sa.user && sa.user.status === 'ACTIVE') {
+          await prisma.eventVolunteer.upsert({
+            where: {
+              eventId_userId: {
+                eventId: event.id,
+                userId: sa.user.id,
+              },
+            },
+            create: {
+              eventId: event.id,
+              userId: sa.user.id,
+              roleInEvent: 'حضور إلزامي لجميع الخدام',
+            },
+            update: {
+              roleInEvent: 'حضور إلزامي لجميع الخدام',
+            },
+          });
+          enrolledCount++;
+        }
+      }
+
+      // Also ensure requiresAllServants is marked in description
+      let currentDesc = event.description || '';
+      let descObj: any = { overview: currentDesc };
+      if (currentDesc.trim().startsWith('{')) {
+        try {
+          descObj = JSON.parse(currentDesc);
+        } catch {}
+      }
+      descObj.requiresAllServants = true;
+      await prisma.calendarEvent.update({
+        where: { id: event.id },
+        data: { description: JSON.stringify(descObj) },
+      });
+
+      // Return updated event
+      const updatedEvent = await prisma.calendarEvent.findUnique({
+        where: { id: event.id },
+        include: {
+          stage: { select: { id: true, name: true } },
+          sector: { select: { id: true, name: true } },
+          volunteers: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  fullName: true,
+                  phoneNumber: true,
+                  role: { select: { id: true, name: true, code: true } },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: `تم إلزام وتسجيل جميع خدام المرحلة (${enrolledCount} خادم) بالحضور بنجاح`,
+        data: {
+          enrolledCount,
+          event: formatCalendarEvent(updatedEvent),
+        },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      console.error('Error enrolling all servants:', err);
       return res.status(500).json({
         success: false,
         error: { code: 'INTERNAL_SERVER_ERROR', message: err.message },

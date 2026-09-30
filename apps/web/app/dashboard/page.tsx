@@ -138,7 +138,11 @@ export default function DashboardPage() {
     setCreateError(null);
     setCreateSuccess(null);
 
-    const resolvedStageId = stageId || user?.scopes.stages[0]?.id;
+    const resolvedStageId = stageId || user?.scopes?.stages?.[0]?.id;
+    if (!resolvedStageId) {
+      setCreateError('يرجى تحديد مرحلة مسندة لإضافة الخادم إليها');
+      return;
+    }
 
     try {
       setCreateLoading(true);
@@ -549,52 +553,63 @@ export default function DashboardPage() {
               <p className="text-body-small text-text-secondary leading-relaxed">
                 {user.role.level >= 5
                   ? `بصفتك (${user.role.name})، يمكنك إنشاء وتفعيل حسابات الخدام ونقلهم وإدارتهم شاملاً.`
-                  : `بصفتك (${user.role.name})، يمكنك مراجعة تحضيرات خدام المرحلة ومتابعة حضورهم وتقييمهم.`}
+                  : `بصفتك (${user.role.name})، يمكنك تعديل بيانات خدام مرحلتك، ومتابعة حضورهم ومراجعة تحضيراتهم.`}
               </p>
 
-              <div className="flex items-center gap-2">
-                {user.role.level >= 5 ? (
-                  <>
-                    <Button
-                      variant="primary"
-                      onClick={() => setIsCreateModalOpen(true)}
-                      className="flex-1 h-[40px] gap-1.5 font-semibold text-caption"
-                    >
-                      <UserPlus className="w-4 h-4" />
-                      <span>إضافة خادم جديد</span>
-                    </Button>
+              {user.role.level >= 5 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <Button
+                    variant="primary"
+                    onClick={() => {
+                      setCreateError(null);
+                      setCreateSuccess(null);
+                      setIsCreateModalOpen(true);
+                    }}
+                    className="h-[40px] gap-1.5 font-semibold text-caption"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    <span>إضافة خادم جديد</span>
+                  </Button>
 
-                    <Button
-                      variant="outline"
-                      onClick={() => router.push('/preparations')}
-                      className="flex-1 h-[40px] gap-1.5 font-semibold text-caption"
-                    >
-                      <BookOpen className="w-4 h-4" />
-                      <span>مراجعة التحضيرات</span>
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <Button
-                      variant="primary"
-                      onClick={() => router.push('/preparations')}
-                      className="flex-1 h-[40px] gap-1.5 font-semibold text-caption"
-                    >
-                      <BookOpen className="w-4 h-4" />
-                      <span>مراجعة التحضيرات</span>
-                    </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => router.push('/attendance?view=servants')}
+                    className="h-[40px] gap-1.5 font-semibold text-caption"
+                  >
+                    <Users className="w-4 h-4" />
+                    <span>متابعة وتعديل الخدام</span>
+                  </Button>
 
-                    <Button
-                      variant="outline"
-                      onClick={() => router.push('/attendance')}
-                      className="flex-1 h-[40px] gap-1.5 font-semibold text-caption"
-                    >
-                      <Users className="w-4 h-4" />
-                      <span>متابعة جدول الخدام</span>
-                    </Button>
-                  </>
-                )}
-              </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => router.push('/preparations')}
+                    className="h-[40px] gap-1.5 font-semibold text-caption"
+                  >
+                    <BookOpen className="w-4 h-4" />
+                    <span>مراجعة التحضيرات</span>
+                  </Button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <Button
+                    variant="primary"
+                    onClick={() => router.push('/attendance?view=servants')}
+                    className="h-[40px] gap-1.5 font-semibold text-caption"
+                  >
+                    <Users className="w-4 h-4" />
+                    <span>متابعة وتعديل بيانات الخدام</span>
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    onClick={() => router.push('/preparations')}
+                    className="h-[40px] gap-1.5 font-semibold text-caption"
+                  >
+                    <BookOpen className="w-4 h-4" />
+                    <span>مراجعة التحضيرات</span>
+                  </Button>
+                </div>
+              )}
             </section>
           )}
 
@@ -613,7 +628,7 @@ export default function DashboardPage() {
                 <div className="mb-4">
                   <h3 className="text-h2 font-bold text-brand-primary">إنشاء حساب خادم مصرح</h3>
                   <p className="text-caption text-text-secondary mt-0.5">
-                    إسناد مباشر للخدمة دون تسجيل ذاتي عام
+                    إسناد مباشر للخدمة وتفعيل الصلاحيات
                   </p>
                 </div>
 
@@ -656,6 +671,34 @@ export default function DashboardPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                   />
+
+                  {user?.scopes?.stages && user.scopes.stages.length > 1 ? (
+                    <div className="flex flex-col gap-1.5 text-right">
+                      <label className="text-caption font-semibold text-text-primary">
+                        المرحلة المسند إليها الخادم *
+                      </label>
+                      <select
+                        value={stageId || user.scopes.stages[0]?.id}
+                        onChange={(e) => setStageId(e.target.value)}
+                        className="h-11 px-3 rounded-button border border-border-default bg-bg-surface text-body-default text-text-primary focus:outline-none focus:border-brand-primary"
+                      >
+                        {user.scopes.stages.map((st) => (
+                          <option key={st.id} value={st.id}>
+                            {st.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : user?.scopes?.stages && user.scopes.stages.length === 1 ? (
+                    <div className="flex flex-col gap-1 text-right">
+                      <label className="text-caption font-semibold text-text-secondary">
+                        المرحلة المسندة
+                      </label>
+                      <div className="h-11 px-3 rounded-button border border-border-default bg-bg-muted flex items-center text-body-default text-text-primary">
+                        {user.scopes.stages[0].name}
+                      </div>
+                    </div>
+                  ) : null}
 
                   <div className="flex flex-col gap-1.5 text-right">
                     <label className="text-caption font-semibold text-text-primary">

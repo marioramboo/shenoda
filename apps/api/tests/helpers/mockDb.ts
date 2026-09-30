@@ -9,8 +9,16 @@ export interface MockUser {
   email: string | null;
   passwordHash: string;
   status: UserStatus;
+  fatherConfessor?: string | null;
+  dateOfBirth?: Date | null;
+  address?: string | null;
+  maritalStatus?: string | null;
+  spouseName?: string | null;
+  educationOrCareer?: string | null;
+  childrenInfo?: any;
   role?: any;
   scopeAssignments?: any[];
+  evaluationsReceived?: any[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -333,6 +341,20 @@ export interface MockUserNotificationPreference {
   pushSubscription: any;
 }
 
+export interface MockServantEvaluation {
+  id: string;
+  subjectUserId: string;
+  evaluatorUserId: string;
+  financialStatus: string | null;
+  behaviorWithMembers: string | null;
+  behaviorWithServants: string | null;
+  cooperation: string | null;
+  individualInitiative: string | null;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export function createMockPrisma() {
   const users: MockUser[] = [];
   const roles: MockRole[] = [];
@@ -342,6 +364,7 @@ export function createMockPrisma() {
   const refreshTokens: MockRefreshToken[] = [];
   const passwordResetTokens: MockPasswordResetToken[] = [];
   const accountStatusLogs: MockAccountStatusLog[] = [];
+  const servantEvaluations: MockServantEvaluation[] = [];
 
   // Phase 3 collections
   const servedMembers: MockServedMember[] = [];
@@ -387,10 +410,12 @@ export function createMockPrisma() {
         const sector = s.sectorId ? sectors.find((sec) => sec.id === s.sectorId) : null;
         return { ...s, stage, sector };
       });
+    const userEvals = servantEvaluations.filter((e) => e.subjectUserId === u.id);
     return {
       ...u,
       role: role || { id: u.roleId, code: 'UNKNOWN', name: 'غير معروف', level: 1 },
       scopeAssignments: userScopes,
+      evaluationsReceived: userEvals,
     };
   };
 
@@ -423,6 +448,7 @@ export function createMockPrisma() {
       refreshTokens,
       passwordResetTokens,
       accountStatusLogs,
+      servantEvaluations,
       servedMembers,
       memberServantAssignments,
       sensitiveAccessLogs,
@@ -650,6 +676,36 @@ export function createMockPrisma() {
           }
         }
         return { count };
+      },
+    },
+
+    servantEvaluation: {
+      findUnique: async (args: any) => {
+        const where = args?.where || {};
+        return servantEvaluations.find((e) => e.subjectUserId === where.subjectUserId) || null;
+      },
+      upsert: async (args: any) => {
+        const { where, update, create } = args;
+        let existing = servantEvaluations.find((e) => e.subjectUserId === where.subjectUserId);
+        if (existing) {
+          Object.assign(existing, update, { updatedAt: new Date() });
+          return existing;
+        }
+        const newRecord: MockServantEvaluation = {
+          id: nextId('seval'),
+          subjectUserId: create.subjectUserId,
+          evaluatorUserId: create.evaluatorUserId,
+          financialStatus: create.financialStatus || null,
+          behaviorWithMembers: create.behaviorWithMembers || null,
+          behaviorWithServants: create.behaviorWithServants || null,
+          cooperation: create.cooperation || null,
+          individualInitiative: create.individualInitiative || null,
+          notes: create.notes || null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        servantEvaluations.push(newRecord);
+        return newRecord;
       },
     },
 
@@ -1715,9 +1771,17 @@ export function createMockPrisma() {
               .filter((v) => v.eventId === e.id)
               .map((v) => {
                 const u = users.find((usr) => usr.id === v.userId);
+                const r = u ? roles.find((role) => role.id === u.roleId) : null;
                 return {
                   ...v,
-                  user: u ? { id: u.id, fullName: u.fullName, phoneNumber: u.phoneNumber } : null,
+                  user: u
+                    ? {
+                        id: u.id,
+                        fullName: u.fullName,
+                        phoneNumber: u.phoneNumber,
+                        role: r ? { id: r.id, name: r.name, code: r.code } : null,
+                      }
+                    : null,
                 };
               });
             return { ...e, volunteers: vols };
@@ -1844,9 +1908,17 @@ export function createMockPrisma() {
           .filter((v) => v.eventId === e.id)
           .map((v) => {
             const u = users.find((usr) => usr.id === v.userId);
+            const r = u ? roles.find((role) => role.id === u.roleId) : null;
             return {
               ...v,
-              user: u ? { id: u.id, fullName: u.fullName, phoneNumber: u.phoneNumber } : null,
+              user: u
+                ? {
+                    id: u.id,
+                    fullName: u.fullName,
+                    phoneNumber: u.phoneNumber,
+                    role: r ? { id: r.id, name: r.name, code: r.code } : null,
+                  }
+                : null,
             };
           });
         const atts = eventAttendanceConfirmations
@@ -1934,6 +2006,34 @@ export function createMockPrisma() {
           if (where.eventId && v.eventId !== where.eventId) return false;
           return true;
         }).length;
+      },
+
+      upsert: async (args: any) => {
+        const { where, create, update } = args;
+        let existing: any = null;
+        if (where.eventId_userId) {
+          existing = eventVolunteers.find(
+            (v) =>
+              v.eventId === where.eventId_userId.eventId &&
+              v.userId === where.eventId_userId.userId
+          );
+        } else if (where.id) {
+          existing = eventVolunteers.find((v) => v.id === where.id);
+        }
+        if (existing) {
+          Object.assign(existing, update);
+          return existing;
+        } else {
+          const vol: MockEventVolunteer = {
+            id: nextId('vol'),
+            eventId: create.eventId,
+            userId: create.userId,
+            roleInEvent: create.roleInEvent || null,
+            createdAt: new Date(),
+          };
+          eventVolunteers.push(vol);
+          return vol;
+        }
       },
 
       delete: async (args: any) => {

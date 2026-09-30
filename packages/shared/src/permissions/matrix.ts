@@ -112,7 +112,7 @@ export const PERMISSION_MATRIX: Record<PermissionAction, PermissionRule> = {
     action: PermissionAction.MANAGE_SERVANT_ACCOUNTS,
     minLevel: 3,
     defaultScope: ScopeRule.STAGE,
-    description: 'إنشاء وإدارة حسابات الخدام ضمن النطاق الإداري المسموح',
+    description: 'تعديل وإدارة بيانات الخدام ضمن النطاق الإداري المسموح',
   },
   [PermissionAction.EDIT_SERVANT_PROFILE_EVAL]: {
     action: PermissionAction.EDIT_SERVANT_PROFILE_EVAL,

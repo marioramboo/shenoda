@@ -36,6 +36,14 @@ import {
   Phone,
   Clock,
   Sparkles,
+  Pencil,
+  Plus,
+  Trash2,
+  HeartHandshake,
+  User,
+  Shield,
+  Briefcase,
+  Award,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -64,17 +72,39 @@ interface AbsenceAlertItem {
   resolutionNotes?: string;
 }
 
+export interface ServantEvaluationItem {
+  financialStatus?: string | null;
+  behaviorWithMembers?: string | null;
+  behaviorWithServants?: string | null;
+  cooperation?: string | null;
+  individualInitiative?: string | null;
+  notes?: string | null;
+}
+
+export interface ServantChildItem {
+  name: string;
+  age: string;
+}
+
 export interface StageServantItem {
   id: string;
   fullName: string;
   phoneNumber?: string;
   email?: string;
+  fatherConfessor?: string | null;
+  dateOfBirth?: string | null;
+  address?: string | null;
+  maritalStatus?: string | null;
+  spouseName?: string | null;
+  educationOrCareer?: string | null;
+  childrenInfo?: any;
   role: {
     id: string;
     name: string;
     code: string;
     level: number;
   };
+  evaluation?: ServantEvaluationItem | null;
   stats?: {
     attendanceRatePercentage: number;
     presentCount: number;
@@ -92,6 +122,16 @@ export default function AttendancePage() {
 
   // Active top view tab: 'members' (تسجيل حضور المخدومين) | 'servants' (متابعة الخدام) | 'alerts' (تنبيهات الافتقاد)
   const [activeView, setActiveView] = useState<'members' | 'servants' | 'alerts'>('members');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const viewParam = params.get('view');
+      if (viewParam === 'servants' || viewParam === 'alerts' || viewParam === 'members') {
+        setActiveView(viewParam);
+      }
+    }
+  }, []);
 
   // Date selection (default to nearest Friday)
   const [selectedDate, setSelectedDate] = useState<string>(() => {
@@ -160,6 +200,50 @@ export default function AttendancePage() {
   const [recordServantNotes, setRecordServantNotes] = useState('');
   const [isSavingServantAttendance, setIsSavingServantAttendance] = useState(false);
   const [servantFeedbackMessage, setServantFeedbackMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Edit Servant Modal (Level 3+ / أمين الخدمة)
+  const [isEditServantModalOpen, setIsEditServantModalOpen] = useState(false);
+  const [editingServant, setEditingServant] = useState<StageServantItem | null>(null);
+  const [editServantTab, setEditServantTab] = useState<'profile' | 'evaluation'>('profile');
+  const [editFullName, setEditFullName] = useState('');
+  const [editPhoneNumber, setEditPhoneNumber] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editRoleCode, setEditRoleCode] = useState('SERVANT');
+  const [editTempPassword, setEditTempPassword] = useState('');
+  const [isEditingServantLoading, setIsEditingServantLoading] = useState(false);
+  const [editServantError, setEditServantError] = useState<string | null>(null);
+
+  // 13 Fields: Personal & Church Profile
+  const [editFatherConfessor, setEditFatherConfessor] = useState('');
+  const [editDateOfBirth, setEditDateOfBirth] = useState('');
+  const [editAddress, setEditAddress] = useState('');
+  const [editMaritalStatus, setEditMaritalStatus] = useState<string>('أعزب');
+  const [editSpouseName, setEditSpouseName] = useState('');
+  const [editEducationOrCareer, setEditEducationOrCareer] = useState('');
+  const [editChildrenList, setEditChildrenList] = useState<ServantChildItem[]>([]);
+
+  // 13 Fields: Evaluative fields added by Stage Secretary (تضاف من أمين الخدمة)
+  const [editFinancialStatus, setEditFinancialStatus] = useState('');
+  const [editBehaviorWithMembers, setEditBehaviorWithMembers] = useState('');
+  const [editBehaviorWithServants, setEditBehaviorWithServants] = useState('');
+  const [editCooperation, setEditCooperation] = useState('');
+  const [editIndividualInitiative, setEditIndividualInitiative] = useState('');
+  const [editEvaluationNotes, setEditEvaluationNotes] = useState('');
+
+  // Helpers for managing servant children
+  const handleAddChild = () => {
+    setEditChildrenList((prev) => [...prev, { name: '', age: '' }]);
+  };
+
+  const handleRemoveChild = (index: number) => {
+    setEditChildrenList((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleChildChange = (index: number, field: 'name' | 'age', value: string) => {
+    setEditChildrenList((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item))
+    );
+  };
 
   // Active selected servant object
   const selectedServant = useMemo(() => {
@@ -357,6 +441,130 @@ export default function AttendancePage() {
       });
     } finally {
       setIsSavingServantAttendance(false);
+    }
+  };
+
+  // Open Edit Servant Modal
+  const handleOpenEditServant = (servant: StageServantItem) => {
+    setEditingServant(servant);
+    setEditServantTab('profile');
+    setEditFullName(servant.fullName || '');
+    setEditPhoneNumber(servant.phoneNumber || '');
+    setEditEmail(servant.email || '');
+    setEditRoleCode(servant.role?.code || 'SERVANT');
+    setEditTempPassword('');
+
+    // Personal & Church fields (1-5, 7-9)
+    setEditFatherConfessor(servant.fatherConfessor || '');
+    setEditDateOfBirth(
+      servant.dateOfBirth
+        ? typeof servant.dateOfBirth === 'string'
+          ? servant.dateOfBirth.split('T')[0]
+          : ''
+        : ''
+    );
+    setEditAddress(servant.address || '');
+    setEditMaritalStatus(
+      servant.maritalStatus === 'متزوج' || servant.maritalStatus === 'MARRIED' ? 'متزوج' : 'أعزب'
+    );
+    setEditSpouseName(servant.spouseName || '');
+    setEditEducationOrCareer(servant.educationOrCareer || '');
+
+    // Parse children info
+    let children: ServantChildItem[] = [];
+    if (servant.childrenInfo) {
+      if (Array.isArray(servant.childrenInfo)) {
+        children = servant.childrenInfo.map((c: any) => ({
+          name: typeof c === 'string' ? c : c?.name || '',
+          age: typeof c === 'object' && c?.age ? String(c.age) : '',
+        }));
+      } else if (typeof servant.childrenInfo === 'string') {
+        try {
+          const parsed = JSON.parse(servant.childrenInfo);
+          if (Array.isArray(parsed)) {
+            children = parsed.map((c: any) => ({
+              name: typeof c === 'string' ? c : c?.name || '',
+              age: typeof c === 'object' && c?.age ? String(c.age) : '',
+            }));
+          }
+        } catch {
+          children = [{ name: servant.childrenInfo, age: '' }];
+        }
+      }
+    }
+    setEditChildrenList(children);
+
+    // Evaluative fields added by Stage Secretary (6, 10-13)
+    const evalData = servant.evaluation;
+    setEditFinancialStatus(evalData?.financialStatus || '');
+    setEditBehaviorWithMembers(evalData?.behaviorWithMembers || '');
+    setEditBehaviorWithServants(evalData?.behaviorWithServants || '');
+    setEditCooperation(evalData?.cooperation || '');
+    setEditIndividualInitiative(evalData?.individualInitiative || '');
+    setEditEvaluationNotes(evalData?.notes || '');
+
+    setEditServantError(null);
+    setIsEditServantModalOpen(true);
+  };
+
+  // Submit Update Servant Data (PATCH /api/v1/accounts/:userId)
+  const handleUpdateServant = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingServant) return;
+
+    try {
+      setIsEditingServantLoading(true);
+      setEditServantError(null);
+
+      // Clean children list
+      const validChildren = editChildrenList
+        .filter((c) => c.name.trim().length > 0)
+        .map((c) => ({ name: c.name.trim(), age: c.age.trim() }));
+
+      const payload: any = {
+        fullName: editFullName.trim(),
+        phoneNumber: editPhoneNumber.trim(),
+        email: editEmail.trim() || null,
+        roleCode: editRoleCode,
+        fatherConfessor: editFatherConfessor.trim() || null,
+        dateOfBirth: editDateOfBirth || null,
+        address: editAddress.trim() || null,
+        maritalStatus: editMaritalStatus,
+        spouseName: editMaritalStatus === 'متزوج' ? editSpouseName.trim() || null : null,
+        educationOrCareer: editEducationOrCareer.trim() || null,
+        childrenInfo: validChildren.length > 0 ? validChildren : null,
+        financialStatus: editFinancialStatus.trim() || null,
+        behaviorWithMembers: editBehaviorWithMembers.trim() || null,
+        behaviorWithServants: editBehaviorWithServants.trim() || null,
+        cooperation: editCooperation.trim() || null,
+        individualInitiative: editIndividualInitiative.trim() || null,
+        evaluationNotes: editEvaluationNotes.trim() || null,
+      };
+
+      if (editTempPassword.trim()) {
+        payload.temporaryPassword = editTempPassword.trim();
+      }
+
+      const res = await api.patch(`/api/v1/accounts/${editingServant.id}`, payload);
+
+      if (res.data?.success) {
+        setIsEditServantModalOpen(false);
+        setEditingServant(null);
+        setServantFeedbackMessage({
+          type: 'success',
+          text: `تم تحديث كافة بيانات وملف الخادم (${editFullName}) بنجاح!`,
+        });
+        setTimeout(() => setServantFeedbackMessage(null), 4000);
+        await fetchStageServants();
+      }
+    } catch (err: any) {
+      setEditServantError(
+        err.response?.data?.error?.message ||
+        err.response?.data?.message ||
+        'فشل في تحديث بيانات الخادم'
+      );
+    } finally {
+      setIsEditingServantLoading(false);
     }
   };
 
@@ -811,7 +1019,7 @@ export default function AttendancePage() {
               {/* Supervisor Servant Selector Carousel */}
               {isSupervisor && (
                 <div className="bg-bg-surface rounded-card p-4 border border-border-default shadow-card space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <div className="flex items-center gap-2">
                       <Users className="w-5 h-5 text-brand-primary" />
                       <h3 className="text-body font-bold text-text-primary">
@@ -819,7 +1027,7 @@ export default function AttendancePage() {
                       </h3>
                     </div>
                     <span className="text-caption text-text-secondary">
-                      اختر خادماً لعرض سجله أو تسجيل حضوره
+                      اختر خادماً لعرض سجله أو تسجيل حضوره أو تعديل بياناته
                     </span>
                   </div>
 
@@ -836,18 +1044,33 @@ export default function AttendancePage() {
                       {stageServants.map((s) => {
                         const isSelected = (selectedServantId || user?.id) === s.id;
                         const isSelf = s.id === user?.id;
+                        const canEdit = !isSelf && s.role.level < (user?.role?.level || 0);
+
                         return (
-                          <button
+                          <div
                             key={s.id}
-                            type="button"
                             onClick={() => setSelectedServantId(s.id)}
                             className={cn(
-                              'flex flex-col items-center gap-1.5 p-2.5 rounded-card border min-w-[110px] max-w-[130px] shrink-0 text-center transition-all',
+                              'relative flex flex-col items-center gap-1.5 p-2.5 rounded-card border min-w-[115px] max-w-[135px] shrink-0 text-center transition-all cursor-pointer',
                               isSelected
                                 ? 'bg-brand-primary/10 border-brand-primary shadow-sm ring-1 ring-brand-primary'
                                 : 'bg-bg-muted/50 border-border-default hover:bg-bg-muted'
                             )}
                           >
+                            {canEdit && (
+                              <button
+                                type="button"
+                                title="تعديل بيانات الخادم"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenEditServant(s);
+                                }}
+                                className="absolute top-1.5 left-1.5 p-1 rounded-full text-text-secondary hover:text-brand-primary hover:bg-bg-surface transition-colors"
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                            )}
+
                             <div
                               className={cn(
                                 'w-9 h-9 rounded-full flex items-center justify-center font-bold text-caption',
@@ -871,30 +1094,43 @@ export default function AttendancePage() {
                                 </span>
                               )}
                             </div>
-                          </button>
+                          </div>
                         );
                       })}
                     </div>
                   )}
 
-                  {/* Action button to record attendance for the selected subordinate */}
+                  {/* Action buttons for the selected subordinate */}
                   {selectedServantId && selectedServantId !== user?.id && (
-                    <div className="pt-2 border-t border-border-default flex items-center justify-between">
+                    <div className="pt-2 border-t border-border-default flex flex-wrap items-center justify-between gap-2">
                       <span className="text-caption text-text-secondary">
                         متابعة: <strong className="text-text-primary">{selectedServant?.fullName}</strong>
                       </span>
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={() => {
-                          setRecordServantNotes('');
-                          setIsRecordServantModalOpen(true);
-                        }}
-                        className="h-8 px-3 text-caption font-semibold gap-1.5"
-                      >
-                        <UserCheck className="w-4 h-4" />
-                        <span>تسجيل حضور الخادم</span>
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        {selectedServant && selectedServant.role.level < (user?.role?.level || 0) && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenEditServant(selectedServant)}
+                            className="h-8 px-2.5 text-caption font-semibold gap-1.5 text-text-primary hover:bg-bg-muted"
+                          >
+                            <Pencil className="w-3.5 h-3.5 text-brand-primary" />
+                            <span>تعديل البيانات</span>
+                          </Button>
+                        )}
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => {
+                            setRecordServantNotes('');
+                            setIsRecordServantModalOpen(true);
+                          }}
+                          className="h-8 px-3 text-caption font-semibold gap-1.5"
+                        >
+                          <UserCheck className="w-4 h-4" />
+                          <span>تسجيل حضور الخادم</span>
+                        </Button>
+                      </div>
                     </div>
                   )}
 
@@ -1259,6 +1495,565 @@ export default function AttendancePage() {
             </div>
           </div>
         )}
+
+        {/* MODAL: EDIT SERVANT DATA (13 Fields + Role & Security) */}
+        {isEditServantModalOpen && editingServant && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="bg-bg-surface w-full max-w-2xl max-h-[92vh] flex flex-col rounded-modal border border-border-default shadow-modal overflow-hidden">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between border-b border-border-default p-4 sm:p-5 shrink-0 bg-bg-surface">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-full bg-brand-primary-soft text-brand-primary flex items-center justify-center font-bold">
+                    <Pencil className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-body font-bold text-text-primary">
+                      تعديل ملف وبيانات الخادم
+                    </h3>
+                    <p className="text-caption text-text-secondary">
+                      {editingServant.fullName} ({editingServant.role.name})
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsEditServantModalOpen(false)}
+                  className="p-1.5 rounded-full text-text-secondary hover:text-text-primary hover:bg-bg-muted transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Navigation Tabs between Personal Data & Supervisor Evaluation */}
+              <div className="flex border-b border-border-default bg-bg-muted/30 px-4 pt-2 gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setEditServantTab('profile')}
+                  className={cn(
+                    'flex items-center gap-2 py-2.5 px-3.5 text-caption sm:text-body-small font-bold border-b-2 transition-all',
+                    editServantTab === 'profile'
+                      ? 'border-brand-primary text-brand-primary'
+                      : 'border-transparent text-text-secondary hover:text-text-primary'
+                  )}
+                >
+                  <User className="w-4 h-4" />
+                  <span>البيانات الشخصية والكنسية</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditServantTab('evaluation')}
+                  className={cn(
+                    'flex items-center gap-2 py-2.5 px-3.5 text-caption sm:text-body-small font-bold border-b-2 transition-all relative',
+                    editServantTab === 'evaluation'
+                      ? 'border-brand-primary text-brand-primary'
+                      : 'border-transparent text-text-secondary hover:text-text-primary'
+                  )}
+                >
+                  <Award className="w-4 h-4" />
+                  <span>تقييم أمين الخدمة</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-status-warning-soft text-status-warning font-semibold border border-status-warning/30 hidden sm:inline-block">
+                    خاص بالمشرف
+                  </span>
+                </button>
+              </div>
+
+              {/* Error Alert */}
+              {editServantError && (
+                <div className="mx-4 mt-3 p-3 bg-status-danger-soft text-status-danger border border-status-danger/30 rounded-card text-caption flex items-center gap-2 shrink-0">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{editServantError}</span>
+                </div>
+              )}
+
+              {/* Scrollable Form Body */}
+              <form onSubmit={handleUpdateServant} className="flex flex-col flex-1 overflow-hidden">
+                <div className="overflow-y-auto p-4 sm:p-5 space-y-4 flex-1">
+                  {editServantTab === 'profile' ? (
+                    <div className="space-y-3.5">
+                      {/* 1) اسمه & 5) التليفون */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-caption font-semibold text-text-secondary block mb-1">
+                            1. اسمه (الاسم الثلاثي للخادم) *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={editFullName}
+                            onChange={(e) => setEditFullName(e.target.value)}
+                            placeholder="مثال: مينا فريد نبيل"
+                            className="w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-caption font-semibold text-text-secondary block mb-1">
+                            5. التليفون (01xxxxxxxxx) *
+                          </label>
+                          <input
+                            type="tel"
+                            required
+                            value={editPhoneNumber}
+                            onChange={(e) => setEditPhoneNumber(e.target.value)}
+                            placeholder="01xxxxxxxxx"
+                            dir="ltr"
+                            className="w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary text-left"
+                          />
+                        </div>
+                      </div>
+
+                      {/* 2) اب الاعتراف & 3) تاريخ الميلاد */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-caption font-semibold text-text-secondary block mb-1">
+                            2. اب الاعتراف
+                          </label>
+                          <input
+                            type="text"
+                            value={editFatherConfessor}
+                            onChange={(e) => setEditFatherConfessor(e.target.value)}
+                            placeholder="مثال: أبونا شنودة، أبونا بولا..."
+                            className="w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-caption font-semibold text-text-secondary block mb-1">
+                            3. تاريخ الميلاد
+                          </label>
+                          <input
+                            type="date"
+                            value={editDateOfBirth}
+                            onChange={(e) => setEditDateOfBirth(e.target.value)}
+                            className="w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary"
+                          />
+                        </div>
+                      </div>
+
+                      {/* 4) العنوان & 8) المرحلة الدراسية */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-caption font-semibold text-text-secondary block mb-1">
+                            4. العنوان ومحل الإقامة
+                          </label>
+                          <input
+                            type="text"
+                            value={editAddress}
+                            onChange={(e) => setEditAddress(e.target.value)}
+                            placeholder="مثال: 14 شارع الكنيسة، شبرا، القاهرة"
+                            className="w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-caption font-semibold text-text-secondary block mb-1">
+                            8. المرحلة الدراسية (يدرس/ جيش/ متخرج)
+                          </label>
+                          <div className="space-y-1.5">
+                            <input
+                              type="text"
+                              value={editEducationOrCareer}
+                              onChange={(e) => setEditEducationOrCareer(e.target.value)}
+                              placeholder="يدرس / جيش / متخرج / التخصص والوظيفة..."
+                              className="w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary"
+                            />
+                            <div className="flex flex-wrap gap-1.5">
+                              {['يدرس', 'جيش', 'متخرج', 'طالب جامعي', 'موظف'].map((opt) => (
+                                <button
+                                  key={opt}
+                                  type="button"
+                                  onClick={() => setEditEducationOrCareer(opt)}
+                                  className={cn(
+                                    'text-[11px] px-2 py-0.5 rounded-full border transition-colors',
+                                    editEducationOrCareer === opt
+                                      ? 'bg-brand-primary text-white border-brand-primary'
+                                      : 'bg-bg-surface text-text-secondary border-border-default hover:border-brand-primary/40'
+                                  )}
+                                >
+                                  {opt}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 7) متزوج (اسم الزوج/ة) */}
+                      <div className="p-3 bg-bg-muted/40 rounded-card border border-border-default space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-caption font-bold text-text-primary">
+                            7. الحالة الاجتماعية: متزوج (اسم الزوج/ة)
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setEditMaritalStatus('أعزب')}
+                              className={cn(
+                                'px-3 py-1 rounded-pill text-caption font-semibold border transition-all',
+                                editMaritalStatus === 'أعزب'
+                                  ? 'bg-brand-primary text-white border-brand-primary'
+                                  : 'bg-bg-surface text-text-secondary border-border-default'
+                              )}
+                            >
+                              أعزب
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditMaritalStatus('متزوج')}
+                              className={cn(
+                                'px-3 py-1 rounded-pill text-caption font-semibold border transition-all',
+                                editMaritalStatus === 'متزوج'
+                                  ? 'bg-brand-primary text-white border-brand-primary'
+                                  : 'bg-bg-surface text-text-secondary border-border-default'
+                              )}
+                            >
+                              متزوج
+                            </button>
+                          </div>
+                        </div>
+
+                        {editMaritalStatus === 'متزوج' && (
+                          <div className="pt-2 border-t border-border-default animate-fade-in">
+                            <label className="text-caption font-semibold text-text-secondary block mb-1">
+                              اسم الزوج / الزوجة
+                            </label>
+                            <input
+                              type="text"
+                              value={editSpouseName}
+                              onChange={(e) => setEditSpouseName(e.target.value)}
+                              placeholder="اسم الزوج/ة بالكامل..."
+                              className="w-full bg-bg-surface border border-border-default rounded-card p-2 text-body-small text-text-primary focus:outline-none focus:border-brand-primary"
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 9) الأبناء (اختياري) وسنهم */}
+                      <div className="p-3 bg-bg-muted/40 rounded-card border border-border-default space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-caption font-bold text-text-primary block">
+                              9. الأبناء (اختياري) وسنهم
+                            </span>
+                            <span className="text-[11px] text-text-secondary">
+                              إضافة أسماء وأعمار أبناء الخادم
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleAddChild}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-pill bg-brand-primary-soft text-brand-primary text-caption font-bold hover:bg-brand-primary/20 transition-colors"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>إضافة ابن/ابنة</span>
+                          </button>
+                        </div>
+
+                        {editChildrenList.length === 0 ? (
+                          <p className="text-[11px] text-text-tertiary text-center py-2">
+                            لم تتم إضافة أبناء (اختياري)
+                          </p>
+                        ) : (
+                          <div className="space-y-2 pt-1">
+                            {editChildrenList.map((child, index) => (
+                              <div key={index} className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  placeholder="اسم الابن/الابنة..."
+                                  value={child.name}
+                                  onChange={(e) => handleChildChange(index, 'name', e.target.value)}
+                                  className="flex-1 bg-bg-surface border border-border-default rounded-card p-2 text-body-small text-text-primary focus:outline-none focus:border-brand-primary"
+                                />
+                                <input
+                                  type="text"
+                                  placeholder="السن..."
+                                  value={child.age}
+                                  onChange={(e) => handleChildChange(index, 'age', e.target.value)}
+                                  className="w-20 bg-bg-surface border border-border-default rounded-card p-2 text-body-small text-text-primary focus:outline-none focus:border-brand-primary text-center"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveChild(index)}
+                                  className="p-2 rounded-full text-status-danger hover:bg-status-danger-soft transition-colors"
+                                  title="حذف"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Additional Account Details: Email, Role, Temp Password */}
+                      <div className="pt-2 border-t border-border-default space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-caption font-semibold text-text-secondary block mb-1">
+                              البريد الإلكتروني (اختياري)
+                            </label>
+                            <input
+                              type="email"
+                              value={editEmail}
+                              onChange={(e) => setEditEmail(e.target.value)}
+                              placeholder="servant@example.com"
+                              dir="ltr"
+                              className="w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary text-left"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-caption font-semibold text-text-secondary block mb-1">
+                              المسؤولية / الرتبة في المرحلة
+                            </label>
+                            <select
+                              value={editRoleCode}
+                              onChange={(e) => setEditRoleCode(e.target.value)}
+                              className="w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary"
+                            >
+                              <option value="SERVANT">خادم مرحلة (SERVANT)</option>
+                              <option value="ASSISTANT_SECRETARY">أمين مساعد للمرحلة (ASSISTANT_SECRETARY)</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-caption font-semibold text-text-secondary block mb-1">
+                            تعيين كلمة مرور جديدة (اتركه فارغاً للإبقاء على الحالية)
+                          </label>
+                          <input
+                            type="password"
+                            value={editTempPassword}
+                            onChange={(e) => setEditTempPassword(e.target.value)}
+                            placeholder="كلمة مرور جديدة (6 أحرف على الأقل)..."
+                            className="w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    /* TAB 2: SUPERVISOR EVALUATION (تضاف من امين الخدمة) */
+                    <div className="space-y-4 animate-fade-in">
+                      <div className="p-3 bg-brand-primary-soft/60 border border-brand-primary/20 rounded-card flex items-start gap-2.5">
+                        <Shield className="w-5 h-5 text-brand-primary shrink-0 mt-0.5" />
+                        <div>
+                          <h4 className="text-body-small font-bold text-brand-primary">
+                            تقييم ومتابعة أمين الخدمة (5 بنود سرية)
+                          </h4>
+                          <p className="text-caption text-text-secondary mt-0.5">
+                            هذه الحقول التقييمية تضاف من أمين الخدمة لمتابعة كفاءة وأداء الخادم، ولا تظهر للمخدومين.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* 6) الحالة المادية (تضاف من امين الخدمة) */}
+                      <div>
+                        <label className="text-caption font-semibold text-text-secondary flex items-center justify-between mb-1">
+                          <span className="font-bold text-text-primary">
+                            6. الحالة المادية (تضاف من أمين الخدمة)
+                          </span>
+                          <span className="text-[11px] text-brand-primary">سرية</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={editFinancialStatus}
+                          onChange={(e) => setEditFinancialStatus(e.target.value)}
+                          placeholder="مثال: مستقرة، تحتاج افتقاد ودعم، ميسورة..."
+                          className="w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary"
+                        />
+                        <div className="flex flex-wrap gap-1.5 mt-1.5">
+                          {['مستقرة', 'متوسطة', 'تحتاج افتقاد ودعم', 'ميسورة'].map((st) => (
+                            <button
+                              key={st}
+                              type="button"
+                              onClick={() => setEditFinancialStatus(st)}
+                              className={cn(
+                                'text-[11px] px-2 py-0.5 rounded-full border transition-colors',
+                                editFinancialStatus === st
+                                  ? 'bg-brand-primary text-white border-brand-primary'
+                                  : 'bg-bg-surface text-text-secondary border-border-default hover:border-brand-primary/40'
+                              )}
+                            >
+                              {st}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 10) السلوك مع المخدومين (تضاف من امين الخدمة) */}
+                      <div>
+                        <label className="text-caption font-semibold text-text-secondary block mb-1">
+                          <span className="font-bold text-text-primary">
+                            10. السلوك مع المخدومين (تضاف من أمين الخدمة)
+                          </span>
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={editBehaviorWithMembers}
+                          onChange={(e) => setEditBehaviorWithMembers(e.target.value)}
+                          placeholder="تقييم علاقة الخادم بالمخدومين، أسلوب الاحتواء والافتقاد والشرح..."
+                          className="w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary resize-none"
+                        />
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          {[
+                            'محب ومحتوي ومواظب',
+                            'علاقة ممتازة وافتقاد دوري',
+                            'جيد ويحتاج تنشيط الافتقاد',
+                            'يحتاج تطوير أسلوب التواصل والتواجد',
+                          ].map((text) => (
+                            <button
+                              key={text}
+                              type="button"
+                              onClick={() => setEditBehaviorWithMembers(text)}
+                              className="text-[11px] px-2 py-0.5 rounded-full bg-bg-surface text-text-secondary border border-border-default hover:border-brand-primary/40"
+                            >
+                              {text}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 11) السلوك مع الخدام (تضاف من امين الخدمة) */}
+                      <div>
+                        <label className="text-caption font-semibold text-text-secondary block mb-1">
+                          <span className="font-bold text-text-primary">
+                            11. السلوك مع الخدام والزملاء (تضاف من أمين الخدمة)
+                          </span>
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={editBehaviorWithServants}
+                          onChange={(e) => setEditBehaviorWithServants(e.target.value)}
+                          placeholder="تقييم روح المحبة، قبول التوجيه، التنسيق مع زملائه الخدام..."
+                          className="w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary resize-none"
+                        />
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          {[
+                            'روح محبة وتواضع ومرونة',
+                            'متعاون جداً مع الفريق',
+                            'هادئ وملتزم بدوره',
+                            'يحتاج اندماج أكثر في روح الفريق',
+                          ].map((text) => (
+                            <button
+                              key={text}
+                              type="button"
+                              onClick={() => setEditBehaviorWithServants(text)}
+                              className="text-[11px] px-2 py-0.5 rounded-full bg-bg-surface text-text-secondary border border-border-default hover:border-brand-primary/40"
+                            >
+                              {text}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 12) التعاون (تضاف من امين الخدمة) */}
+                      <div>
+                        <label className="text-caption font-semibold text-text-secondary block mb-1">
+                          <span className="font-bold text-text-primary">
+                            12. التعاون والمشاركة (تضاف من أمين الخدمة)
+                          </span>
+                        </label>
+                        <input
+                          type="text"
+                          value={editCooperation}
+                          onChange={(e) => setEditCooperation(e.target.value)}
+                          placeholder="مدى التعاون في أنشطة المرحلة والرحلات والاحتفالات..."
+                          className="w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary"
+                        />
+                        <div className="flex flex-wrap gap-1.5 mt-1.5">
+                          {[
+                            'متعاون جداً ويبادر بالمساعدة',
+                            'ملتزم تماماً بما يكلف به',
+                            'متوسط ويحتاج تشجيع ومتابعة',
+                            'يحتاج مشاركة أكثر في الأنشطة',
+                          ].map((text) => (
+                            <button
+                              key={text}
+                              type="button"
+                              onClick={() => setEditCooperation(text)}
+                              className="text-[11px] px-2 py-0.5 rounded-full bg-bg-surface text-text-secondary border border-border-default hover:border-brand-primary/40"
+                            >
+                              {text}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 13) العمل الفردي (تضاف من امين الخدمة) */}
+                      <div>
+                        <label className="text-caption font-semibold text-text-secondary block mb-1">
+                          <span className="font-bold text-text-primary">
+                            13. العمل الفردي والمبادرة (تضاف من أمين الخدمة)
+                          </span>
+                        </label>
+                        <input
+                          type="text"
+                          value={editIndividualInitiative}
+                          onChange={(e) => setEditIndividualInitiative(e.target.value)}
+                          placeholder="القدرة على الافتقاد الفردي، حل المشكلات، الابتكار..."
+                          className="w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary"
+                        />
+                        <div className="flex flex-wrap gap-1.5 mt-1.5">
+                          {[
+                            'مبادر ومبتكر في العمل الفردي',
+                            'نشط في الافتقاد الشخصي للمخدومين',
+                            'جيد في إنجاز المهام الفردية',
+                            'يحتاج توجيه وإشراف مستمر',
+                          ].map((text) => (
+                            <button
+                              key={text}
+                              type="button"
+                              onClick={() => setEditIndividualInitiative(text)}
+                              className="text-[11px] px-2 py-0.5 rounded-full bg-bg-surface text-text-secondary border border-border-default hover:border-brand-primary/40"
+                            >
+                              {text}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* ملاحظات سرية إضافية لأمين الخدمة */}
+                      <div>
+                        <label className="text-caption font-semibold text-text-secondary block mb-1">
+                          ملاحظات وتوجيهات إضافية لأمين الخدمة
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={editEvaluationNotes}
+                          onChange={(e) => setEditEvaluationNotes(e.target.value)}
+                          placeholder="أي ملاحظات رعوية خاصة بمتابعة الخادم وتطويره..."
+                          className="w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary resize-none"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Modal Footer with Actions */}
+                <div className="flex items-center gap-3 p-4 sm:p-5 border-t border-border-default bg-bg-surface shrink-0">
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    fullWidth
+                    isLoading={isEditingServantLoading}
+                    className="h-[42px] font-bold text-caption sm:text-body-small gap-2"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>حفظ كافة التعديلات والتقييمات</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isEditingServantLoading}
+                    onClick={() => setIsEditServantModalOpen(false)}
+                    className="h-[42px] px-6 text-text-secondary hover:text-text-primary text-caption sm:text-body-small shrink-0"
+                  >
+                    إلغاء
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+
 
         {/* Global Bottom Tab Bar */}
         <TabBar activeTab="attendance" />

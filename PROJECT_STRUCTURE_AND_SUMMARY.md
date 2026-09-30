@@ -179,6 +179,8 @@ A modern, responsive Next.js 14 web application built with Tailwind CSS, Lucide 
      - Allows viewing regular meeting dates and agendas.
      - **Permission Rule**: Strictly allows only the General Secretary (`الأمين العام`) to add, edit, or delete meetings. Stage Secretaries (`أمين الخدمة`) have clean, read-only visibility.
   2. **تدبير الخدمة (Service Activities)**: General church feasts, trips, spiritual retreats, and volunteer coordination.
+     - **Mandatory Attendance vs Volunteer Option**: Allows supervisors to toggle between "حضور إلزامي لجميع الخدام" (auto-enrolling all stage servants) and "تطوع بالخدمة" with volunteer limits.
+     - **Volunteers & Attendees Inspection Modal**: Stage Secretaries (`أمين الخدمة`) and supervisors can view full lists of registered servants/volunteers (names, church roles, contact numbers with direct call/WhatsApp links) with a one-click button to enroll all stage servants.
   3. **تحضير الدروس (Lesson Preparation & Inspection)**: Curriculum lessons, compulsory ecclesiastical references, servant preparation submissions, and supervisor inspection of prepared vs. unprepared servants.
 - **`app/calendar/page.tsx`**: Unified liturgical and service calendar with monthly/weekly views and volunteer sign-ups.
 - **`app/announcements/page.tsx`**: Interactive announcements feed and active church polls with voting.

@@ -41,6 +41,8 @@ import {
   Info,
   Pencil,
   MessageSquare,
+  ShieldAlert,
+  UserCheck,
 } from 'lucide-react';
 
 enum EventCategory {
@@ -67,9 +69,16 @@ interface Volunteer {
   id: string;
   userId: string;
   roleInEvent: string | null;
+  createdAt?: string;
   user?: {
     id: string;
     fullName: string;
+    phoneNumber?: string | null;
+    role?: {
+      id?: string;
+      name?: string;
+      code?: string;
+    };
   };
 }
 
@@ -86,6 +95,7 @@ interface CalendarEvent {
   bibleVerse?: string | null;
   references?: string | null;
   overview?: string | null;
+  requiresAllServants?: boolean;
 }
 
 interface YearPlan {
@@ -196,10 +206,16 @@ export default function StagePlanPage() {
   const [eventEndDate, setEventEndDate] = useState('');
   const [eventLocation, setEventLocation] = useState('');
   const [eventMaxVolunteers, setEventMaxVolunteers] = useState<number | ''>(2);
+  const [requiresAllServants, setRequiresAllServants] = useState(false);
   // Specific fields for Lesson Plan
   const [lessonBibleVerse, setLessonBibleVerse] = useState('');
   const [lessonReferences, setLessonReferences] = useState('');
   const [createEventLoading, setCreateEventLoading] = useState(false);
+
+  // 1b. Volunteers / Attendees Modal (For Stage Secretary & Servants)
+  const [viewVolunteersModalOpen, setViewVolunteersModalOpen] = useState(false);
+  const [viewingVolunteersEvent, setViewingVolunteersEvent] = useState<CalendarEvent | null>(null);
+  const [isEnrollingAllLoading, setIsEnrollingAllLoading] = useState(false);
 
   // 2. Lesson Inspection Modal (For Stage Secretary)
   const [inspectModalOpen, setInspectModalOpen] = useState(false);
@@ -301,8 +317,58 @@ export default function StagePlanPage() {
     fetchUserPreparations();
   }, []);
 
-  // Filter events into the 3 distinct parts
-  const allEvents = selectedPlan?.events || [];
+  // Helper to safely parse and sanitize any event data so raw JSON metadata is never shown
+  const sanitizeEvent = (evt: CalendarEvent): CalendarEvent => {
+    let overview = evt.overview;
+    let bibleVerse = evt.bibleVerse;
+    let references = evt.references;
+    let requiresAllServants = Boolean(evt.requiresAllServants);
+
+    if (evt.description && typeof evt.description === 'string' && evt.description.trim().startsWith('{')) {
+      try {
+        const parsed = JSON.parse(evt.description);
+        overview = parsed.overview || '';
+        bibleVerse = parsed.bibleVerse || bibleVerse;
+        references = parsed.references || references;
+        if (parsed.requiresAllServants !== undefined) {
+          requiresAllServants = Boolean(parsed.requiresAllServants);
+        }
+      } catch {
+        // fallback
+      }
+    } else if (!overview && evt.description) {
+      overview = evt.description;
+    }
+
+    return {
+      ...evt,
+      overview: overview || '',
+      description: overview || '',
+      bibleVerse: bibleVerse || null,
+      references: references || null,
+      requiresAllServants,
+    };
+  };
+
+  const getEventDisplayDescription = (evt: CalendarEvent): string => {
+    if (evt.overview) return evt.overview;
+    if (!evt.description) return '';
+    const trimmed = evt.description.trim();
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        return parsed.overview || '';
+      } catch {
+        return evt.description;
+      }
+    }
+    return evt.description;
+  };
+
+  // Filter events into the 3 distinct parts (cleanly sanitized)
+  const allEvents = useMemo(() => {
+    return (selectedPlan?.events || []).map(sanitizeEvent);
+  }, [selectedPlan]);
 
   // 1. تدبير اجتماع خدام: SERVICE_MEETING & SECRETARIES_COUNCIL
   const meetingEvents = useMemo(() => {
@@ -346,17 +412,22 @@ export default function StagePlanPage() {
     setEventLocation('');
     setEventStartDate('');
     setEventEndDate('');
-    setEventMaxVolunteers(2);
     setLessonBibleVerse('');
     setLessonReferences('');
 
     if (type === 'meeting') {
       setEventCategory(EventCategory.SERVICE_MEETING);
       setEventLocation('قاعة كنيسة أنبا شنودة');
+      setRequiresAllServants(true); // Meetings are mandatory for all servants by default
+      setEventMaxVolunteers('');
     } else if (type === 'service') {
       setEventCategory(EventCategory.TRIP_OR_OUTING);
+      setRequiresAllServants(false);
+      setEventMaxVolunteers(2);
     } else {
       setEventCategory(EventCategory.SPIRITUAL_LESSON);
+      setRequiresAllServants(true);
+      setEventMaxVolunteers('');
     }
 
     setIsAddEventOpen(true);
@@ -374,16 +445,87 @@ export default function StagePlanPage() {
     setEditingEvent(evt);
     setAddEventType(type);
     setEventTitle(evt.title || '');
-    setEventDesc(evt.overview || evt.description || '');
+    setEventDesc(getEventDisplayDescription(evt));
     setEventLocation(evt.location || '');
     setEventCategory(evt.category);
     setEventStartDate(evt.startDate ? new Date(evt.startDate).toISOString().split('T')[0] : '');
     setEventEndDate(evt.endDate ? new Date(evt.endDate).toISOString().split('T')[0] : '');
     setEventMaxVolunteers(evt.maxVolunteers || '');
+    setRequiresAllServants(Boolean(evt.requiresAllServants));
     setLessonBibleVerse(evt.bibleVerse || '');
     setLessonReferences(evt.references || '');
 
     setIsAddEventOpen(true);
+  };
+
+  // Open Volunteers / Attendees Inspection Modal
+  const handleOpenViewVolunteers = (evt: CalendarEvent) => {
+    setViewingVolunteersEvent(evt);
+    setViewVolunteersModalOpen(true);
+  };
+
+  // One-Click: Enroll and mandate all active stage servants into event
+  const handleEnrollAllServants = async (eventId: string) => {
+    try {
+      setIsEnrollingAllLoading(true);
+      const res = await api.post(`/api/v1/events/${eventId}/enroll-all`);
+      if (res.data?.success) {
+        const enrolledCount = res.data.data?.enrolledCount || 0;
+        const updatedEvent = res.data.data?.event;
+
+        setActionMessage({
+          type: 'success',
+          text: `تم تسجيل وإلزام جميع خدام المرحلة (${enrolledCount} خادم) بالحضور بنجاح!`,
+        });
+
+        // Update local viewing event state
+        if (updatedEvent) {
+          setViewingVolunteersEvent(updatedEvent);
+        }
+
+        const planId = selectedPlan?.id || (plans.length > 0 ? plans[0].id : null);
+        if (planId) {
+          await loadPlanDetail(planId);
+        }
+        setTimeout(() => setActionMessage(null), 4000);
+      }
+    } catch (err: any) {
+      console.error('Failed to enroll all servants:', err);
+      setActionMessage({
+        type: 'error',
+        text: err.response?.data?.error?.message || 'فشل في تسجيل جميع الخدام',
+      });
+    } finally {
+      setIsEnrollingAllLoading(false);
+    }
+  };
+
+  // Delete Service Event (For Stage Secretary / Level 3+)
+  const handleDeleteServiceEvent = async (eventId: string) => {
+    const planId = selectedPlan?.id || (plans.length > 0 ? plans[0].id : null);
+    if (!planId) return;
+
+    if (!window.confirm('هل أنت متأكد من رغبتك في حذف هذه الفعالية من الخطة؟')) {
+      return;
+    }
+
+    try {
+      setDeleteEventLoading(eventId);
+      const res = await api.delete(`/api/v1/year-plans/${planId}/events/${eventId}`);
+      if (res.data?.success) {
+        setActionMessage({ type: 'success', text: 'تم حذف الفعالية بنجاح من الخطة' });
+        await loadPlanDetail(planId);
+        setTimeout(() => setActionMessage(null), 4000);
+      }
+    } catch (err: any) {
+      console.error('Failed to delete event:', err);
+      setActionMessage({
+        type: 'error',
+        text: err.response?.data?.error?.message || 'فشل في حذف الفعالية',
+      });
+    } finally {
+      setDeleteEventLoading(null);
+    }
   };
 
   // Delete Meeting (Only General Secretary)
@@ -504,7 +646,8 @@ export default function StagePlanPage() {
           startDate: eventStartDate,
           endDate: eventEndDate || eventStartDate,
           location: eventLocation.trim() || undefined,
-          maxVolunteers: eventMaxVolunteers ? Number(eventMaxVolunteers) : undefined,
+          maxVolunteers: requiresAllServants ? undefined : (eventMaxVolunteers ? Number(eventMaxVolunteers) : undefined),
+          requiresAllServants,
           bibleVerse: addEventType === 'lesson' ? lessonBibleVerse.trim() : undefined,
           references: addEventType === 'lesson' ? lessonReferences.trim() : undefined,
         });
@@ -538,7 +681,8 @@ export default function StagePlanPage() {
         startDate: eventStartDate,
         endDate: eventEndDate || eventStartDate,
         location: eventLocation.trim() || undefined,
-        maxVolunteers: eventMaxVolunteers ? Number(eventMaxVolunteers) : undefined,
+        maxVolunteers: requiresAllServants ? undefined : (eventMaxVolunteers ? Number(eventMaxVolunteers) : undefined),
+        requiresAllServants,
         bibleVerse: addEventType === 'lesson' ? lessonBibleVerse.trim() : undefined,
         references: addEventType === 'lesson' ? lessonReferences.trim() : undefined,
         isLessonPlanCreation: addEventType === 'lesson',
@@ -913,10 +1057,18 @@ export default function StagePlanPage() {
                         key={evt.id}
                         className="bg-bg-surface border border-border-default rounded-card p-3.5 shadow-card text-right flex flex-col gap-2 hover:border-brand-primary/40 transition-all"
                       >
-                        <div className="flex items-center justify-between">
-                          <Badge variant="accent">
-                            {EVENT_CATEGORY_ARABIC[evt.category]}
-                          </Badge>
+                        <div className="flex items-center justify-between flex-wrap gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <Badge variant="accent">
+                              {EVENT_CATEGORY_ARABIC[evt.category]}
+                            </Badge>
+                            {evt.requiresAllServants && (
+                              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                                <ShieldAlert className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                                <span>حضور إلزامي لجميع الخدام</span>
+                              </span>
+                            )}
+                          </div>
                           <span className="text-[11px] text-text-secondary flex items-center gap-1">
                             <Clock className="w-3 h-3" />
                             {formattedDate}
@@ -927,9 +1079,9 @@ export default function StagePlanPage() {
                           {evt.title}
                         </h3>
 
-                        {evt.description && (
+                        {getEventDisplayDescription(evt) && (
                           <p className="text-caption text-text-secondary leading-relaxed">
-                            {evt.description}
+                            {getEventDisplayDescription(evt)}
                           </p>
                         )}
 
@@ -940,32 +1092,45 @@ export default function StagePlanPage() {
                           </div>
                         )}
 
-                        {/* Actions: ONLY General Secretary can edit or delete servant meetings */}
-                        {canManageMeetings && (
-                          <div className="flex items-center gap-2 pt-2 border-t border-border-default mt-1">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleOpenEditEvent(evt, 'meeting')}
-                              className="h-7 text-[11px] px-2.5 gap-1 font-semibold text-brand-primary border-brand-primary/30 hover:bg-brand-primary/10"
-                            >
-                              <Pencil className="w-3 h-3" />
-                              <span>تعديل</span>
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={deleteEventLoading === evt.id}
-                              onClick={() => handleDeleteMeeting(evt.id)}
-                              className="h-7 text-[11px] px-2.5 gap-1 font-semibold text-status-danger border-status-danger/30 hover:bg-status-danger-soft hover:text-status-danger"
-                            >
-                              <X className="w-3 h-3" />
-                              <span>{deleteEventLoading === evt.id ? 'جارٍ الحذف...' : 'حذف'}</span>
-                            </Button>
-                          </div>
-                        )}
+                        {/* Actions: View Attendees / Volunteers & Secretary controls */}
+                        <div className="flex items-center justify-between pt-2 border-t border-border-default mt-1 flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenViewVolunteers(evt)}
+                            className="h-7 text-[11px] px-2.5 gap-1.5 font-semibold text-brand-primary border-brand-primary/30 hover:bg-brand-primary/10"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>كشف الخدام المسجلين ({evt.volunteers?.length || 0})</span>
+                          </Button>
+
+                          {canManageMeetings && (
+                            <div className="flex items-center gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleOpenEditEvent(evt, 'meeting')}
+                                className="h-7 text-[11px] px-2.5 gap-1 font-semibold text-brand-primary border-brand-primary/30 hover:bg-brand-primary/10"
+                              >
+                                <Pencil className="w-3 h-3" />
+                                <span>تعديل</span>
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={deleteEventLoading === evt.id}
+                                onClick={() => handleDeleteMeeting(evt.id)}
+                                className="h-7 text-[11px] px-2.5 gap-1 font-semibold text-status-danger border-status-danger/30 hover:bg-status-danger-soft hover:text-status-danger"
+                              >
+                                <X className="w-3 h-3" />
+                                <span>{deleteEventLoading === evt.id ? 'جارٍ الحذف...' : 'حذف'}</span>
+                              </Button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -1037,10 +1202,18 @@ export default function StagePlanPage() {
                         key={evt.id}
                         className="bg-bg-surface border border-border-default rounded-card p-3.5 shadow-card text-right flex flex-col gap-2.5 hover:border-brand-primary/40 transition-all"
                       >
-                        <div className="flex items-center justify-between">
-                          <span className="text-caption font-bold px-2 py-0.5 rounded-full bg-brand-primary-soft text-brand-primary">
-                            {EVENT_CATEGORY_ARABIC[evt.category] || evt.category}
-                          </span>
+                        <div className="flex items-center justify-between flex-wrap gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-caption font-bold px-2 py-0.5 rounded-full bg-brand-primary-soft text-brand-primary">
+                              {EVENT_CATEGORY_ARABIC[evt.category] || evt.category}
+                            </span>
+                            {evt.requiresAllServants && (
+                              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                                <ShieldAlert className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                                <span>حضور إلزامي لجميع الخدام</span>
+                              </span>
+                            )}
+                          </div>
                           <span className="text-[11px] text-text-secondary flex items-center gap-1">
                             <Clock className="w-3 h-3" />
                             {formattedDate}
@@ -1051,9 +1224,9 @@ export default function StagePlanPage() {
                           <h3 className="text-body-default font-bold text-text-primary">
                             {evt.title}
                           </h3>
-                          {evt.description && (
+                          {getEventDisplayDescription(evt) && (
                             <p className="text-caption text-text-secondary mt-1 leading-relaxed">
-                              {evt.description}
+                              {getEventDisplayDescription(evt)}
                             </p>
                           )}
                         </div>
@@ -1065,34 +1238,68 @@ export default function StagePlanPage() {
                           </div>
                         )}
 
-                        <div className="flex items-center justify-between pt-2 border-t border-border-default mt-0.5">
-                          <div className="flex items-center gap-1.5 text-caption text-text-secondary">
-                            <Users className="w-3.5 h-3.5 text-text-secondary" />
-                            <span>
-                              المتطوعين: {evt.volunteers.length}
-                              {evt.maxVolunteers ? ` / ${evt.maxVolunteers}` : ''}
-                            </span>
-                          </div>
-
+                        <div className="flex items-center justify-between pt-2 border-t border-border-default mt-0.5 flex-wrap gap-2">
                           <Button
-                            variant={isVolunteered ? 'outline' : 'primary'}
+                            variant="outline"
                             size="sm"
-                            isLoading={volunteerActionLoading === evt.id}
-                            onClick={() => handleVolunteerToggle(evt)}
-                            className={cn(
-                              'h-7 px-2.5 text-caption font-semibold gap-1',
-                              isVolunteered && 'text-status-success border-status-success/40 bg-status-success-soft'
-                            )}
+                            onClick={() => handleOpenViewVolunteers(evt)}
+                            className="h-7 px-2.5 text-caption font-semibold gap-1.5 text-brand-primary border-brand-primary/30 hover:bg-brand-primary/10"
                           >
-                            {isVolunteered ? (
-                              <>
-                                <Check className="w-3 h-3" />
-                                <span>متطوع بالخدمة</span>
-                              </>
-                            ) : (
-                              <span>تطوع بالخدمة</span>
-                            )}
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>
+                              {evt.requiresAllServants ? 'كشف الخدام المسجلين' : 'المتطوعين المسجلين'}{' '}
+                              ({evt.volunteers?.length || 0}
+                              {evt.maxVolunteers && !evt.requiresAllServants ? ` / ${evt.maxVolunteers}` : ''})
+                            </span>
                           </Button>
+
+                          <div className="flex items-center gap-1.5">
+                            {canManagePlan && (
+                              <>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleOpenEditEvent(evt, 'service')}
+                                  className="h-7 text-[11px] px-2 gap-1 font-semibold text-text-secondary hover:text-brand-primary border-border-default hover:bg-bg-muted"
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                  <span>تعديل</span>
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={deleteEventLoading === evt.id}
+                                  onClick={() => handleDeleteServiceEvent(evt.id)}
+                                  className="h-7 text-[11px] px-2 gap-1 font-semibold text-status-danger border-status-danger/30 hover:bg-status-danger-soft hover:text-status-danger"
+                                >
+                                  <X className="w-3 h-3" />
+                                  <span>{deleteEventLoading === evt.id ? '...' : 'حذف'}</span>
+                                </Button>
+                              </>
+                            )}
+
+                            <Button
+                              variant={isVolunteered ? 'outline' : 'primary'}
+                              size="sm"
+                              isLoading={volunteerActionLoading === evt.id}
+                              onClick={() => handleVolunteerToggle(evt)}
+                              className={cn(
+                                'h-7 px-2.5 text-caption font-semibold gap-1',
+                                isVolunteered && 'text-status-success border-status-success/40 bg-status-success-soft'
+                              )}
+                            >
+                              {isVolunteered ? (
+                                <>
+                                  <Check className="w-3 h-3" />
+                                  <span>مسجل بالفعالية</span>
+                                </>
+                              ) : (
+                                <span>تطوع بالخدمة</span>
+                              )}
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -1172,6 +1379,12 @@ export default function StagePlanPage() {
                             <span className="text-caption font-bold px-2.5 py-0.5 rounded-full bg-brand-primary/10 text-brand-primary border border-brand-primary/20">
                               الدرس {idx + 1}
                             </span>
+                            {evt.requiresAllServants && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                                <ShieldAlert className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                                <span>إلزامي لجميع الخدام</span>
+                              </span>
+                            )}
                             {userPrep && (
                               <span className={cn(
                                 "text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1",
@@ -1480,19 +1693,85 @@ export default function StagePlanPage() {
                         />
                       </div>
 
-                      <div>
-                        <label className="text-caption font-semibold text-text-secondary block mb-1">
-                          عدد الخدام المطلوب تطوعهم
+                      {/* Attendance Requirement Selector: حضور إلزامي لجميع الخدام vs تطوع بالخدمة */}
+                      <div className="space-y-2 bg-bg-muted/70 p-3 rounded-card border border-border-default">
+                        <label className="text-caption font-bold text-text-primary block">
+                          طبيعة مشاركة وحضور الخدام في التدبير *
                         </label>
-                        <Input
-                          type="number"
-                          min={1}
-                          max={30}
-                          value={eventMaxVolunteers}
-                          onChange={(e) =>
-                            setEventMaxVolunteers(e.target.value ? Number(e.target.value) : '')
-                          }
-                        />
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRequiresAllServants(true);
+                              setEventMaxVolunteers('');
+                            }}
+                            className={cn(
+                              'p-3 rounded-card border text-right transition-all flex flex-col gap-1',
+                              requiresAllServants
+                                ? 'bg-amber-500/10 border-amber-500/60 text-text-primary ring-1 ring-amber-500/50 shadow-sm'
+                                : 'bg-bg-surface border-border-default text-text-secondary hover:border-brand-primary/40'
+                            )}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-body-small flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
+                                <ShieldAlert className="w-4 h-4 shrink-0" />
+                                <span>حضور إلزامي لجميع الخدام</span>
+                              </span>
+                              {requiresAllServants && <Check className="w-4 h-4 text-amber-600 dark:text-amber-400" />}
+                            </div>
+                            <p className="text-[11px] text-text-secondary leading-snug">
+                              مطلوب تواجد وحضور كافة خدام المرحلة بدون استثناء وتسجيلهم تلقائياً
+                            </p>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRequiresAllServants(false);
+                              if (!eventMaxVolunteers) setEventMaxVolunteers(2);
+                            }}
+                            className={cn(
+                              'p-3 rounded-card border text-right transition-all flex flex-col gap-1',
+                              !requiresAllServants
+                                ? 'bg-brand-primary/10 border-brand-primary/60 text-text-primary ring-1 ring-brand-primary/50 shadow-sm'
+                                : 'bg-bg-surface border-border-default text-text-secondary hover:border-brand-primary/40'
+                            )}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-body-small flex items-center gap-1.5 text-brand-primary">
+                                <Users className="w-4 h-4 shrink-0" />
+                                <span>تطوع بالخدمة (اختياري)</span>
+                              </span>
+                              {!requiresAllServants && <Check className="w-4 h-4 text-brand-primary" />}
+                            </div>
+                            <p className="text-[11px] text-text-secondary leading-snug">
+                              فتح باب التطوع لعدد محدد من الخدام الراغبين في المشاركة
+                            </p>
+                          </button>
+                        </div>
+
+                        {requiresAllServants ? (
+                          <div className="pt-2 text-[11px] font-semibold text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-amber-600" />
+                            <span>سيتم إدراج وتسجيل جميع خدام المرحلة كحضور إلزامي لهذا التدبير تلقائياً.</span>
+                          </div>
+                        ) : (
+                          <div className="pt-2 mt-1 border-t border-border-default">
+                            <label className="text-caption font-semibold text-text-secondary block mb-1">
+                              الحد الأقصى لعدد الخدام المطلوب تطوعهم
+                            </label>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={50}
+                              value={eventMaxVolunteers}
+                              onChange={(e) =>
+                                setEventMaxVolunteers(e.target.value ? Number(e.target.value) : '')
+                              }
+                              placeholder="مثال: 2 أو 3 خدام"
+                            />
+                          </div>
+                        )}
                       </div>
                     </>
                   )}
@@ -2260,6 +2539,210 @@ export default function StagePlanPage() {
                         </Button>
                       </div>
                     )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ======================================================== */}
+          {/* MODAL 5: كشف الخدام والمتطوعين المسجلين بالفعالية / التدبير */}
+          {/* ======================================================== */}
+          {viewVolunteersModalOpen && viewingVolunteersEvent && (
+            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+              <div className="bg-bg-surface border border-border-default rounded-card w-full max-w-lg p-5 shadow-elevated text-right space-y-4 max-h-[90vh] overflow-y-auto">
+                {/* Header */}
+                <div className="flex items-center justify-between pb-3 border-b border-border-default">
+                  <div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <Badge variant="accent">
+                        {EVENT_CATEGORY_ARABIC[viewingVolunteersEvent.category] || viewingVolunteersEvent.category}
+                      </Badge>
+                      <h3 className="text-h2 font-bold text-text-primary">
+                        {viewingVolunteersEvent.title}
+                      </h3>
+                    </div>
+                    <p className="text-caption text-text-secondary mt-0.5">
+                      كشف الخدام والمتطوعين المسجلين في هذا التدبير
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setViewVolunteersModalOpen(false);
+                      setViewingVolunteersEvent(null);
+                    }}
+                    className="p-1 rounded-full hover:bg-bg-muted text-text-secondary"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Event Details Card */}
+                <div className="bg-bg-muted/60 border border-border-default rounded-card p-3 space-y-2 text-caption">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-text-primary">الموعد والتاريخ:</span>
+                    <span className="text-text-secondary font-medium">
+                      {new Date(viewingVolunteersEvent.startDate).toLocaleDateString('ar-EG', {
+                        weekday: 'long',
+                        day: 'numeric',
+                        month: 'long',
+                        year: 'numeric',
+                      })}
+                    </span>
+                  </div>
+
+                  {viewingVolunteersEvent.location && (
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-text-primary">مكان الانعقاد:</span>
+                      <span className="text-text-secondary font-medium">
+                        {viewingVolunteersEvent.location}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between pt-1 border-t border-border-default">
+                    <span className="font-bold text-text-primary">حالة المشاركة:</span>
+                    {viewingVolunteersEvent.requiresAllServants ? (
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                        <ShieldAlert className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                        <span>حضور إلزامي لجميع الخدام</span>
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-brand-primary/10 text-brand-primary border border-brand-primary/20 flex items-center gap-1">
+                        <Users className="w-3.5 h-3.5" />
+                        <span>
+                          باب التطوع مفتوح ({viewingVolunteersEvent.volunteers?.length || 0}
+                          {viewingVolunteersEvent.maxVolunteers ? ` / ${viewingVolunteersEvent.maxVolunteers}` : ''})
+                        </span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Supervisor Action: Enroll All Servants Now Button */}
+                {canManagePlan && (
+                  <div className="bg-amber-500/10 border border-amber-500/30 rounded-card p-3 flex flex-col sm:flex-row items-center justify-between gap-2.5 text-right">
+                    <div>
+                      <h4 className="text-body-small font-bold text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                        <UserCheck className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                        <span>إلزام وتسجيل جميع خدام المرحلة بالحضور</span>
+                      </h4>
+                      <p className="text-[11px] text-amber-800 dark:text-amber-400/90 mt-0.5">
+                        تسجيل وإشعار كافة الخدام النشطين بالمرحلة وإلزامهم بالتواجد بنقرة واحدة
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      isLoading={isEnrollingAllLoading}
+                      onClick={() => handleEnrollAllServants(viewingVolunteersEvent.id)}
+                      className="whitespace-nowrap font-bold text-caption bg-amber-600 hover:bg-amber-700 text-white shrink-0"
+                    >
+                      <UserCheck className="w-3.5 h-3.5 ml-1" />
+                      <span>إلزام جميع الخدام الآن</span>
+                    </Button>
+                  </div>
+                )}
+
+                {/* Servants List */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-body-small font-bold text-text-primary flex items-center gap-1.5">
+                      <Users className="w-4 h-4 text-brand-primary" />
+                      <span>قائمة الخدام المسجلين ({viewingVolunteersEvent.volunteers?.length || 0})</span>
+                    </h4>
+                  </div>
+
+                  {(!viewingVolunteersEvent.volunteers || viewingVolunteersEvent.volunteers.length === 0) ? (
+                    <div className="p-6 text-center text-text-secondary bg-bg-muted/40 border border-dashed border-border-default rounded-card">
+                      <Users className="w-8 h-8 text-text-tertiary mx-auto mb-2" />
+                      <p className="text-body-small font-semibold">لم يقم أي خادم بالتسجيل أو التطوع حتى الآن</p>
+                      <p className="text-caption text-text-tertiary mt-1">
+                        يمكن للخدام التطوع عبر بطاقة الفعالية، أو يمكن للمشرف إلزام وتسجيل كافة الخدام أعلاه.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-2 max-h-72 overflow-y-auto pr-1">
+                      {viewingVolunteersEvent.volunteers.map((vol, index) => {
+                        const servantName = vol.user?.fullName || 'خادم';
+                        const servantRole = vol.user?.role?.name || 'خادم';
+                        const servantPhone = vol.user?.phoneNumber;
+                        const roleInEvent =
+                          vol.roleInEvent ||
+                          (viewingVolunteersEvent.requiresAllServants
+                            ? 'حضور إلزامي لجميع الخدام'
+                            : 'متطوع بالخدمة');
+
+                        const isMandatory =
+                          roleInEvent.includes('إلزامي') || viewingVolunteersEvent.requiresAllServants;
+
+                        return (
+                          <div
+                            key={vol.id || index}
+                            className="bg-bg-muted/60 border border-border-default rounded-card p-3 flex items-center justify-between gap-2.5 hover:border-brand-primary/40 transition-all"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="w-9 h-9 rounded-full bg-brand-primary/10 border border-brand-primary/20 flex items-center justify-center font-bold text-brand-primary shrink-0">
+                                {servantName.charAt(0)}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <h5 className="text-body-small font-bold text-text-primary truncate">
+                                    {servantName}
+                                  </h5>
+                                  <span className="text-[10px] font-semibold text-text-secondary bg-bg-surface px-1.5 py-0.2 rounded border border-border-default">
+                                    {servantRole}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  <span
+                                    className={cn(
+                                      'text-[10px] font-bold px-2 py-0.2 rounded-full border',
+                                      isMandatory
+                                        ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30'
+                                        : 'bg-status-success-soft text-status-success border-status-success/30'
+                                    )}
+                                  >
+                                    {roleInEvent}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {servantPhone && (
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <a
+                                  href={`tel:${servantPhone}`}
+                                  className="h-7 px-2 text-[11px] font-semibold text-brand-primary border border-brand-primary/30 rounded-card hover:bg-brand-primary/10 flex items-center gap-1 transition-all"
+                                  title="اتصال هاتفي"
+                                >
+                                  <Phone className="w-3 h-3" />
+                                  <span className="hidden sm:inline">{servantPhone}</span>
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="pt-3 border-t border-border-default flex items-center justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setViewVolunteersModalOpen(false);
+                      setViewingVolunteersEvent(null);
+                    }}
+                    className="text-caption font-semibold"
+                  >
+                    إغلاق
+                  </Button>
                 </div>
               </div>
             </div>

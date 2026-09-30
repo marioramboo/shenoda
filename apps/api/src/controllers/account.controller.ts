@@ -21,6 +21,36 @@ const createAccountSchema = z.object({
   temporaryPassword: z.string().min(8, 'كلمة المرور المؤقتة يجب ألا تقل عن 8 أحرف'),
 });
 
+const updateAccountSchema = z.object({
+  fullName: z.string().min(3, 'الاسم بالكامل يجب ألا يقل عن 3 أحرف').optional(),
+  phoneNumber: z
+    .string()
+    .min(10, 'رقم الهاتف مطلوب')
+    .regex(EGYPTIAN_PHONE_REGEX, 'يرجى إدخال رقم هاتف مصري صحيح (مثال: 01xxxxxxxxx)')
+    .optional(),
+  email: z.string().email('بريد إلكتروني غير صالح').optional().nullable(),
+  roleId: z.string().optional(),
+  roleCode: z.string().optional(),
+  temporaryPassword: z.string().min(8, 'كلمة المرور المؤقتة يجب ألا تقل عن 8 أحرف').optional(),
+
+  // Non-evaluative servant profile fields
+  fatherConfessor: z.string().optional().nullable(),
+  dateOfBirth: z.string().optional().nullable(),
+  address: z.string().optional().nullable(),
+  maritalStatus: z.string().optional().nullable(),
+  spouseName: z.string().optional().nullable(),
+  educationOrCareer: z.string().optional().nullable(),
+  childrenInfo: z.any().optional().nullable(),
+
+  // Evaluative fields (added by Stage Secretary / Supervisor)
+  financialStatus: z.string().optional().nullable(),
+  behaviorWithMembers: z.string().optional().nullable(),
+  behaviorWithServants: z.string().optional().nullable(),
+  cooperation: z.string().optional().nullable(),
+  individualInitiative: z.string().optional().nullable(),
+  evaluationNotes: z.string().optional().nullable(),
+});
+
 const updateStatusSchema = z.object({
   action: z.enum(['SUSPEND', 'ACTIVATE', 'TRANSFER']),
   newStageId: z.string().optional(),
@@ -80,23 +110,21 @@ export class AccountController {
     }
 
     // 2. Validate hierarchical creation authority (Assumption A7)
-    // Level 3 (امين الخدمة) -> can create Level 1 (خادم) and Level 2 (مساعد) within own stage
-    // Level 4 (امين قطاع)  -> can create Level 3, 2, 1 within stages of own sector
-    // Level 5 (امين عام)   -> can create Level 4 or any role org-wide
+    // Adding/creating a new servant is strictly restricted to General Secretary (الامين العام - Level 5)
     const creatorLevel = creator.roleLevel;
 
-    if (creatorLevel < 3) {
+    if (creatorLevel < 5) {
       return res.status(403).json({
         success: false,
         error: {
-          code: 'ACCESS_DENIED_SCOPE',
-          message: 'ليس لديك الصلاحية لإنشاء حسابات خدام',
+          code: 'ACCESS_DENIED_MIN_LEVEL',
+          message: 'إنشاء وإضافة خادم جديد مقتصر حصرياً على الأمين العام',
         },
       });
     }
 
-    // Cannot create role at or above own level
-    if (creatorLevel < 5 && targetRole.level >= creatorLevel) {
+    // Cannot create role at or above Level 5
+    if (targetRole.level >= 5) {
       return res.status(403).json({
         success: false,
         error: {
@@ -134,31 +162,6 @@ export class AccountController {
       }
 
       assignedSectorId = stage.sectorId;
-
-      // Creator scope enforcement
-      if (creatorLevel === 3) {
-        // Must belong to creator's assigned stage
-        if (!creator.stageIds.includes(assignedStageId)) {
-          return res.status(403).json({
-            success: false,
-            error: {
-              code: 'ACCESS_DENIED_STAGE_MISMATCH',
-              message: 'لا يمكنك إنشاء خادم في مرحلة خارج نطاق إشرافك المباشر',
-            },
-          });
-        }
-      } else if (creatorLevel === 4) {
-        // Stage's sector must belong to creator's sector
-        if (!creator.sectorIds.includes(stage.sectorId)) {
-          return res.status(403).json({
-            success: false,
-            error: {
-              code: 'ACCESS_DENIED_SECTOR_MISMATCH',
-              message: 'المرحلة المحددة لا تنتمي للقطاع التابع لك',
-            },
-          });
-        }
-      }
     } else if (targetRole.level === 4) {
       // Sector Secretary (Level 4): requires sectorId and creator must be Level 5
       if (creatorLevel < 5) {
@@ -423,6 +426,316 @@ export class AccountController {
     return res.status(200).json({
       success: true,
       logs,
+    });
+  }
+
+  /**
+   * PATCH /api/v1/accounts/:userId
+   * Scoped account editing (FR-1.2, MANAGE_SERVANT_ACCOUNTS).
+   * Level 3 (أمين الخدمة): can edit servants (Level 1 & 2) in their assigned stage.
+   * Level 4 (أمين قطاع): can edit servants (Level 1, 2 & 3) in their sector.
+   * Level 5 (الأمين العام): can edit any servant in the organization.
+   */
+  public static async updateAccount(req: Request, res: Response) {
+    const operator = req.user;
+    if (!operator) {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'AUTH_REQUIRED', message: 'Authentication required' },
+      });
+    }
+
+    if (operator.roleLevel < 3) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'ACCESS_DENIED_SCOPE',
+          message: 'ليس لديك الصلاحية لتعديل بيانات الخدام',
+        },
+      });
+    }
+
+    const { userId } = req.params;
+    const parseResult = updateAccountSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: parseResult.error.errors[0]?.message || 'بيانات تعديل الحساب غير صحيحة',
+          details: parseResult.error.format(),
+        },
+      });
+    }
+
+    const {
+      fullName,
+      phoneNumber,
+      email,
+      roleId,
+      roleCode,
+      temporaryPassword,
+      fatherConfessor,
+      dateOfBirth,
+      address,
+      maritalStatus,
+      spouseName,
+      educationOrCareer,
+      childrenInfo,
+      financialStatus,
+      behaviorWithMembers,
+      behaviorWithServants,
+      cooperation,
+      individualInitiative,
+      evaluationNotes,
+    } = parseResult.data;
+
+    // 1. Fetch target user
+    const targetUser = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        role: true,
+        scopeAssignments: {
+          include: { stage: true, sector: true },
+        },
+      },
+    });
+
+    if (!targetUser) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'USER_NOT_FOUND',
+          message: 'حساب الخادم غير موجود',
+        },
+      });
+    }
+
+    // 2. Validate hierarchical authority
+    const targetLevel = targetUser.role?.level || 1;
+
+    // Operator cannot edit peers or superiors unless General Secretary (Level 5)
+    if (operator.roleLevel < 5 && targetLevel >= operator.roleLevel) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'FORBIDDEN_HIERARCHY',
+          message: 'لا يمكنك تعديل بيانات رتبة مساوية أو أعلى من رتبتك',
+        },
+      });
+    }
+
+    // Scope verification
+    const targetStageIds = (targetUser.scopeAssignments || []).map((sa: any) => sa.stageId).filter(Boolean) as string[];
+    const targetSectorIds = (targetUser.scopeAssignments || []).map((sa: any) => sa.sectorId).filter(Boolean) as string[];
+
+    if (operator.roleLevel === 3) {
+      // Stage Secretary can ONLY edit servants within their assigned stage
+      const hasOverlap = (operator.stageIds || []).some((stId: string) => targetStageIds.includes(stId));
+      if (!hasOverlap) {
+        return res.status(403).json({
+          success: false,
+          error: {
+            code: 'FORBIDDEN_STAGE_SCOPE',
+            message: 'لا يمكنك تعديل بيانات خادم خارج مرحلتك المسندة إليك',
+          },
+        });
+      }
+    } else if (operator.roleLevel === 4) {
+      // Sector Secretary can edit within their sector
+      const hasSectorOverlap =
+        (operator.sectorIds || []).some((secId: string) => targetSectorIds.includes(secId)) ||
+        (targetUser.scopeAssignments || []).some((sa: any) => sa.stage && (operator.sectorIds || []).includes(sa.stage.sectorId));
+      if (!hasSectorOverlap) {
+        return res.status(403).json({
+          success: false,
+          error: {
+            code: 'FORBIDDEN_SECTOR_SCOPE',
+            message: 'لا يمكنك تعديل بيانات خادم خارج قطاعك',
+          },
+        });
+      }
+    }
+
+    // 3. If changing role
+    let newRoleId = targetUser.roleId;
+    if (roleId || roleCode) {
+      const foundRole = await prisma.role.findFirst({
+        where: roleId ? { id: roleId } : { code: roleCode },
+      });
+
+      if (!foundRole) {
+        return res.status(404).json({
+          success: false,
+          error: {
+            code: 'ROLE_NOT_FOUND',
+            message: 'الرتبة الجديدة غير موجودة في النظام',
+          },
+        });
+      }
+
+      // Cannot assign role at or above operator's own level
+      if (operator.roleLevel < 5 && foundRole.level >= operator.roleLevel) {
+        return res.status(403).json({
+          success: false,
+          error: {
+            code: 'FORBIDDEN_ROLE_ASSIGNMENT',
+            message: 'لا يمكنك ترقية الخادم لرتبة مساوية أو أعلى من رتبتك',
+          },
+        });
+      }
+
+      newRoleId = foundRole.id;
+    }
+
+    // 4. Check phone collision if phone is updated
+    if (phoneNumber && phoneNumber !== targetUser.phoneNumber) {
+      const phoneVariants = getPhoneVariants(phoneNumber);
+      const existingPhone = await prisma.user.findFirst({
+        where: {
+          id: { not: targetUser.id },
+          phoneNumber: { in: phoneVariants },
+        },
+      });
+
+      if (existingPhone) {
+        return res.status(409).json({
+          success: false,
+          error: {
+            code: 'ERR_PHONE_EXISTS',
+            message: 'رقم الهاتف مسجل بالفعل لخادم آخر في النظام',
+          },
+        });
+      }
+    }
+
+    // Check email collision if email is updated
+    if (email && email.toLowerCase() !== targetUser.email?.toLowerCase()) {
+      const existingEmail = await prisma.user.findFirst({
+        where: {
+          id: { not: targetUser.id },
+          email: email.toLowerCase(),
+        },
+      });
+
+      if (existingEmail) {
+        return res.status(409).json({
+          success: false,
+          error: {
+            code: 'ERR_EMAIL_EXISTS',
+            message: 'البريد الإلكتروني مسجل بالفعل لخادم آخر في النظام',
+          },
+        });
+      }
+    }
+
+    // 5. Prepare update data
+    const updateData: any = {};
+    if (fullName) updateData.fullName = fullName.trim();
+    if (phoneNumber) updateData.phoneNumber = phoneNumber.trim();
+    if (email !== undefined) updateData.email = email ? email.trim().toLowerCase() : null;
+    if (newRoleId && newRoleId !== targetUser.roleId) updateData.roleId = newRoleId;
+    if (temporaryPassword) {
+      updateData.passwordHash = await HashService.hashPassword(temporaryPassword);
+    }
+    if (fatherConfessor !== undefined) updateData.fatherConfessor = fatherConfessor ? fatherConfessor.trim() : null;
+    if (dateOfBirth !== undefined) {
+      updateData.dateOfBirth = dateOfBirth ? new Date(dateOfBirth) : null;
+    }
+    if (address !== undefined) updateData.address = address ? address.trim() : null;
+    if (maritalStatus !== undefined) updateData.maritalStatus = maritalStatus ? maritalStatus.trim() : null;
+    if (spouseName !== undefined) updateData.spouseName = spouseName ? spouseName.trim() : null;
+    if (educationOrCareer !== undefined) updateData.educationOrCareer = educationOrCareer ? educationOrCareer.trim() : null;
+    if (childrenInfo !== undefined) updateData.childrenInfo = childrenInfo;
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: updateData,
+      include: {
+        role: true,
+        scopeAssignments: {
+          include: { stage: true, sector: true },
+        },
+      },
+    });
+
+    // 6. Upsert supervisor evaluation if any evaluative field is provided
+    let updatedEvaluation: any = null;
+    const hasEvaluativeUpdate =
+      financialStatus !== undefined ||
+      behaviorWithMembers !== undefined ||
+      behaviorWithServants !== undefined ||
+      cooperation !== undefined ||
+      individualInitiative !== undefined ||
+      evaluationNotes !== undefined;
+
+    if (hasEvaluativeUpdate) {
+      updatedEvaluation = await prisma.servantEvaluation.upsert({
+        where: { subjectUserId: userId },
+        create: {
+          subjectUserId: userId,
+          evaluatorUserId: operator.userId,
+          financialStatus: financialStatus || null,
+          behaviorWithMembers: behaviorWithMembers || null,
+          behaviorWithServants: behaviorWithServants || null,
+          cooperation: cooperation || null,
+          individualInitiative: individualInitiative || null,
+          notes: evaluationNotes || null,
+        },
+        update: {
+          evaluatorUserId: operator.userId,
+          ...(financialStatus !== undefined && { financialStatus }),
+          ...(behaviorWithMembers !== undefined && { behaviorWithMembers }),
+          ...(behaviorWithServants !== undefined && { behaviorWithServants }),
+          ...(cooperation !== undefined && { cooperation }),
+          ...(individualInitiative !== undefined && { individualInitiative }),
+          ...(evaluationNotes !== undefined && { notes: evaluationNotes }),
+        },
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'تم تحديث بيانات الخادم بنجاح',
+      user: {
+        id: updatedUser.id,
+        fullName: updatedUser.fullName,
+        phoneNumber: updatedUser.phoneNumber,
+        email: updatedUser.email,
+        fatherConfessor: updatedUser.fatherConfessor,
+        dateOfBirth: updatedUser.dateOfBirth
+          ? (typeof updatedUser.dateOfBirth === 'string'
+              ? updatedUser.dateOfBirth
+              : updatedUser.dateOfBirth.toISOString().split('T')[0])
+          : null,
+        address: updatedUser.address,
+        maritalStatus: updatedUser.maritalStatus,
+        spouseName: updatedUser.spouseName,
+        educationOrCareer: updatedUser.educationOrCareer,
+        childrenInfo: updatedUser.childrenInfo,
+        role: {
+          id: updatedUser.role.id,
+          code: updatedUser.role.code,
+          name: updatedUser.role.name,
+          level: updatedUser.role.level,
+        },
+        evaluation: updatedEvaluation
+          ? {
+              financialStatus: updatedEvaluation.financialStatus,
+              behaviorWithMembers: updatedEvaluation.behaviorWithMembers,
+              behaviorWithServants: updatedEvaluation.behaviorWithServants,
+              cooperation: updatedEvaluation.cooperation,
+              individualInitiative: updatedEvaluation.individualInitiative,
+              notes: updatedEvaluation.notes,
+            }
+          : null,
+        scopes: (updatedUser.scopeAssignments || []).map((sa: any) => ({
+          stageId: sa.stageId,
+          stageName: sa.stage?.name,
+          sectorId: sa.sectorId,
+          sectorName: sa.sector?.name,
+        })),
+      },
     });
   }
 }

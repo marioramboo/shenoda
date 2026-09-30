@@ -10,11 +10,18 @@ export const accountRouter = Router();
 accountRouter.use(authenticateJwt);
 accountRouter.use(requireAuth);
 
-// Scoped servant account creation (FR-1.2, Assumption A7)
+// General Secretary exclusive servant account creation (FR-1.2, Assumption A7)
 accountRouter.post(
   '/create',
-  requirePermission(PermissionAction.MANAGE_SERVANT_ACCOUNTS),
+  requirePermission(PermissionAction.TRANSFER_SUSPEND_SERVANT),
   AccountController.createAccount
+);
+
+// Scoped servant account editing (FR-1.2, MANAGE_SERVANT_ACCOUNTS)
+accountRouter.patch(
+  '/:userId',
+  requirePermission(PermissionAction.MANAGE_SERVANT_ACCOUNTS),
+  AccountController.updateAccount
 );
 
 // General Secretary exclusive servant transfer & suspension (FR-1.4)

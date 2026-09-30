@@ -324,6 +324,7 @@ export class ServantAttendanceController {
         user: {
           include: {
             role: true,
+            evaluationsReceived: true,
           },
         },
       },
@@ -339,21 +340,40 @@ export class ServantAttendanceController {
 
     const servants = Array.from(userMap.values());
 
-    // Enrich each servant with attendance stats
+    // Enrich each servant with attendance stats, profile, and evaluation data
     const enrichedServants = await Promise.all(
       servants.map(async (s) => {
         const stats = await calculateServantAttendanceRate(s.id, 8);
+        const evalItem = s.evaluationsReceived && s.evaluationsReceived.length > 0 ? s.evaluationsReceived[0] : null;
+
         return {
           id: s.id,
           fullName: s.fullName,
           phoneNumber: s.phoneNumber,
           email: s.email,
+          fatherConfessor: s.fatherConfessor || null,
+          dateOfBirth: s.dateOfBirth ? (typeof s.dateOfBirth === 'string' ? s.dateOfBirth : s.dateOfBirth.toISOString().split('T')[0]) : null,
+          address: s.address || null,
+          maritalStatus: s.maritalStatus || null,
+          spouseName: s.spouseName || null,
+          educationOrCareer: s.educationOrCareer || null,
+          childrenInfo: s.childrenInfo || null,
           role: {
             id: s.role.id,
             name: s.role.name,
             code: s.role.code,
             level: s.role.level,
           },
+          evaluation: evalItem
+            ? {
+                financialStatus: evalItem.financialStatus || null,
+                behaviorWithMembers: evalItem.behaviorWithMembers || null,
+                behaviorWithServants: evalItem.behaviorWithServants || null,
+                cooperation: evalItem.cooperation || null,
+                individualInitiative: evalItem.individualInitiative || null,
+                notes: evalItem.notes || null,
+              }
+            : null,
           stats,
         };
       })

@@ -16,6 +16,7 @@ router.delete('/:id', YearPlanController.deleteEventFromPlan);
 // Volunteer Opt-In & Withdrawal (FR-7.2)
 router.post('/:id/volunteer', CalendarController.volunteerForEvent);
 router.delete('/:id/volunteer', CalendarController.withdrawVolunteer);
+router.post('/:id/enroll-all', CalendarController.enrollAllServants);
 
 // Attendance Verification Bridge into جدول المتابعة (FR-12.2)
 router.post('/:id/confirm-attendance', CalendarController.confirmAttendance);
