@@ -403,6 +403,19 @@ export class YearPlanController {
         });
       }
 
+      // Business Rule: Servants' Meetings (SERVICE_MEETING & SECRETARIES_COUNCIL) are managed EXCLUSIVELY by General Secretary (الأمين العام)
+      const isServantMeeting = category === 'SERVICE_MEETING' || category === 'SECRETARIES_COUNCIL';
+      if (isServantMeeting && user.roleLevel < 5 && user.roleCode !== 'GENERAL_SECRETARY') {
+        return res.status(403).json({
+          success: false,
+          error: {
+            code: 'FORBIDDEN_GENERAL_SECRETARY_ONLY',
+            message: 'عفواً، تدبير وإضافة مواعيد اجتماعات الخدام مقتصرة حصرياً على الأمين العام',
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
       // If created as a curriculum lesson, validate references is provided as required by business rules
       if (category === 'SPIRITUAL_LESSON' && isLessonPlanCreation && !references) {
         return res.status(400).json({
@@ -450,6 +463,194 @@ export class YearPlanController {
       });
     } catch (err: any) {
       console.error('Error adding event to plan:', err);
+      return res.status(500).json({
+        success: false,
+        error: { code: 'INTERNAL_SERVER_ERROR', message: err.message },
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
+  /**
+   * PATCH /api/v1/year-plans/:id/events/:eventId
+   * Updates an existing event in a Year Plan.
+   */
+  static async updateEventInPlan(req: Request, res: Response) {
+    try {
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          error: { code: 'AUTH_REQUIRED', message: 'Authentication required' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const targetEventId = req.params.eventId || req.params.id;
+      const event = await prisma.calendarEvent.findUnique({
+        where: { id: targetEventId },
+      });
+
+      if (!event) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'Event not found' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const isCurrentMeeting = event.category === 'SERVICE_MEETING' || event.category === 'SECRETARIES_COUNCIL';
+      const isTargetMeeting = req.body.category && (req.body.category === 'SERVICE_MEETING' || req.body.category === 'SECRETARIES_COUNCIL');
+
+      // Servants' Meetings (SERVICE_MEETING & SECRETARIES_COUNCIL) are editable EXCLUSIVELY by General Secretary
+      if ((isCurrentMeeting || isTargetMeeting) && user.roleLevel < 5 && user.roleCode !== 'GENERAL_SECRETARY') {
+        return res.status(403).json({
+          success: false,
+          error: {
+            code: 'FORBIDDEN_GENERAL_SECRETARY_ONLY',
+            message: 'عفواً، تعديل مواعيد اجتماعات الخدام مقتصر حصرياً على الأمين العام',
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      if (user.roleLevel < 3) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'غير مصرح بتعديل الأحداث' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      if (user.roleLevel === 3 && event.stageId && !user.stageIds.includes(event.stageId)) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'غير مصرح بتعديل حدث لمرحلة أخرى' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const {
+        title,
+        description,
+        category,
+        startDate,
+        endDate,
+        location,
+        maxVolunteers,
+        bibleVerse,
+        references,
+      } = req.body;
+
+      const updatedCategory = category || event.category;
+      let resolvedDescription = description !== undefined ? description : event.description;
+
+      if (updatedCategory === 'SPIRITUAL_LESSON' && (bibleVerse || references)) {
+        resolvedDescription = JSON.stringify({
+          overview: description !== undefined ? description : (formatCalendarEvent(event).overview || ''),
+          bibleVerse: bibleVerse || '',
+          references: references || '',
+        });
+      }
+
+      const updatedEvent = await prisma.calendarEvent.update({
+        where: { id: targetEventId },
+        data: {
+          title: title !== undefined ? title : event.title,
+          description: resolvedDescription,
+          category: updatedCategory as any,
+          startDate: startDate ? new Date(startDate) : event.startDate,
+          endDate: endDate ? new Date(endDate) : (startDate ? new Date(startDate) : event.endDate),
+          location: location !== undefined ? location : event.location,
+          maxVolunteers: maxVolunteers !== undefined ? (maxVolunteers ? Number(maxVolunteers) : null) : event.maxVolunteers,
+        },
+        include: {
+          stage: { select: { id: true, name: true } },
+        },
+      });
+
+      return res.status(200).json({
+        success: true,
+        data: formatCalendarEvent(updatedEvent),
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      console.error('Error updating event:', err);
+      return res.status(500).json({
+        success: false,
+        error: { code: 'INTERNAL_SERVER_ERROR', message: err.message },
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
+  /**
+   * DELETE /api/v1/year-plans/:id/events/:eventId
+   * Deletes an event from a Year Plan.
+   */
+  static async deleteEventFromPlan(req: Request, res: Response) {
+    try {
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          error: { code: 'AUTH_REQUIRED', message: 'Authentication required' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const targetEventId = req.params.eventId || req.params.id;
+      const event = await prisma.calendarEvent.findUnique({
+        where: { id: targetEventId },
+      });
+
+      if (!event) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'Event not found' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const isMeeting = event.category === 'SERVICE_MEETING' || event.category === 'SECRETARIES_COUNCIL';
+      if (isMeeting && user.roleLevel < 5 && user.roleCode !== 'GENERAL_SECRETARY') {
+        return res.status(403).json({
+          success: false,
+          error: {
+            code: 'FORBIDDEN_GENERAL_SECRETARY_ONLY',
+            message: 'عفواً، حذف مواعيد اجتماعات الخدام مقتصر حصرياً على الأمين العام',
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      if (user.roleLevel < 3) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'غير مصرح بحذف الأحداث' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      if (user.roleLevel === 3 && event.stageId && !user.stageIds.includes(event.stageId)) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'غير مصرح بحذف حدث لمرحلة أخرى' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      await prisma.calendarEvent.delete({
+        where: { id: targetEventId },
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: 'تم حذف الحدث بنجاح',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      console.error('Error deleting event:', err);
       return res.status(500).json({
         success: false,
         error: { code: 'INTERNAL_SERVER_ERROR', message: err.message },

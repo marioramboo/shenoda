@@ -12,6 +12,8 @@ router.post('/', YearPlanController.createYearPlan);
 router.get('/', YearPlanController.listYearPlans);
 router.get('/:id', YearPlanController.getYearPlanById);
 router.post('/:id/events', YearPlanController.addEventToPlan);
+router.patch('/:id/events/:eventId', YearPlanController.updateEventInPlan);
+router.delete('/:id/events/:eventId', YearPlanController.deleteEventFromPlan);
 
 // Servant Stage-Isolated Posts (FR-7.4)
 router.post('/:id/servant-posts', ServantPostController.createPost);

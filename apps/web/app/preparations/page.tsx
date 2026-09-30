@@ -28,6 +28,7 @@ import {
   X,
   Sparkles,
   Layers,
+  AlertCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -44,9 +45,12 @@ interface PrepItem {
   status: PrepStatus;
   reviewerNotes?: string | null;
   reviewedById?: string | null;
+  reviewedByName?: string | null;
+  reviewedByRole?: string | null;
+  reviewedByLevel?: number | null;
   author?: { id: string; fullName: string };
   stage?: { id: string; name: string };
-  reviewedBy?: { id: string; fullName: string };
+  reviewedBy?: { id: string; fullName: string; role?: { name: string } };
   createdAt: string;
 }
 
@@ -351,14 +355,53 @@ export default function PreparationsPage() {
                   </p>
 
                   {/* Reviewer Notes Callout */}
-                  {prep.reviewerNotes && (
-                    <div className="bg-status-success-soft/60 border border-status-success/30 rounded-card p-2.5 flex items-start gap-2">
-                      <MessageSquare className="w-4 h-4 text-status-success shrink-0 mt-0.5" />
-                      <div className="text-caption">
-                        <span className="font-bold text-status-success block">
-                          ملاحظات أمين الخدمة ({prep.reviewedBy?.fullName || 'المشرف'}):
-                        </span>
-                        <p className="text-text-primary mt-0.5">{prep.reviewerNotes}</p>
+                  {(prep.reviewerNotes || (prep.status === PrepStatus.DRAFT && (prep.reviewedByName || prep.reviewedBy))) && (
+                    <div className={cn(
+                      "border rounded-card p-3 flex items-start gap-2.5 shadow-sm",
+                      prep.status === PrepStatus.DRAFT
+                        ? "bg-status-danger-soft/80 border-status-danger/30 text-status-danger"
+                        : "bg-status-success-soft/60 border-status-success/30 text-status-success"
+                    )}>
+                      {prep.status === PrepStatus.DRAFT ? (
+                        <AlertCircle className="w-4 h-4 text-status-danger shrink-0 mt-0.5" />
+                      ) : (
+                        <CheckCircle2 className="w-4 h-4 text-status-success shrink-0 mt-0.5" />
+                      )}
+                      <div className="text-caption flex-1 text-right">
+                        <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
+                          <span className={cn(
+                            "font-bold",
+                            prep.status === PrepStatus.DRAFT ? "text-status-danger" : "text-status-success"
+                          )}>
+                            {prep.status === PrepStatus.DRAFT
+                              ? 'ملاحظات طلب التعديل (سبب الرفض):'
+                              : 'ملاحظات وتوجيهات المشرف:'}
+                          </span>
+                          {(prep.reviewedByName || prep.reviewedBy?.fullName) && (
+                            <span className={cn(
+                              "text-[10px] font-semibold px-2 py-0.5 rounded-full border",
+                              prep.status === PrepStatus.DRAFT
+                                ? "bg-status-danger/10 text-status-danger border-status-danger/20"
+                                : "bg-status-success/10 text-status-success border-status-success/20"
+                            )}>
+                              بواسطة: {prep.reviewedByName || prep.reviewedBy?.fullName} {prep.reviewedByRole ? `(${prep.reviewedByRole})` : prep.reviewedBy?.role?.name ? `(${prep.reviewedBy?.role?.name})` : ''}
+                            </span>
+                          )}
+                        </div>
+                        {prep.reviewerNotes ? (
+                          <div className={cn(
+                            "p-2 rounded border text-body-small text-text-primary whitespace-pre-wrap leading-relaxed",
+                            prep.status === PrepStatus.DRAFT
+                              ? "bg-white/80 dark:bg-bg-surface/90 border-status-danger/20"
+                              : "bg-white/80 dark:bg-bg-surface/90 border-status-success/20"
+                          )}>
+                            {prep.reviewerNotes}
+                          </div>
+                        ) : (
+                          <p className="text-[11px] text-status-danger/90">
+                            تم طلب إعادة تعديل هذا التحضير من قِبل المشرف.
+                          </p>
+                        )}
                       </div>
                     </div>
                   )}

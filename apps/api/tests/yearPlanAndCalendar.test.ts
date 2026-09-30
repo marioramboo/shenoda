@@ -297,6 +297,144 @@ describe('Phase 6 — Year Plan (تدبير السنة) & Calendar Module Compre
       assert.strictEqual(data.data.title, 'درس مثل الابن الضال');
       assert.strictEqual(data.data.maxVolunteers, 2);
     });
+
+    test('1.5 Stage Secretary (امين الخدمة) CANNOT add meeting to اجتماع الخدام -> 403 Forbidden', async () => {
+      const plan = await mockDb.yearPlan.create({
+        data: {
+          organizationId: 'org-1',
+          title: 'خطة إعدادي بنين',
+          academicYear: '2026-2027',
+          scopeType: 'STAGE',
+          stageId: 'stage-prep-boys',
+          publishedById: 'user-stagesec-boys',
+          isPublished: true,
+        },
+      });
+
+      const stageSecToken = makeToken({
+        userId: 'user-stagesec-boys',
+        roleLevel: 3,
+        roleCode: 'STAGE_SECRETARY',
+        stageIds: ['stage-prep-boys'],
+        sectorIds: ['sector-youth'],
+      });
+
+      const res = await fetch(`${baseUrl}/api/v1/year-plans/${plan.id}/events`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${stageSecToken}`,
+        },
+        body: JSON.stringify({
+          title: 'اجتماع الخدام الأسبوعي',
+          category: 'SERVICE_MEETING',
+          startDate: '2026-10-10T19:00:00.000Z',
+        }),
+      });
+
+      assert.strictEqual(res.status, 403);
+      const data = await res.json();
+      assert.strictEqual(data.error.code, 'FORBIDDEN_GENERAL_SECRETARY_ONLY');
+    });
+
+    test('1.6 General Secretary (امين العام) CAN add meeting to اجتماع الخدام -> 201 Created', async () => {
+      const plan = await mockDb.yearPlan.create({
+        data: {
+          organizationId: 'org-1',
+          title: 'خطة الخدمة العامة',
+          academicYear: '2026-2027',
+          scopeType: 'STAGE',
+          stageId: 'stage-prep-boys',
+          publishedById: 'user-stagesec-boys',
+          isPublished: true,
+        },
+      });
+
+      const genSecToken = makeToken({
+        userId: 'user-generalsec',
+        roleLevel: 5,
+        roleCode: 'GENERAL_SECRETARY',
+        stageIds: [],
+        sectorIds: [],
+      });
+
+      const res = await fetch(`${baseUrl}/api/v1/year-plans/${plan.id}/events`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${genSecToken}`,
+        },
+        body: JSON.stringify({
+          title: 'اجتماع الخدام الشهري العام',
+          category: 'SERVICE_MEETING',
+          startDate: '2026-10-12T19:00:00.000Z',
+          location: 'القاعة الكبرى',
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.title, 'اجتماع الخدام الشهري العام');
+
+      const createdEventId = data.data.id;
+
+      // 1.7 Stage Secretary CANNOT edit the meeting -> 403
+      const stageSecToken = makeToken({
+        userId: 'user-stagesec-boys',
+        roleLevel: 3,
+        roleCode: 'STAGE_SECRETARY',
+        stageIds: ['stage-prep-boys'],
+        sectorIds: ['sector-youth'],
+      });
+
+      const editRes = await fetch(`${baseUrl}/api/v1/year-plans/${plan.id}/events/${createdEventId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${stageSecToken}`,
+        },
+        body: JSON.stringify({
+          title: 'محاولة تعديل اجتماع الخدام من أمين الخدمة',
+        }),
+      });
+      assert.strictEqual(editRes.status, 403);
+      const editData = await editRes.json();
+      assert.strictEqual(editData.error.code, 'FORBIDDEN_GENERAL_SECRETARY_ONLY');
+
+      // 1.8 General Secretary CAN edit the meeting -> 200 OK
+      const genEditRes = await fetch(`${baseUrl}/api/v1/year-plans/${plan.id}/events/${createdEventId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${genSecToken}`,
+        },
+        body: JSON.stringify({
+          title: 'اجتماع الخدام الشهري المحدث',
+        }),
+      });
+      assert.strictEqual(genEditRes.status, 200);
+      const genEditData = await genEditRes.json();
+      assert.strictEqual(genEditData.data.title, 'اجتماع الخدام الشهري المحدث');
+
+      // 1.9 Stage Secretary CANNOT delete the meeting -> 403
+      const delRes = await fetch(`${baseUrl}/api/v1/year-plans/${plan.id}/events/${createdEventId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${stageSecToken}`,
+        },
+      });
+      assert.strictEqual(delRes.status, 403);
+
+      // 1.10 General Secretary CAN delete the meeting -> 200 OK
+      const genDelRes = await fetch(`${baseUrl}/api/v1/year-plans/${plan.id}/events/${createdEventId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${genSecToken}`,
+        },
+      });
+      assert.strictEqual(genDelRes.status, 200);
+    });
   });
 
   // ------------------------------------------------------------------------

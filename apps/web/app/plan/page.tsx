@@ -40,6 +40,7 @@ import {
   Clock3,
   Info,
   Pencil,
+  MessageSquare,
 } from 'lucide-react';
 
 enum EventCategory {
@@ -183,8 +184,10 @@ export default function StagePlanPage() {
   const [selectedPlan, setSelectedPlan] = useState<YearPlan | null>(null);
 
   // Modals
-  // 1. Add Event (General / Meeting / Service)
+  // 1. Add / Edit Event (General / Meeting / Service)
   const [isAddEventOpen, setIsAddEventOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
+  const [deleteEventLoading, setDeleteEventLoading] = useState<string | null>(null);
   const [addEventType, setAddEventType] = useState<'meeting' | 'service' | 'lesson'>('lesson');
   const [eventTitle, setEventTitle] = useState('');
   const [eventDesc, setEventDesc] = useState('');
@@ -209,6 +212,7 @@ export default function StagePlanPage() {
   const [prepModalOpen, setPrepModalOpen] = useState(false);
   const [targetLessonEvent, setTargetLessonEvent] = useState<CalendarEvent | null>(null);
   const [editingPrepId, setEditingPrepId] = useState<string | null>(null);
+  const [editingPrep, setEditingPrep] = useState<LessonPreparationData | null>(null);
   const [userPreparations, setUserPreparations] = useState<LessonPreparationData[]>([]);
   const [prepObjective, setPrepObjective] = useState('');
   const [prepVisualAid, setPrepVisualAid] = useState('');
@@ -227,8 +231,17 @@ export default function StagePlanPage() {
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [volunteerActionLoading, setVolunteerActionLoading] = useState<string | null>(null);
 
+  // Role Permissions
+  // General Secretary (الأمين العام) - Level 5
+  const isGeneralSecretary = Boolean(
+    user && user.role && (user.role.level >= 5 || user.role.code === 'GENERAL_SECRETARY')
+  );
+  // Stage Secretary & supervisors (أمين المرحلة فما فوق) - Level >= 3 can manage lessons & general activities
   const canManagePlan = Boolean(user && user.role && user.role.level >= 3);
   const isSupervisor = Boolean(user && user.role && user.role.level >= 3);
+  // Business Rule: ONLY General Secretary (الأمين العام) can add or edit meetings in اجتماع الخدام.
+  // أمين الخدمة (Stage Secretary) and others cannot edit or add anything in اجتماع الخدام.
+  const canManageMeetings = isGeneralSecretary;
 
   // Fetch logged-in servant's preparations to track what has already been submitted
   const fetchUserPreparations = async () => {
@@ -318,6 +331,15 @@ export default function StagePlanPage() {
 
   // Open Add Event Modal for a specific tab
   const handleOpenAddEvent = (type: 'meeting' | 'service' | 'lesson') => {
+    // Only General Secretary (الأمين العام) can add meetings to اجتماع الخدام
+    if (type === 'meeting' && !canManageMeetings) {
+      setActionMessage({
+        type: 'error',
+        text: 'عفواً، تدبير وإضافة مواعيد اجتماعات الخدام مقتصرة حصرياً على الأمين العام',
+      });
+      return;
+    }
+    setEditingEvent(null);
     setAddEventType(type);
     setEventTitle('');
     setEventDesc('');
@@ -340,10 +362,84 @@ export default function StagePlanPage() {
     setIsAddEventOpen(true);
   };
 
-  // Submit Add Event / تدبير
+  // Open Edit Event Modal (Only General Secretary can edit meetings)
+  const handleOpenEditEvent = (evt: CalendarEvent, type: 'meeting' | 'service' | 'lesson') => {
+    if (type === 'meeting' && !canManageMeetings) {
+      setActionMessage({
+        type: 'error',
+        text: 'عفواً، تعديل مواعيد اجتماعات الخدام مقتصر حصرياً على الأمين العام',
+      });
+      return;
+    }
+    setEditingEvent(evt);
+    setAddEventType(type);
+    setEventTitle(evt.title || '');
+    setEventDesc(evt.overview || evt.description || '');
+    setEventLocation(evt.location || '');
+    setEventCategory(evt.category);
+    setEventStartDate(evt.startDate ? new Date(evt.startDate).toISOString().split('T')[0] : '');
+    setEventEndDate(evt.endDate ? new Date(evt.endDate).toISOString().split('T')[0] : '');
+    setEventMaxVolunteers(evt.maxVolunteers || '');
+    setLessonBibleVerse(evt.bibleVerse || '');
+    setLessonReferences(evt.references || '');
+
+    setIsAddEventOpen(true);
+  };
+
+  // Delete Meeting (Only General Secretary)
+  const handleDeleteMeeting = async (eventId: string) => {
+    if (!canManageMeetings) {
+      setActionMessage({
+        type: 'error',
+        text: 'عفواً، حذف مواعيد اجتماعات الخدام مقتصر حصرياً على الأمين العام',
+      });
+      return;
+    }
+
+    const planId = selectedPlan?.id || (plans.length > 0 ? plans[0].id : null);
+    if (!planId) return;
+
+    if (!window.confirm('هل أنت متأكد من رغبتك في حذف موعد اجتماع الخدام هذا؟')) {
+      return;
+    }
+
+    try {
+      setDeleteEventLoading(eventId);
+      const res = await api.delete(`/api/v1/year-plans/${planId}/events/${eventId}`);
+      if (res.data?.success) {
+        setActionMessage({ type: 'success', text: 'تم حذف موعد الاجتماع بنجاح' });
+        await loadPlanDetail(planId);
+        setTimeout(() => setActionMessage(null), 4000);
+      }
+    } catch (err: any) {
+      console.error('Failed to delete meeting:', err);
+      setActionMessage({
+        type: 'error',
+        text: err.response?.data?.error?.message || 'فشل في حذف موعد الاجتماع',
+      });
+    } finally {
+      setDeleteEventLoading(null);
+    }
+  };
+
+  // Submit Add or Edit Event / تدبير
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     setActionMessage(null);
+
+    // Security Gate: meetings can only be added or modified by General Secretary
+    const isMeeting =
+      addEventType === 'meeting' ||
+      eventCategory === EventCategory.SERVICE_MEETING ||
+      eventCategory === EventCategory.SECRETARIES_COUNCIL;
+
+    if (isMeeting && !canManageMeetings) {
+      setActionMessage({
+        type: 'error',
+        text: 'عفواً، تدبير وتعديل مواعيد اجتماعات الخدام مقتصرة حصرياً على الأمين العام',
+      });
+      return;
+    }
 
     if (!eventTitle.trim()) {
       setActionMessage({ type: 'error', text: 'يرجى كتابة عنوان التدبير أو الدرس' });
@@ -397,6 +493,42 @@ export default function StagePlanPage() {
 
     if (!planId) return;
 
+    // Handle Edit Mode
+    if (editingEvent) {
+      try {
+        setCreateEventLoading(true);
+        const res = await api.patch(`/api/v1/year-plans/${planId}/events/${editingEvent.id}`, {
+          title: eventTitle.trim(),
+          description: eventDesc.trim() || undefined,
+          category: eventCategory,
+          startDate: eventStartDate,
+          endDate: eventEndDate || eventStartDate,
+          location: eventLocation.trim() || undefined,
+          maxVolunteers: eventMaxVolunteers ? Number(eventMaxVolunteers) : undefined,
+          bibleVerse: addEventType === 'lesson' ? lessonBibleVerse.trim() : undefined,
+          references: addEventType === 'lesson' ? lessonReferences.trim() : undefined,
+        });
+
+        if (res.data?.success) {
+          setIsAddEventOpen(false);
+          setEditingEvent(null);
+          setActionMessage({ type: 'success', text: 'تم تحديث التدبير بنجاح!' });
+          await loadPlanDetail(planId);
+          setTimeout(() => setActionMessage(null), 4000);
+        }
+      } catch (err: any) {
+        console.error('Failed to update event:', err);
+        setActionMessage({
+          type: 'error',
+          text: err.response?.data?.error?.message || 'فشل في تحديث التدبير',
+        });
+      } finally {
+        setCreateEventLoading(false);
+      }
+      return;
+    }
+
+    // Handle Create Mode
     try {
       setCreateEventLoading(true);
       const res = await api.post(`/api/v1/year-plans/${planId}/events`, {
@@ -452,6 +584,7 @@ export default function StagePlanPage() {
   const handleOpenPrepModal = (evt: CalendarEvent, existingPrep?: LessonPreparationData) => {
     const prepToEdit = existingPrep || getUserPrepForEvent(evt);
     setTargetLessonEvent(evt);
+    setEditingPrep(prepToEdit || null);
 
     if (prepToEdit) {
       setEditingPrepId(prepToEdit.id);
@@ -505,6 +638,7 @@ export default function StagePlanPage() {
 
       if (res.data?.success) {
         setPrepModalOpen(false);
+        setEditingPrep(null);
         setActionMessage({
           type: 'success',
           text: editingPrepId
@@ -724,7 +858,7 @@ export default function StagePlanPage() {
                   </p>
                 </div>
 
-                {canManagePlan && (
+                {canManageMeetings ? (
                   <Button
                     variant="primary"
                     size="sm"
@@ -734,16 +868,21 @@ export default function StagePlanPage() {
                     <Plus className="w-3.5 h-3.5" />
                     <span>إضافة اجتماع</span>
                   </Button>
+                ) : (
+                  <span className="text-[11px] font-semibold text-text-tertiary bg-bg-muted px-2.5 py-1 rounded-full border border-border-default flex items-center gap-1">
+                    <Eye className="w-3.5 h-3.5 text-text-tertiary" />
+                    <span>صلاحية الأمانة العامة فقط</span>
+                  </span>
                 )}
               </div>
 
               {meetingEvents.length === 0 ? (
                 <div className="p-6 bg-bg-surface border border-dashed border-border-default rounded-card text-center flex flex-col items-center gap-2">
                   <CalendarDays className="w-8 h-8 text-text-tertiary" />
-                  <p className="text-body-small text-text-secondary">
+                  <p className="text-body-small font-semibold text-text-secondary">
                     لا توجد مواعيد اجتماعات خدام مسجلة حتى الآن
                   </p>
-                  {canManagePlan && (
+                  {canManageMeetings ? (
                     <Button
                       variant="outline"
                       size="sm"
@@ -753,6 +892,10 @@ export default function StagePlanPage() {
                       <Plus className="w-4 h-4 ml-1" />
                       <span>جدولة أول اجتماع خدام</span>
                     </Button>
+                  ) : (
+                    <p className="text-caption text-text-tertiary max-w-sm mt-0.5 leading-relaxed">
+                      مواعيد اجتماعات الخدام ومجالس الأمناء يتم تدبيرها وجدولتها حصرياً بواسطة الأمين العام.
+                    </p>
                   )}
                 </div>
               ) : (
@@ -794,6 +937,33 @@ export default function StagePlanPage() {
                           <div className="flex items-center gap-1.5 text-caption text-text-secondary bg-bg-muted/60 px-2.5 py-1.5 rounded-card">
                             <MapPin className="w-3.5 h-3.5 text-brand-accent shrink-0" />
                             <span className="truncate">{evt.location}</span>
+                          </div>
+                        )}
+
+                        {/* Actions: ONLY General Secretary can edit or delete servant meetings */}
+                        {canManageMeetings && (
+                          <div className="flex items-center gap-2 pt-2 border-t border-border-default mt-1">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleOpenEditEvent(evt, 'meeting')}
+                              className="h-7 text-[11px] px-2.5 gap-1 font-semibold text-brand-primary border-brand-primary/30 hover:bg-brand-primary/10"
+                            >
+                              <Pencil className="w-3 h-3" />
+                              <span>تعديل</span>
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={deleteEventLoading === evt.id}
+                              onClick={() => handleDeleteMeeting(evt.id)}
+                              className="h-7 text-[11px] px-2.5 gap-1 font-semibold text-status-danger border-status-danger/30 hover:bg-status-danger-soft hover:text-status-danger"
+                            >
+                              <X className="w-3 h-3" />
+                              <span>{deleteEventLoading === evt.id ? 'جارٍ الحذف...' : 'حذف'}</span>
+                            </Button>
                           </div>
                         )}
                       </div>
@@ -1011,7 +1181,11 @@ export default function StagePlanPage() {
                                   ? "bg-status-danger-soft text-status-danger border-status-danger/30"
                                   : "bg-brand-primary-soft text-brand-primary border-brand-primary/30"
                               )}>
-                                <CheckCircle2 className="w-3 h-3" />
+                                {userPrep.status === 'DRAFT' ? (
+                                  <AlertCircle className="w-3 h-3 text-status-danger" />
+                                ) : (
+                                  <CheckCircle2 className="w-3 h-3" />
+                                )}
                                 <span>{userPrep.status === 'REVIEWED' ? 'معتمد' : userPrep.status === 'DRAFT' ? 'مطلوب تعديل' : 'تم التحضير'}</span>
                               </span>
                             )}
@@ -1047,6 +1221,59 @@ export default function StagePlanPage() {
                             <div>
                               <span className="font-bold text-text-primary ml-1">المراجع الكنسية المقررة:</span>
                               <span>{evt.references}</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Rejection / Modification Request Notice */}
+                        {userPrep && userPrep.status === 'DRAFT' && (userPrep.reviewerNotes || userPrep.reviewedByName) && (
+                          <div className="bg-status-danger-soft/80 border border-status-danger/30 rounded-card p-3 flex flex-col gap-2 shadow-sm text-right">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <div className="flex items-center gap-1.5 text-status-danger font-bold text-caption">
+                                <AlertCircle className="w-4 h-4 shrink-0" />
+                                <span>مطلوب تعديل التحضير</span>
+                              </div>
+                              {userPrep.reviewedByName && (
+                                <span className="text-[11px] font-medium text-status-danger bg-status-danger/10 px-2 py-0.5 rounded-full border border-status-danger/20">
+                                  بواسطة: <strong className="font-bold">{userPrep.reviewedByName}</strong> {userPrep.reviewedByRole ? `(${userPrep.reviewedByRole})` : ''}
+                                </span>
+                              )}
+                            </div>
+
+                            {userPrep.reviewerNotes ? (
+                              <div className="bg-white/80 dark:bg-bg-surface/90 border border-status-danger/25 rounded-md p-2.5 text-body-small text-text-primary">
+                                <span className="text-[11px] font-bold text-status-danger block mb-1">
+                                  سبب الرفض وملاحظات التعديل:
+                                </span>
+                                <p className="whitespace-pre-wrap leading-relaxed">{userPrep.reviewerNotes}</p>
+                              </div>
+                            ) : (
+                              <p className="text-[11px] text-status-danger/90">
+                                تم طلب إعادة صياغة وتعديل الدرس من قِبل المشرف، يرجى مراجعة محتوى الدرس وتعديله.
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Approved Notes / Feedback */}
+                        {userPrep && userPrep.status === 'REVIEWED' && userPrep.reviewerNotes && (
+                          <div className="bg-status-success-soft/70 border border-status-success/30 rounded-card p-3 flex flex-col gap-1.5 shadow-sm text-right">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <div className="flex items-center gap-1.5 text-status-success font-bold text-caption">
+                                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                                <span>تم اعتماد الدرس بنجاح</span>
+                              </div>
+                              {userPrep.reviewedByName && (
+                                <span className="text-[11px] font-medium text-status-success bg-status-success/10 px-2 py-0.5 rounded-full border border-status-success/20">
+                                  المعتمد: <strong className="font-bold">{userPrep.reviewedByName}</strong> {userPrep.reviewedByRole ? `(${userPrep.reviewedByRole})` : ''}
+                                </span>
+                              )}
+                            </div>
+                            <div className="bg-white/80 dark:bg-bg-surface/90 border border-status-success/25 rounded-md p-2.5 text-body-small text-text-primary">
+                              <span className="text-[11px] font-bold text-status-success block mb-1">
+                                ملاحظات وتوجيهات المشرف:
+                              </span>
+                              <p className="whitespace-pre-wrap leading-relaxed">{userPrep.reviewerNotes}</p>
                             </div>
                           </div>
                         )}
@@ -1105,7 +1332,13 @@ export default function StagePlanPage() {
                 <div className="flex items-center justify-between pb-2 border-b border-border-default">
                   <div>
                     <h3 className="text-h2 font-bold text-text-primary">
-                      {addEventType === 'lesson'
+                      {editingEvent
+                        ? addEventType === 'lesson'
+                          ? 'تعديل درس روحي'
+                          : addEventType === 'meeting'
+                          ? 'تعديل موعد اجتماع الخدام'
+                          : 'تعديل فعالية خدمة'
+                        : addEventType === 'lesson'
                         ? 'تدبير درس روحي جديد للمنهج'
                         : addEventType === 'meeting'
                         ? 'تدبير اجتماع خدام جديد'
@@ -1114,12 +1347,17 @@ export default function StagePlanPage() {
                     <p className="text-caption text-text-secondary mt-0.5">
                       {addEventType === 'lesson'
                         ? 'تحديد اسم الدرس وتاريخ الإلقاء والآية والمراجع الإجبارية'
+                        : addEventType === 'meeting'
+                        ? 'تحديد موعد ونوع اجتماع الخدام ومكان الانعقاد'
                         : 'جدولة الموعد والمكان والمتطوعين بالخطة'}
                     </p>
                   </div>
                   <button
                     type="button"
-                    onClick={() => setIsAddEventOpen(false)}
+                    onClick={() => {
+                      setIsAddEventOpen(false);
+                      setEditingEvent(null);
+                    }}
                     className="p-1 rounded-full hover:bg-bg-muted text-text-secondary"
                   >
                     <X className="w-5 h-5" />
@@ -1127,6 +1365,41 @@ export default function StagePlanPage() {
                 </div>
 
                 <form onSubmit={handleCreateEvent} className="space-y-3.5">
+                  {/* Meeting Type Selection (Only for Meetings) */}
+                  {addEventType === 'meeting' && (
+                    <div>
+                      <label className="text-caption font-semibold text-text-secondary block mb-1">
+                        نوع اجتماع الخدام *
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setEventCategory(EventCategory.SERVICE_MEETING)}
+                          className={cn(
+                            'p-2 text-caption font-semibold rounded-card border transition-all text-center',
+                            eventCategory === EventCategory.SERVICE_MEETING
+                              ? 'bg-brand-primary text-white border-brand-primary shadow-sm'
+                              : 'bg-bg-muted border-border-default text-text-secondary hover:text-text-primary'
+                          )}
+                        >
+                          اجتماع الخدمة الأسبوعي
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEventCategory(EventCategory.SECRETARIES_COUNCIL)}
+                          className={cn(
+                            'p-2 text-caption font-semibold rounded-card border transition-all text-center',
+                            eventCategory === EventCategory.SECRETARIES_COUNCIL
+                              ? 'bg-brand-primary text-white border-brand-primary shadow-sm'
+                              : 'bg-bg-muted border-border-default text-text-secondary hover:text-text-primary'
+                          )}
+                        >
+                          مجلس أمناء المرحلة
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Title */}
                   <div>
                     <label className="text-caption font-semibold text-text-secondary block mb-1">
@@ -1243,7 +1516,10 @@ export default function StagePlanPage() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => setIsAddEventOpen(false)}
+                      onClick={() => {
+                        setIsAddEventOpen(false);
+                        setEditingEvent(null);
+                      }}
                     >
                       إلغاء
                     </Button>
@@ -1253,7 +1529,7 @@ export default function StagePlanPage() {
                       size="sm"
                       isLoading={createEventLoading}
                     >
-                      حفظ التدبير ونشره
+                      {editingEvent ? 'حفظ التعديلات' : 'حفظ التدبير ونشره'}
                     </Button>
                   </div>
                 </form>
@@ -1544,7 +1820,10 @@ export default function StagePlanPage() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setPrepModalOpen(false)}
+                    onClick={() => {
+                      setPrepModalOpen(false);
+                      setEditingPrep(null);
+                    }}
                     className="p-1 rounded-full hover:bg-bg-muted text-text-secondary"
                   >
                     <X className="w-5 h-5" />
@@ -1578,6 +1857,32 @@ export default function StagePlanPage() {
                 </div>
 
                 <form onSubmit={handleSubmitPrep} className="space-y-3.5">
+                  {/* Rejection / Modification Request Banner inside Form */}
+                  {editingPrep && editingPrep.status === 'DRAFT' && (editingPrep.reviewerNotes || editingPrep.reviewedByName) && (
+                    <div className="bg-status-danger-soft border-2 border-status-danger/40 rounded-card p-3.5 flex flex-col gap-2 shadow-sm text-right">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-1.5 text-status-danger font-bold text-caption">
+                          <AlertCircle className="w-4 h-4 shrink-0" />
+                          <span>توجيهات وملاحظات طلب التعديل (سبب الرفض)</span>
+                        </div>
+                        {editingPrep.reviewedByName && (
+                          <span className="text-[11px] font-semibold text-status-danger bg-status-danger/10 px-2 py-0.5 rounded-full border border-status-danger/25">
+                            المشرف: {editingPrep.reviewedByName} {editingPrep.reviewedByRole ? `(${editingPrep.reviewedByRole})` : ''}
+                          </span>
+                        )}
+                      </div>
+                      {editingPrep.reviewerNotes ? (
+                        <div className="bg-white/90 dark:bg-bg-surface p-2.5 rounded border border-status-danger/30 text-body-small text-text-primary whitespace-pre-wrap leading-relaxed">
+                          {editingPrep.reviewerNotes}
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-status-danger">
+                          طلب المشرف إعادة تعديل التحضير، يرجى مراجعة وتعديل محتوى الدرس ثم حفظ التحضير.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   {/* Status notice */}
                   {editingPrepId ? (
                     <div className="bg-amber-500/10 border border-amber-500/20 p-2 rounded-card text-[11px] text-amber-700 dark:text-amber-300 flex items-center gap-1.5 font-medium">
@@ -1673,7 +1978,10 @@ export default function StagePlanPage() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => setPrepModalOpen(false)}
+                      onClick={() => {
+                        setPrepModalOpen(false);
+                        setEditingPrep(null);
+                      }}
                     >
                       إلغاء
                     </Button>
@@ -1754,7 +2062,7 @@ export default function StagePlanPage() {
                     </div>
                   )}
 
-                  {selectedPrepDetail.status === 'DRAFT' && selectedPrepDetail.reviewerNotes && (
+                  {selectedPrepDetail.status === 'DRAFT' && (selectedPrepDetail.reviewerNotes || selectedPrepDetail.reviewedByName) && (
                     <div className="bg-status-danger-soft border border-status-danger/30 p-2.5 rounded-card text-caption text-status-danger flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5">
                         <AlertCircle className="w-4 h-4 shrink-0" />
@@ -1820,11 +2128,36 @@ export default function StagePlanPage() {
 
                   {/* Previous Reviewer Notes */}
                   {selectedPrepDetail.reviewerNotes && (
-                    <div className="bg-bg-muted/80 border border-border-default p-2.5 rounded-card text-caption">
-                      <span className="font-bold text-text-primary block mb-0.5">
-                        ملاحظات المراجعة المسجلة:
-                      </span>
-                      <p className="text-text-secondary">{selectedPrepDetail.reviewerNotes}</p>
+                    <div className={cn(
+                      "p-2.5 rounded-card text-caption border",
+                      selectedPrepDetail.status === 'DRAFT'
+                        ? "bg-status-danger-soft/70 border-status-danger/30"
+                        : selectedPrepDetail.status === 'REVIEWED'
+                        ? "bg-status-success-soft/60 border-status-success/30"
+                        : "bg-bg-muted/80 border-border-default"
+                    )}>
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className={cn(
+                          "font-bold block",
+                          selectedPrepDetail.status === 'DRAFT'
+                            ? "text-status-danger"
+                            : selectedPrepDetail.status === 'REVIEWED'
+                            ? "text-status-success"
+                            : "text-text-primary"
+                        )}>
+                          {selectedPrepDetail.status === 'DRAFT'
+                            ? 'سبب الرفض وملاحظات طلب التعديل المسجلة:'
+                            : selectedPrepDetail.status === 'REVIEWED'
+                            ? 'ملاحظات وتوجيهات الاعتماد المسجلة:'
+                            : 'ملاحظات المراجعة المسجلة:'}
+                        </span>
+                        {selectedPrepDetail.reviewedByName && (
+                          <span className="text-[10px] font-semibold text-text-secondary">
+                            (بواسطة: {selectedPrepDetail.reviewedByName})
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-text-primary whitespace-pre-wrap leading-relaxed">{selectedPrepDetail.reviewerNotes}</p>
                     </div>
                   )}
 

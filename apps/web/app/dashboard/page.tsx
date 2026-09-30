@@ -402,28 +402,48 @@ export default function DashboardPage() {
 
                 {/* Reviewer Details Display (FR-5.2 & User Spec) */}
                 {dashboardData.upcomingLessons[0].status === 'REVIEWED' ? (
-                  <div className="mt-1 pt-2 border-t border-border-default flex items-center justify-between text-[11px] text-status-success font-semibold">
-                    <span className="flex items-center gap-1">
-                      <Check className="w-3.5 h-3.5" />
-                      <span>تم الاعتماد بواسطة:</span>
-                    </span>
-                    <span className="font-bold">
-                      {dashboardData.upcomingLessons[0].reviewedByName
-                        ? `${dashboardData.upcomingLessons[0].reviewedByName} (${dashboardData.upcomingLessons[0].reviewedByRole || 'أمين'})`
-                        : 'أمين الخدمة'}
-                    </span>
+                  <div className="mt-1 pt-2 border-t border-border-default flex flex-col gap-1.5 text-right">
+                    <div className="flex items-center justify-between text-[11px] text-status-success font-semibold">
+                      <span className="flex items-center gap-1">
+                        <Check className="w-3.5 h-3.5" />
+                        <span>تم الاعتماد بواسطة:</span>
+                      </span>
+                      <span className="font-bold">
+                        {dashboardData.upcomingLessons[0].reviewedByName
+                          ? `${dashboardData.upcomingLessons[0].reviewedByName} (${dashboardData.upcomingLessons[0].reviewedByRole || 'أمين'})`
+                          : 'أمين الخدمة'}
+                      </span>
+                    </div>
+                    {dashboardData.upcomingLessons[0].reviewerNotes && (
+                      <div className="bg-status-success-soft/70 border border-status-success/25 rounded p-2 text-caption text-text-primary">
+                        <span className="font-bold text-status-success block text-[11px] mb-0.5">
+                          ملاحظات الاعتماد والتوجيهات:
+                        </span>
+                        <p className="whitespace-pre-wrap leading-relaxed">{dashboardData.upcomingLessons[0].reviewerNotes}</p>
+                      </div>
+                    )}
                   </div>
-                ) : dashboardData.upcomingLessons[0].status === 'DRAFT' && dashboardData.upcomingLessons[0].reviewerNotes ? (
-                  <div className="mt-1 pt-2 border-t border-border-default flex items-center justify-between text-[11px] text-status-danger font-semibold">
-                    <span className="flex items-center gap-1">
-                      <AlertCircle className="w-3.5 h-3.5" />
-                      <span>طلب تعديل بواسطة:</span>
-                    </span>
-                    <span className="font-bold">
-                      {dashboardData.upcomingLessons[0].reviewedByName
-                        ? `${dashboardData.upcomingLessons[0].reviewedByName} (${dashboardData.upcomingLessons[0].reviewedByRole || 'أمين'})`
-                        : 'أمين الخدمة'}
-                    </span>
+                ) : dashboardData.upcomingLessons[0].status === 'DRAFT' && (dashboardData.upcomingLessons[0].reviewerNotes || dashboardData.upcomingLessons[0].reviewedByName) ? (
+                  <div className="mt-1 pt-2 border-t border-border-default flex flex-col gap-1.5 text-right">
+                    <div className="flex items-center justify-between text-[11px] text-status-danger font-semibold">
+                      <span className="flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        <span>طلب تعديل بواسطة:</span>
+                      </span>
+                      <span className="font-bold">
+                        {dashboardData.upcomingLessons[0].reviewedByName
+                          ? `${dashboardData.upcomingLessons[0].reviewedByName} (${dashboardData.upcomingLessons[0].reviewedByRole || 'أمين'})`
+                          : 'أمين الخدمة'}
+                      </span>
+                    </div>
+                    {dashboardData.upcomingLessons[0].reviewerNotes && (
+                      <div className="bg-status-danger-soft/70 border border-status-danger/25 rounded p-2 text-caption text-text-primary">
+                        <span className="font-bold text-status-danger block text-[11px] mb-0.5">
+                          ملاحظات وسبب طلب التعديل:
+                        </span>
+                        <p className="whitespace-pre-wrap leading-relaxed">{dashboardData.upcomingLessons[0].reviewerNotes}</p>
+                      </div>
+                    )}
                   </div>
                 ) : null}
               </div>
