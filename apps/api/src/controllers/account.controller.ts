@@ -8,18 +8,26 @@ import { getPhoneVariants } from '@shenoda/shared';
 
 const EGYPTIAN_PHONE_REGEX = /^(?:\+20|0)?1[0125][0-9]{8}$/;
 
-const createAccountSchema = z.object({
-  fullName: z.string().min(3, 'الاسم بالكامل يجب ألا يقل عن 3 أحرف'),
-  phoneNumber: z
-    .string()
-    .min(10, 'رقم الهاتف مطلوب')
-    .regex(EGYPTIAN_PHONE_REGEX, 'يرجى إدخال رقم هاتف مصري صحيح (مثال: 01xxxxxxxxx)'),
-  email: z.string().email('بريد إلكتروني غير صالح').optional().nullable(),
-  roleId: z.string().min(1, 'معرف الدور مطلوب'),
-  stageId: z.string().optional().nullable(),
-  sectorId: z.string().optional().nullable(),
-  temporaryPassword: z.string().min(8, 'كلمة المرور المؤقتة يجب ألا تقل عن 8 أحرف'),
-});
+const createAccountSchema = z
+  .object({
+    fullName: z.string().min(3, 'الاسم بالكامل يجب ألا يقل عن 3 أحرف'),
+    phoneNumber: z
+      .string()
+      .min(10, 'رقم الهاتف مطلوب')
+      .regex(EGYPTIAN_PHONE_REGEX, 'يرجى إدخال رقم هاتف مصري صحيح (مثال: 01xxxxxxxxx)'),
+    email: z.string().email('بريد إلكتروني غير صالح').optional().nullable(),
+    roleId: z.string().optional().nullable(),
+    roleCode: z.string().optional().nullable(),
+    stageId: z.string().optional().nullable(),
+    sectorId: z.string().optional().nullable(),
+    sectorName: z.string().optional().nullable(),
+    stageIds: z.array(z.string()).optional().nullable(),
+    temporaryPassword: z.string().min(8, 'كلمة المرور المؤقتة يجب ألا تقل عن 8 أحرف'),
+  })
+  .refine((data) => data.roleId || data.roleCode, {
+    message: 'معرف أو كود الدور مطلوب',
+    path: ['roleCode'],
+  });
 
 const updateAccountSchema = z.object({
   fullName: z.string().min(3, 'الاسم بالكامل يجب ألا يقل عن 3 أحرف').optional(),
@@ -60,202 +68,391 @@ const updateStatusSchema = z.object({
 
 export class AccountController {
   /**
+   * GET /api/v1/accounts/roles
+   * Lists available roles below the caller's level for assignment.
+   */
+  public static async listRoles(req: Request, res: Response) {
+    try {
+      const user = req.user;
+      const callerLevel = user?.roleLevel ?? 5;
+
+      const roles = await prisma.role.findMany({
+        where: {
+          level: { lt: callerLevel },
+        },
+        orderBy: { level: 'asc' },
+      });
+
+      return res.status(200).json({
+        success: true,
+        roles,
+      });
+    } catch (err: any) {
+      console.error('Failed to list roles:', err);
+      return res.status(500).json({
+        success: false,
+        error: { code: 'INTERNAL_SERVER_ERROR', message: err.message },
+      });
+    }
+  }
+
+  /**
    * POST /api/v1/accounts/create (FR-1.2, Assumption A7)
    * Scoped account creation strictly enforcing hierarchical authority.
    */
   public static async createAccount(req: Request, res: Response) {
-    const creator = req.user;
-    if (!creator) {
-      return res.status(401).json({
-        success: false,
-        error: { code: 'AUTH_REQUIRED', message: 'Authentication required' },
-      });
-    }
+    try {
+      const creator = req.user;
+      if (!creator) {
+        return res.status(401).json({
+          success: false,
+          error: { code: 'AUTH_REQUIRED', message: 'Authentication required' },
+        });
+      }
 
-    const parseResult = createAccountSchema.safeParse(req.body);
-    if (!parseResult.success) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: parseResult.error.errors[0]?.message || 'بيانات إنشاء الحساب غير صحيحة',
-          details: parseResult.error.format(),
-        },
-      });
-    }
-
-    const {
-      fullName,
-      phoneNumber,
-      email,
-      roleId,
-      stageId,
-      sectorId,
-      temporaryPassword,
-    } = parseResult.data;
-
-    // 1. Fetch target role
-    const targetRole = await prisma.role.findUnique({
-      where: { id: roleId },
-    });
-
-    if (!targetRole) {
-      return res.status(404).json({
-        success: false,
-        error: {
-          code: 'ROLE_NOT_FOUND',
-          message: 'الدور المطلوب غير موجود في النظام',
-        },
-      });
-    }
-
-    // 2. Validate hierarchical creation authority (Assumption A7)
-    // Adding/creating a new servant is strictly restricted to General Secretary (الامين العام - Level 5)
-    const creatorLevel = creator.roleLevel;
-
-    if (creatorLevel < 5) {
-      return res.status(403).json({
-        success: false,
-        error: {
-          code: 'ACCESS_DENIED_MIN_LEVEL',
-          message: 'إنشاء وإضافة خادم جديد مقتصر حصرياً على الأمين العام',
-        },
-      });
-    }
-
-    // Cannot create role at or above Level 5
-    if (targetRole.level >= 5) {
-      return res.status(403).json({
-        success: false,
-        error: {
-          code: 'ACCESS_DENIED_ROLE_HIERARCHY',
-          message: `لا يمكن إنشاء حساب برتبة مساوية أو أعلى من رتبتك الحالية (${creator.roleCode})`,
-        },
-      });
-    }
-
-    // 3. Validate Scope Assignment bounds
-    let assignedSectorId = sectorId || null;
-    let assignedStageId = stageId || null;
-
-    if (targetRole.level <= 3) {
-      // Stage-level roles require a valid stageId
-      if (!assignedStageId) {
+      const parseResult = createAccountSchema.safeParse(req.body);
+      if (!parseResult.success) {
         return res.status(400).json({
           success: false,
           error: {
-            code: 'STAGE_REQUIRED',
-            message: 'تحديد المرحلة (stageId) إلزامي لهذا الدور',
+            code: 'VALIDATION_ERROR',
+            message: parseResult.error.errors[0]?.message || 'بيانات إنشاء الحساب غير صحيحة',
+            details: parseResult.error.format(),
           },
         });
       }
 
-      const stage = await prisma.stage.findUnique({
-        where: { id: assignedStageId },
-      });
+      const {
+        fullName,
+        phoneNumber,
+        email,
+        roleId,
+        roleCode,
+        stageId,
+        sectorId,
+        sectorName,
+        stageIds,
+        temporaryPassword,
+      } = parseResult.data;
 
-      if (!stage) {
-        return res.status(404).json({
+      // Safe organizationId lookup early
+      let orgId: string | undefined = creator.organizationId;
+      if (!orgId) {
+        const creatorDb = await prisma.user.findUnique({
+          where: { id: creator.userId },
+          select: { organizationId: true },
+        });
+        orgId = creatorDb?.organizationId;
+      }
+      if (!orgId) {
+        const firstOrg = await prisma.organization.findFirst({ select: { id: true } });
+        orgId = firstOrg?.id;
+      }
+
+      if (!orgId) {
+        return res.status(400).json({
           success: false,
-          error: { code: 'STAGE_NOT_FOUND', message: 'المرحلة المحددة غير موجودة' },
+          error: {
+            code: 'ORG_NOT_FOUND',
+            message: 'تعذر تحديد المؤسسة التابع لها الحساب',
+          },
         });
       }
 
-      assignedSectorId = stage.sectorId;
-    } else if (targetRole.level === 4) {
-      // Sector Secretary (Level 4): requires sectorId and creator must be Level 5
+      // 1. Fetch target role by id or code
+      const requestedId = (roleId || '').trim();
+      const requestedCode = (roleCode || '').trim();
+      let targetRole: any = null;
+
+      if (requestedId) {
+        targetRole = await prisma.role.findFirst({
+          where: {
+            OR: [
+              { id: requestedId },
+              { code: requestedId },
+              { code: requestedId.replace(/^role-/, '').replace(/-/g, '_').toUpperCase() },
+            ],
+          },
+        });
+      }
+
+      if (!targetRole && requestedCode) {
+        targetRole = await prisma.role.findFirst({
+          where: {
+            OR: [
+              { id: requestedCode },
+              { code: requestedCode },
+              { code: requestedCode.replace(/^role-/, '').replace(/-/g, '_').toUpperCase() },
+            ],
+          },
+        });
+      }
+
+      // Friendly fallbacks for legacy aliases
+      if (!targetRole) {
+        const candidate = (requestedCode || requestedId).toLowerCase();
+        if (candidate.includes('servant')) {
+          targetRole = await prisma.role.findFirst({ where: { code: 'SERVANT' } });
+        } else if (candidate.includes('assistant')) {
+          targetRole = await prisma.role.findFirst({ where: { code: 'ASSISTANT_SECRETARY' } });
+        } else if (candidate.includes('stagesec') || candidate.includes('stage')) {
+          targetRole = await prisma.role.findFirst({ where: { code: 'STAGE_SECRETARY' } });
+        } else if (candidate.includes('sectorsec') || candidate.includes('sector')) {
+          targetRole = await prisma.role.findFirst({ where: { code: 'SECTOR_SECRETARY' } });
+        }
+      }
+
+      if (!targetRole) {
+        return res.status(404).json({
+          success: false,
+          error: {
+            code: 'ROLE_NOT_FOUND',
+            message: 'الدور المطلوب غير موجود في النظام',
+          },
+        });
+      }
+
+      // 2. Validate hierarchical creation authority (Assumption A7)
+      // Adding/creating a new servant is strictly restricted to General Secretary (الامين العام - Level 5)
+      const creatorLevel = creator.roleLevel;
+
       if (creatorLevel < 5) {
         return res.status(403).json({
           success: false,
           error: {
-            code: 'ACCESS_DENIED_SCOPE',
-            message: 'إنشاء أمناء القطاعات مقتصر حصرياً على الأمين العام',
+            code: 'ACCESS_DENIED_MIN_LEVEL',
+            message: 'إنشاء وإضافة خادم جديد مقتصر حصرياً على الأمين العام',
           },
         });
       }
 
-      if (!assignedSectorId) {
-        return res.status(400).json({
+      // Cannot create role at or above Level 5
+      if (targetRole.level >= 5) {
+        return res.status(403).json({
           success: false,
           error: {
-            code: 'SECTOR_REQUIRED',
-            message: 'تحديد القطاع (sectorId) إلزامي لأمين القطاع',
+            code: 'ACCESS_DENIED_ROLE_HIERARCHY',
+            message: `لا يمكن إنشاء حساب برتبة مساوية أو أعلى من رتبتك الحالية (${creator.roleCode})`,
           },
         });
       }
-    }
 
-    // 4. Check uniqueness for phone variants and email
-    const phoneVariants = getPhoneVariants(phoneNumber);
-    const existingUser = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { phoneNumber: { in: phoneVariants } },
-          ...(email ? [{ email: email.toLowerCase() }] : []),
-        ],
-      },
-    });
+      // 3. Validate Scope Assignment bounds
+      let assignedSectorId = sectorId || null;
+      let assignedStageId = stageId || null;
 
-    if (existingUser) {
-      return res.status(409).json({
-        success: false,
-        error: {
-          code: 'ERR_USER_EXISTS',
-          message: 'رقم الهاتف أو البريد الإلكتروني مسجل مسبقاً في النظام',
+      if (assignedStageId) {
+        const stage = await prisma.stage.findUnique({
+          where: { id: assignedStageId },
+        });
+        if (stage && !assignedSectorId) {
+          assignedSectorId = stage.sectorId;
+        }
+      }
+
+      if (targetRole.level <= 3) {
+        // Stage-level roles require a valid stageId
+        if (!assignedStageId) {
+          return res.status(400).json({
+            success: false,
+            error: {
+              code: 'STAGE_REQUIRED',
+              message: 'تحديد المرحلة (stageId) إلزامي لهذا الدور',
+            },
+          });
+        }
+
+        const stage = await prisma.stage.findUnique({
+          where: { id: assignedStageId },
+        });
+
+        if (!stage) {
+          return res.status(404).json({
+            success: false,
+            error: { code: 'STAGE_NOT_FOUND', message: 'المرحلة المحددة غير موجودة' },
+          });
+        }
+
+        assignedSectorId = stage.sectorId;
+      } else if (targetRole.level === 4) {
+        // Sector Secretary (Level 4): requires sectorId or sectorName + stageIds
+        if (creatorLevel < 5) {
+          return res.status(403).json({
+            success: false,
+            error: {
+              code: 'ACCESS_DENIED_SCOPE',
+              message: 'إنشاء أمناء القطاعات مقتصر حصرياً على الأمين العام',
+            },
+          });
+        }
+
+        // If sectorName provided, look up or create the sector
+        if (sectorName && sectorName.trim()) {
+          const sName = sectorName.trim();
+          let sector = await prisma.sector.findFirst({
+            where: {
+              organizationId: orgId!,
+              name: { equals: sName, mode: 'insensitive' },
+            },
+          });
+          if (!sector) {
+            const safeCode =
+              'SEC_' +
+              sName
+                .replace(/\s+/g, '_')
+                .replace(/[^a-zA-Z0-9_\u0600-\u06FF]/g, '')
+                .toUpperCase() +
+              '_' +
+              Date.now().toString().slice(-4);
+            sector = await prisma.sector.create({
+              data: {
+                organizationId: orgId!,
+                name: sName,
+                code: safeCode,
+              },
+            });
+          }
+          assignedSectorId = sector.id;
+        }
+
+        if (!assignedSectorId && stageIds && stageIds.length > 0) {
+          const firstStage = await prisma.stage.findFirst({
+            where: { id: { in: stageIds } },
+          });
+          if (firstStage) assignedSectorId = firstStage.sectorId;
+        }
+
+        if (!assignedSectorId && assignedStageId) {
+          const stage = await prisma.stage.findUnique({
+            where: { id: assignedStageId },
+          });
+          if (stage) assignedSectorId = stage.sectorId;
+        }
+
+        if (!assignedSectorId) {
+          return res.status(400).json({
+            success: false,
+            error: {
+              code: 'SECTOR_REQUIRED',
+              message: 'تحديد القطاع أو كتابة اسم القطاع إلزامي لأمين القطاع',
+            },
+          });
+        }
+      }
+
+      // 4. Check uniqueness for phone variants and email
+      const phoneVariants = getPhoneVariants(phoneNumber);
+      const existingUser = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { phoneNumber: { in: phoneVariants } },
+            ...(email ? [{ email: email.toLowerCase() }] : []),
+          ],
         },
       });
-    }
 
-    // 5. Hash temporary password
-    const passwordHash = await HashService.hashPassword(temporaryPassword);
+      if (existingUser) {
+        return res.status(409).json({
+          success: false,
+          error: {
+            code: 'ERR_USER_EXISTS',
+            message: 'رقم الهاتف أو البريد الإلكتروني مسجل مسبقاً في النظام',
+          },
+        });
+      }
 
-    // 6. Create User and Scope Assignment in transaction
-    const newUser = await prisma.$transaction(async (tx) => {
-      const user = await tx.user.create({
-        data: {
-          organizationId: creator.organizationId,
-          roleId: targetRole.id,
-          fullName,
-          phoneNumber,
-          email: email ? email.toLowerCase() : null,
-          passwordHash,
-          status: UserStatus.ACTIVE,
-        },
-      });
+      // 5. Hash temporary password
+      const passwordHash = await HashService.hashPassword(temporaryPassword);
 
-      if (assignedStageId || assignedSectorId) {
-        await tx.scopeAssignment.create({
+      // 6. Create User and Scope Assignment in transaction
+      const newUser = await prisma.$transaction(async (tx) => {
+        const user = await tx.user.create({
           data: {
-            userId: user.id,
-            stageId: assignedStageId,
+            organizationId: orgId!,
+            roleId: targetRole.id,
+            fullName,
+            phoneNumber,
+            email: email ? email.toLowerCase() : null,
+            passwordHash,
+            status: UserStatus.ACTIVE,
+          },
+        });
+
+        if (targetRole.level === 4) {
+          // If stageIds were provided, update those stages to link to this sector
+          if (stageIds && stageIds.length > 0 && assignedSectorId) {
+            await tx.stage.updateMany({
+              where: { id: { in: stageIds } },
+              data: { sectorId: assignedSectorId },
+            });
+          }
+
+          // Primary sector scope assignment
+          if (assignedSectorId) {
+            await tx.scopeAssignment.create({
+              data: {
+                userId: user.id,
+                sectorId: assignedSectorId,
+                stageId: null,
+              },
+            });
+          }
+
+          // Direct assignments to each selected stage
+          if (stageIds && stageIds.length > 0) {
+            for (const sId of stageIds) {
+              await tx.scopeAssignment.create({
+                data: {
+                  userId: user.id,
+                  sectorId: assignedSectorId,
+                  stageId: sId,
+                },
+              });
+            }
+          }
+        } else if (assignedStageId || assignedSectorId) {
+          await tx.scopeAssignment.create({
+            data: {
+              userId: user.id,
+              stageId: assignedStageId,
+              sectorId: assignedSectorId,
+            },
+          });
+        }
+
+        return user;
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: 'تم إنشاء حساب الخادم وتفعيله بنجاح',
+        user: {
+          id: newUser.id,
+          fullName: newUser.fullName,
+          phoneNumber: newUser.phoneNumber,
+          email: newUser.email,
+          role: {
+            id: targetRole.id,
+            code: targetRole.code,
+            name: targetRole.name,
+            level: targetRole.level,
+          },
+          scope: {
+            stageId: targetRole.level === 4 ? null : assignedStageId,
             sectorId: assignedSectorId,
           },
-        });
-      }
-
-      return user;
-    });
-
-    return res.status(201).json({
-      success: true,
-      message: 'تم إنشاء حساب الخادم وتفعيله بنجاح',
-      user: {
-        id: newUser.id,
-        fullName: newUser.fullName,
-        phoneNumber: newUser.phoneNumber,
-        email: newUser.email,
-        role: {
-          id: targetRole.id,
-          code: targetRole.code,
-          name: targetRole.name,
-          level: targetRole.level,
         },
-        scope: {
-          stageId: assignedStageId,
-          sectorId: assignedSectorId,
+      });
+    } catch (err: any) {
+      console.error('Account creation error:', err);
+      return res.status(500).json({
+        success: false,
+        error: {
+          code: 'ACCOUNT_CREATION_FAILED',
+          message: err.message || 'فشل إنشاء الحساب في النظام',
         },
-      },
-    });
+      });
+    }
   }
 
   /**

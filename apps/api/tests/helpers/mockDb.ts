@@ -553,13 +553,39 @@ export function createMockPrisma() {
     role: {
       findUnique: async (args: any) => {
         const where = args?.where || {};
-        return roles.find((r) => r.id === where.id || r.code === where.code) || null;
+        return roles.find((r) => (where.id && r.id === where.id) || (where.code && r.code === where.code)) || null;
       },
       findFirst: async (args: any) => {
         const where = args?.where || {};
-        return roles.find((r) => r.code === where.code || r.level === where.level) || null;
+        if (where.OR && Array.isArray(where.OR)) {
+          return (
+            roles.find((r) =>
+              where.OR.some(
+                (cond: any) =>
+                  (cond.id && r.id === cond.id) ||
+                  (cond.code && r.code === cond.code) ||
+                  (cond.level !== undefined && r.level === cond.level)
+              )
+            ) || null
+          );
+        }
+        return (
+          roles.find(
+            (r) =>
+              (where.id && r.id === where.id) ||
+              (where.code && r.code === where.code) ||
+              (where.level !== undefined && r.level === where.level)
+          ) || null
+        );
       },
-      findMany: async () => roles,
+      findMany: async (args?: any) => {
+        const where = args?.where || {};
+        let result = [...roles];
+        if (where.level?.lt !== undefined) {
+          result = result.filter((r) => r.level < where.level.lt);
+        }
+        return result.sort((a, b) => a.level - b.level);
+      },
     },
 
     stage: {

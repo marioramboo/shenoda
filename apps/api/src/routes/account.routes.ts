@@ -10,6 +10,9 @@ export const accountRouter = Router();
 accountRouter.use(authenticateJwt);
 accountRouter.use(requireAuth);
 
+// Roles available for assignment
+accountRouter.get('/roles', AccountController.listRoles);
+
 // General Secretary exclusive servant account creation (FR-1.2, Assumption A7)
 accountRouter.post(
   '/create',

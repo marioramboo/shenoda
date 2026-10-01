@@ -96,17 +96,27 @@ export default function DashboardPage() {
   const [email, setEmail] = useState('');
   const [roleCode, setRoleCode] = useState('SERVANT');
   const [stageId, setStageId] = useState('');
+  const [sectorId, setSectorId] = useState('');
+  const [sectorName, setSectorName] = useState('');
+  const [selectedStageIds, setSelectedStageIds] = useState<string[]>([]);
   const [tempPassword, setTempPassword] = useState('InitPassword2026!');
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [createSuccess, setCreateSuccess] = useState<string | null>(null);
 
-  // Dynamic stages list (from API or user.scopes)
+  const handleToggleStage = (stId: string) => {
+    setSelectedStageIds((prev) =>
+      prev.includes(stId) ? prev.filter((id) => id !== stId) : [...prev, stId]
+    );
+  };
+
+  // Dynamic roles and stages list
   const [stagesList, setStagesList] = useState<any[]>([]);
+  const [rolesList, setRolesList] = useState<any[]>([]);
 
   useEffect(() => {
     let isMounted = true;
-    const fetchStages = async () => {
+    const fetchStagesAndRoles = async () => {
       try {
         const res = await api.get('/api/v1/stages');
         if (res.data?.success && Array.isArray(res.data.stages)) {
@@ -115,8 +125,17 @@ export default function DashboardPage() {
       } catch {
         // Fallback silently to user.scopes.stages
       }
+
+      try {
+        const resRoles = await api.get('/api/v1/accounts/roles');
+        if (resRoles.data?.success && Array.isArray(resRoles.data.roles)) {
+          if (isMounted) setRolesList(resRoles.data.roles);
+        }
+      } catch {
+        // Fallback silently to static list
+      }
     };
-    fetchStages();
+    fetchStagesAndRoles();
     return () => {
       isMounted = false;
     };
@@ -126,11 +145,35 @@ export default function DashboardPage() {
     return stagesList.length > 0 ? stagesList : (user?.scopes?.stages || []);
   }, [stagesList, user]);
 
+  const availableSectors = useMemo(() => {
+    return user?.scopes?.sectors || [];
+  }, [user]);
+
+  const availableRoles = useMemo(() => {
+    if (rolesList.length > 0) {
+      return rolesList;
+    }
+    const callerLevel = user?.role?.level ?? 1;
+    const defaultRoles = [
+      { code: 'SERVANT', name: 'خادم مرحلة', level: 1 },
+      { code: 'ASSISTANT_SECRETARY', name: 'مساعد أمين الخدمة', level: 2 },
+      { code: 'STAGE_SECRETARY', name: 'أمين الخدمة / أمين مرحلة', level: 3 },
+      { code: 'SECTOR_SECRETARY', name: 'أمين قطاع', level: 4 },
+    ];
+    return defaultRoles.filter((r) => r.level < callerLevel);
+  }, [rolesList, user]);
+
   useEffect(() => {
     if (availableStages.length > 0 && !stageId) {
       setStageId(availableStages[0].id);
     }
   }, [availableStages, stageId]);
+
+  useEffect(() => {
+    if (availableSectors.length > 0 && !sectorId) {
+      setSectorId(availableSectors[0].id);
+    }
+  }, [availableSectors, sectorId]);
 
   // Coptic Date
   const copticDate = getCopticDate();
@@ -169,28 +212,51 @@ export default function DashboardPage() {
     setCreateError(null);
     setCreateSuccess(null);
 
-    const resolvedStageId = stageId || user?.scopes?.stages?.[0]?.id;
-    if (!resolvedStageId) {
-      setCreateError('يرجى تحديد مرحلة مسندة لإضافة الخادم إليها');
-      return;
+    const selectedRole = availableRoles.find((r) => r.code === roleCode);
+    const isSectorRole = roleCode === 'SECTOR_SECRETARY' || selectedRole?.level === 4;
+
+    const payload: any = {
+      fullName: fullName.trim(),
+      phoneNumber: phoneNumber.trim(),
+      email: email ? email.trim() : undefined,
+      roleCode,
+      roleId: selectedRole?.id || undefined,
+      temporaryPassword: tempPassword,
+    };
+
+    if (isSectorRole) {
+      if (!sectorName.trim()) {
+        setCreateError('يرجى كتابة اسم القطاع المسند إليه أمين القطاع');
+        return;
+      }
+      if (selectedStageIds.length === 0) {
+        setCreateError('يرجى تحديد مرحلة واحدة على الأقل تابعة لهذا القطاع');
+        return;
+      }
+      payload.sectorName = sectorName.trim();
+      payload.stageIds = selectedStageIds;
+    } else {
+      const resolvedStageId = stageId || availableStages[0]?.id || user?.scopes?.stages?.[0]?.id;
+      if (!resolvedStageId) {
+        setCreateError('يرجى تحديد مرحلة مسندة لإضافة الخادم إليها');
+        return;
+      }
+      payload.stageId = resolvedStageId;
     }
 
     try {
       setCreateLoading(true);
-      const res = await api.post('/api/v1/accounts/create', {
-        fullName,
-        phoneNumber,
-        email: email || undefined,
-        roleId: roleCode === 'SERVANT' ? 'role-servant' : 'role-assistant',
-        stageId: resolvedStageId,
-        temporaryPassword: tempPassword,
-      });
+      const res = await api.post('/api/v1/accounts/create', payload);
 
       if (res.data?.success) {
-        setCreateSuccess(`تم إنشاء حساب الخادم (${fullName}) بنجاح!`);
+        setCreateSuccess(
+          `تم إنشاء حساب الخادم (${fullName}) برتبة (${selectedRole?.name || roleCode}) بنجاح!`
+        );
         setFullName('');
         setPhoneNumber('');
         setEmail('');
+        setSectorName('');
+        setSelectedStageIds([]);
       }
     } catch (err: any) {
       setCreateError(
@@ -703,49 +769,106 @@ export default function DashboardPage() {
                     onChange={(e) => setEmail(e.target.value)}
                   />
 
-                  {availableStages.length > 1 ? (
-                    <div className="flex flex-col gap-1.5 text-right">
-                      <label className="text-caption font-semibold text-text-primary">
-                        المرحلة المسند إليها الخادم *
-                      </label>
-                      <select
-                        value={stageId || availableStages[0]?.id}
-                        onChange={(e) => setStageId(e.target.value)}
-                        className="h-11 px-3 rounded-button border border-border-default bg-bg-surface text-body-default text-text-primary focus:outline-none focus:border-brand-primary"
-                      >
-                        {availableStages.map((st) => (
-                          <option key={st.id} value={st.id}>
-                            {st.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  ) : availableStages.length === 1 ? (
-                    <div className="flex flex-col gap-1 text-right">
-                      <label className="text-caption font-semibold text-text-secondary">
-                        المرحلة المسندة
-                      </label>
-                      <div className="h-11 px-3 rounded-button border border-border-default bg-bg-muted flex items-center text-body-default text-text-primary">
-                        {availableStages[0].name}
-                      </div>
-                    </div>
-                  ) : null}
-
                   <div className="flex flex-col gap-1.5 text-right">
                     <label className="text-caption font-semibold text-text-primary">
-                      الرتبة في المرحلة
+                      الرتبة / الدور في الخدمة *
                     </label>
                     <select
                       value={roleCode}
                       onChange={(e) => setRoleCode(e.target.value)}
                       className="h-11 px-3 rounded-button border border-border-default bg-bg-surface text-body-default text-text-primary focus:outline-none focus:border-brand-primary"
                     >
-                      <option value="SERVANT">خادم مرحلة (المستوى 1)</option>
-                      {user && user.role.level >= 3 && (
-                        <option value="ASSISTANT_SECRETARY">مساعد أمين الخدمة (المستوى 2)</option>
-                      )}
+                      {availableRoles.map((r) => (
+                        <option key={r.code} value={r.code}>
+                          {r.name} (المستوى {r.level})
+                        </option>
+                      ))}
                     </select>
                   </div>
+
+                  {roleCode === 'SECTOR_SECRETARY' ? (
+                    <>
+                      <Input
+                        label="اسم القطاع *"
+                        placeholder="مثال: قطاع الطفولة، قطاع الشباب، قطاع إعدادي وثانوي..."
+                        value={sectorName}
+                        onChange={(e) => setSectorName(e.target.value)}
+                        required
+                      />
+
+                      <div className="flex flex-col gap-2 text-right">
+                        <div className="flex items-center justify-between">
+                          <label className="text-caption font-semibold text-text-primary">
+                            المراحل التابعة لهذا القطاع *
+                          </label>
+                          <span className="text-[11px] text-brand-primary font-medium">
+                            {selectedStageIds.length > 0
+                              ? `(تم اختيار ${selectedStageIds.length} مرحلة)`
+                              : '(حدد مرحلة واحدة على الأقل)'}
+                          </span>
+                        </div>
+
+                        <div className="border border-border-default rounded-card p-2.5 max-h-48 overflow-y-auto bg-bg-muted/20 flex flex-col gap-1.5">
+                          {availableStages.map((st) => {
+                            const isChecked = selectedStageIds.includes(st.id);
+                            return (
+                              <label
+                                key={st.id}
+                                className={`flex items-center justify-between px-3 py-2 rounded-lg border text-caption cursor-pointer transition-colors ${
+                                  isChecked
+                                    ? 'bg-brand-primary/10 border-brand-primary text-brand-primary font-bold shadow-xs'
+                                    : 'bg-bg-surface border-border-default hover:bg-bg-muted text-text-primary'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2.5">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => handleToggleStage(st.id)}
+                                    className="w-4 h-4 rounded text-brand-primary accent-brand-primary focus:ring-brand-primary cursor-pointer"
+                                  />
+                                  <span>{st.name}</span>
+                                </div>
+                                {st.code && (
+                                  <span className="text-[10px] text-text-secondary bg-bg-muted px-1.5 py-0.5 rounded">
+                                    {st.code}
+                                  </span>
+                                )}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    availableStages.length > 1 ? (
+                      <div className="flex flex-col gap-1.5 text-right">
+                        <label className="text-caption font-semibold text-text-primary">
+                          المرحلة المسند إليها الخادم *
+                        </label>
+                        <select
+                          value={stageId || availableStages[0]?.id}
+                          onChange={(e) => setStageId(e.target.value)}
+                          className="h-11 px-3 rounded-button border border-border-default bg-bg-surface text-body-default text-text-primary focus:outline-none focus:border-brand-primary"
+                        >
+                          {availableStages.map((st) => (
+                            <option key={st.id} value={st.id}>
+                              {st.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : availableStages.length === 1 ? (
+                      <div className="flex flex-col gap-1 text-right">
+                        <label className="text-caption font-semibold text-text-secondary">
+                          المرحلة المسندة
+                        </label>
+                        <div className="h-11 px-3 rounded-button border border-border-default bg-bg-muted flex items-center text-body-default text-text-primary">
+                          {availableStages[0].name}
+                        </div>
+                      </div>
+                    ) : null
+                  )}
 
                   <Input
                     label="كلمة المرور المؤقتة"

@@ -8,6 +8,7 @@ import { healthRouter } from './routes/health.routes';
 import { permissionsRouter } from './routes/permissions.routes';
 import { authRouter } from './routes/auth.routes';
 import { accountRouter } from './routes/account.routes';
+import { AccountController } from './controllers/account.controller';
 import { memberRouter } from './routes/member.routes';
 import { noteRouter } from './routes/note.routes';
 import { attendanceRouter } from './routes/attendance.routes';
@@ -77,6 +78,10 @@ export const createApp = (beforeRoutesMiddleware?: RequestHandler): Application 
   // Stages routes (FR-3.4 / Multi-stage oversight for General & Sector Secretaries)
   app.use('/api/v1/stages', stageRouter);
   app.use('/api/stages', stageRouter);
+
+  // Roles routes
+  app.get('/api/v1/roles', AccountController.listRoles);
+  app.get('/api/roles', AccountController.listRoles);
 
   // Supervisory Notes routes (FR-8.1, FR-8.2)
   app.use('/api/v1/notes', noteRouter);
