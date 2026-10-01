@@ -21,6 +21,7 @@ import { pollRouter } from './routes/poll.routes';
 import { notificationRouter } from './routes/notification.routes';
 import { analyticsRouter } from './routes/analytics.routes';
 import { reportRouter } from './routes/report.routes';
+import { stageRouter } from './routes/stage.routes';
 import { authenticateJwt } from './middleware/auth';
 import { enforceIdempotency } from './middleware/idempotency';
 
@@ -72,6 +73,10 @@ export const createApp = (beforeRoutesMiddleware?: RequestHandler): Application 
   // Served Member routes (FR-3.1, FR-3.2, FR-3.3, Assumption A2)
   app.use('/api/v1/members', memberRouter);
   app.use('/api/members', memberRouter);
+
+  // Stages routes (FR-3.4 / Multi-stage oversight for General & Sector Secretaries)
+  app.use('/api/v1/stages', stageRouter);
+  app.use('/api/stages', stageRouter);
 
   // Supervisory Notes routes (FR-8.1, FR-8.2)
   app.use('/api/v1/notes', noteRouter);

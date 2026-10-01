@@ -1,15 +1,17 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Button } from '@/components/ui/Button';
 import { StatCard } from '@/components/ui/StatCard';
 import { Badge } from '@/components/ui/Badge';
+import { Chip } from '@/components/ui/Chip';
 import { TabBar } from '@/components/layout/TabBar';
 import { ExportReportModal } from '@/components/reports/ExportReportModal';
 import { api } from '@/lib/api';
+import { cn } from '@/lib/utils';
 import {
   BarChart3,
   TrendingUp,
@@ -77,14 +79,36 @@ export default function AnalyticsPage() {
   const [selectedStageId, setSelectedStageId] = useState<string>('');
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
-  // Available stages for selector
-  const stagesList = user?.scopes?.stages || [];
+  // Dynamic stages list (from API or user.scopes)
+  const [stagesList, setStagesList] = useState<any[]>([]);
 
   useEffect(() => {
-    if (stagesList.length > 0 && !selectedStageId) {
-      setSelectedStageId(stagesList[0].id);
+    let isMounted = true;
+    const fetchStages = async () => {
+      try {
+        const res = await api.get('/api/v1/stages');
+        if (res.data?.success && Array.isArray(res.data.stages)) {
+          if (isMounted) setStagesList(res.data.stages);
+        }
+      } catch {
+        // Fallback silently to user.scopes.stages
+      }
+    };
+    fetchStages();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const availableStages = useMemo(() => {
+    return stagesList.length > 0 ? stagesList : (user?.scopes?.stages || []);
+  }, [stagesList, user]);
+
+  useEffect(() => {
+    if (availableStages.length > 0 && !selectedStageId) {
+      setSelectedStageId(availableStages[0].id);
     }
-  }, [stagesList, selectedStageId]);
+  }, [availableStages, selectedStageId]);
 
   const fetchAnalytics = async () => {
     setIsLoading(true);
@@ -115,7 +139,7 @@ export default function AnalyticsPage() {
   }, [user, selectedStageId]);
 
   const currentStageName =
-    stagesList.find((s) => s.id === selectedStageId)?.name ||
+    availableStages.find((s) => s.id === selectedStageId)?.name ||
     'المرحلة الحالية';
 
   // Calculate funnel total
@@ -158,25 +182,8 @@ export default function AnalyticsPage() {
               </div>
             </div>
 
-            {/* Actions & Scope Filter */}
+            {/* Actions & Export */}
             <div className="flex items-center gap-3 self-end md:self-auto">
-              {stagesList.length > 1 && (
-                <div className="relative">
-                  <select
-                    value={selectedStageId}
-                    onChange={(e) => setSelectedStageId(e.target.value)}
-                    className="h-10 pl-8 pr-3 rounded-xl border border-border-default bg-bg-surface text-sm font-medium text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-primary appearance-none cursor-pointer"
-                  >
-                    {stagesList.map((st) => (
-                      <option key={st.id} value={st.id}>
-                        {st.name}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="w-4 h-4 text-text-tertiary absolute left-2.5 top-3 pointer-events-none" />
-                </div>
-              )}
-
               <Button
                 variant="primary"
                 onClick={() => setIsExportModalOpen(true)}
@@ -188,6 +195,35 @@ export default function AnalyticsPage() {
             </div>
           </div>
         </header>
+
+        {/* Stage Selector Chips Bar */}
+        {availableStages.length > 1 && (
+          <div className="max-w-6xl mx-auto px-4 pt-3">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar select-none">
+              <span className="text-caption font-bold text-text-secondary whitespace-nowrap ml-1">
+                المرحلة:
+              </span>
+              {availableStages.map((stage) => {
+                const isSelected = selectedStageId === stage.id;
+                return (
+                  <Chip
+                    key={stage.id}
+                    selected={isSelected}
+                    onClick={() => setSelectedStageId(stage.id)}
+                    className={cn(
+                      'shrink-0 text-caption transition-all',
+                      isSelected
+                        ? 'bg-brand-primary text-text-inverse shadow-sm'
+                        : 'bg-bg-surface border border-border-default text-text-secondary hover:border-text-secondary hover:text-text-primary'
+                    )}
+                  >
+                    {stage.name}
+                  </Chip>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Main Content Area */}
         <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">

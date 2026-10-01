@@ -569,14 +569,30 @@ export function createMockPrisma() {
       },
       findMany: async (args?: any) => {
         const where = args?.where || {};
-        return stages.filter((s) => {
-          if (where.sectorId && s.sectorId !== where.sectorId) return false;
+        const result = stages.filter((s) => {
+          if (where.sectorId) {
+            if (typeof where.sectorId === 'string' && s.sectorId !== where.sectorId) return false;
+            if (where.sectorId.in && Array.isArray(where.sectorId.in) && !where.sectorId.in.includes(s.sectorId)) return false;
+          }
+          if (where.sector?.organizationId) {
+            const sec = sectors.find((sc) => sc.id === s.sectorId);
+            if (sec && sec.organizationId !== where.sector.organizationId) return false;
+          }
+          if (where.OR && Array.isArray(where.OR)) {
+            const matchesOr = where.OR.some((cond: any) => {
+              if (cond.sectorId?.in && cond.sectorId.in.includes(s.sectorId)) return true;
+              if (cond.id?.in && cond.id.in.includes(s.id)) return true;
+              return false;
+            });
+            if (!matchesOr) return false;
+          }
           if (where.id) {
             if (typeof where.id === 'string' && s.id !== where.id) return false;
             if (where.id.in && Array.isArray(where.id.in) && !where.id.in.includes(s.id)) return false;
           }
           return true;
         });
+        return result.sort((a, b) => ((a as any).orderIndex || 0) - ((b as any).orderIndex || 0));
       },
     },
 
@@ -585,7 +601,13 @@ export function createMockPrisma() {
         const where = args?.where || {};
         return sectors.find((s) => s.id === where.id || s.code === where.code) || null;
       },
-      findMany: async () => sectors,
+      findMany: async (args?: any) => {
+        const where = args?.where || {};
+        if (where.organizationId) {
+          return sectors.filter((sec) => sec.organizationId === where.organizationId);
+        }
+        return sectors;
+      },
     },
 
     refreshToken: {

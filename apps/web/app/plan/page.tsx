@@ -259,6 +259,39 @@ export default function StagePlanPage() {
   // أمين الخدمة (Stage Secretary) and others cannot edit or add anything in اجتماع الخدام.
   const canManageMeetings = isGeneralSecretary;
 
+  // Dynamic stages list (from API or user.scopes)
+  const [stagesList, setStagesList] = useState<any[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchStages = async () => {
+      try {
+        const res = await api.get('/api/v1/stages');
+        if (res.data?.success && Array.isArray(res.data.stages)) {
+          if (isMounted) setStagesList(res.data.stages);
+        }
+      } catch {
+        // Fallback silently to user.scopes.stages
+      }
+    };
+    fetchStages();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const availableStages = useMemo(() => {
+    return stagesList.length > 0 ? stagesList : (user?.scopes?.stages || []);
+  }, [stagesList, user]);
+
+  const [selectedStageId, setSelectedStageId] = useState<string>('');
+
+  useEffect(() => {
+    if (availableStages.length > 0 && !selectedStageId) {
+      setSelectedStageId(availableStages[0].id);
+    }
+  }, [availableStages, selectedStageId]);
+
   // Fetch logged-in servant's preparations to track what has already been submitted
   const fetchUserPreparations = async () => {
     try {
@@ -282,13 +315,18 @@ export default function StagePlanPage() {
   };
 
   // Fetch Year Plans
-  const fetchPlans = async () => {
+  const fetchPlans = async (targetStageId?: string) => {
     try {
       setLoading(true);
-      const res = await api.get('/api/v1/year-plans');
+      const stageToQuery = targetStageId !== undefined ? targetStageId : selectedStageId;
+      const stageParam = stageToQuery ? `?stageId=${stageToQuery}` : '';
+      const res = await api.get(`/api/v1/year-plans${stageParam}`);
       if (res.data?.success && Array.isArray(res.data.data) && res.data.data.length > 0) {
         setPlans(res.data.data);
-        await loadPlanDetail(res.data.data[0].id);
+        const matched = stageToQuery
+          ? res.data.data.find((p: any) => p.stageId === stageToQuery || p.stage?.id === stageToQuery) || res.data.data[0]
+          : res.data.data[0];
+        await loadPlanDetail(matched.id);
       } else {
         setPlans([]);
         setSelectedPlan(null);
@@ -313,9 +351,12 @@ export default function StagePlanPage() {
   };
 
   useEffect(() => {
-    fetchPlans();
-    fetchUserPreparations();
-  }, []);
+    if (selectedStageId) {
+      fetchPlans(selectedStageId);
+    } else {
+      fetchPlans();
+    }
+  }, [selectedStageId]);
 
   // Helper to safely parse and sanitize any event data so raw JSON metadata is never shown
   const sanitizeEvent = (evt: CalendarEvent): CalendarEvent => {
@@ -610,17 +651,19 @@ export default function StagePlanPage() {
     if (!planId) {
       try {
         setCreateEventLoading(true);
-        const stageId = user?.scopes?.stages?.[0]?.id;
+        const currentStage = availableStages.find((s) => s.id === selectedStageId) || availableStages[0];
+        const targetStageId = currentStage?.id;
+        const stageName = currentStage?.name || 'المرحلة';
         const createPlanRes = await api.post('/api/v1/year-plans', {
-          title: `خطة خدمة ${user?.scopes?.stages?.[0]?.name || 'المرحلة'} لعام 2026 / 2027`,
+          title: `خطة خدمة ${stageName} لعام 2026 / 2027`,
           academicYear: '2026-2027',
           scopeType: 'STAGE',
-          stageId,
+          stageId: targetStageId,
           isPublished: true,
         });
-        if (createPlanRes.data?.success) {
+        if (createPlanRes.data?.success && createPlanRes.data.data) {
           planId = createPlanRes.data.data.id;
-          await fetchPlans();
+          await fetchPlans(targetStageId);
         }
       } catch (err: any) {
         console.error('Failed to auto-create plan:', err);
@@ -890,9 +933,39 @@ export default function StagePlanPage() {
             </div>
 
             <Badge variant="accent">
-              {user?.scopes.stages[0]?.name || 'إعدادي بنين'}
+              {availableStages.find((s) => s.id === selectedStageId)?.name || availableStages[0]?.name || 'إعدادي بنين'}
             </Badge>
           </header>
+
+          {/* Stage Selector Chips Bar for multi-stage oversight (الأمين العام / أمين القطاع) */}
+          {availableStages.length > 1 && (
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar select-none">
+              <span className="text-caption font-bold text-text-secondary whitespace-nowrap ml-1">
+                المرحلة:
+              </span>
+              {availableStages.map((stage) => {
+                const isSelected = selectedStageId === stage.id;
+                return (
+                  <Chip
+                    key={stage.id}
+                    selected={isSelected}
+                    onClick={() => {
+                      setSelectedStageId(stage.id);
+                      fetchPlans(stage.id);
+                    }}
+                    className={cn(
+                      'shrink-0 text-caption transition-all',
+                      isSelected
+                        ? 'bg-brand-primary text-text-inverse shadow-sm'
+                        : 'bg-bg-surface border border-border-default text-text-secondary hover:border-text-secondary hover:text-text-primary'
+                    )}
+                  >
+                    {stage.name}
+                  </Chip>
+                );
+              })}
+            </div>
+          )}
 
           {/* Action Feedback Message */}
           {actionMessage && (

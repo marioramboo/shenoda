@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
@@ -98,11 +98,36 @@ export default function AnnouncementsPage() {
     }
   }, [user]);
 
+  // Dynamic stages list (from API or user.scopes)
+  const [stagesList, setStagesList] = useState<any[]>([]);
+
   useEffect(() => {
-    if (user?.scopes?.stages?.[0]?.id) {
-      setAnnStageId(user.scopes.stages[0].id);
+    let isMounted = true;
+    const fetchStages = async () => {
+      try {
+        const res = await api.get('/api/v1/stages');
+        if (res.data?.success && Array.isArray(res.data.stages)) {
+          if (isMounted) setStagesList(res.data.stages);
+        }
+      } catch {
+        // Fallback silently to user.scopes.stages
+      }
+    };
+    fetchStages();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const availableStages = useMemo(() => {
+    return stagesList.length > 0 ? stagesList : (user?.scopes?.stages || []);
+  }, [stagesList, user]);
+
+  useEffect(() => {
+    if (availableStages.length > 0 && !annStageId) {
+      setAnnStageId(availableStages[0].id);
     }
-  }, [user]);
+  }, [availableStages, annStageId]);
 
   const fetchAnnouncements = async () => {
     setIsLoadingAnnouncements(true);
@@ -587,9 +612,25 @@ export default function AnnouncementsPage() {
                         className="text-brand-primary focus:ring-brand-primary"
                       />
                       <span className="text-body-small font-medium text-text-primary">
-                        كل خدام مرحلتي فقط ({user?.scopes?.stages?.[0]?.name || 'المرحلة المسندة'})
+                        خدام مرحلة محددة {availableStages.length === 1 && `(${availableStages[0].name})`}
                       </span>
                     </label>
+
+                    {annScope === TargetScopeLevel.STAGE_ALL && availableStages.length > 1 && (
+                      <div className="mr-6 my-1">
+                        <select
+                          value={annStageId || availableStages[0]?.id}
+                          onChange={(e) => setAnnStageId(e.target.value)}
+                          className="w-full px-2.5 py-1.5 text-body-small rounded-input border border-border-default bg-bg-surface text-text-primary focus:border-brand-primary focus:outline-none"
+                        >
+                          {availableStages.map((st) => (
+                            <option key={st.id} value={st.id}>
+                              {st.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
 
                     <label
                       className={`flex items-center gap-2.5 ${

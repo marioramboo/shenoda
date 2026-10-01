@@ -41,6 +41,10 @@ export default function MembersListPage() {
   const [selectedStageId, setSelectedStageId] = useState<string>('');
   const [assignedOnly, setAssignedOnly] = useState<boolean>(false);
 
+  // Dynamic stages list (from API or user.scopes)
+  const [stagesList, setStagesList] = useState<any[]>([]);
+  const [bulkStageId, setBulkStageId] = useState('');
+
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
@@ -92,19 +96,45 @@ export default function MembersListPage() {
     fetchMembers();
   }, [fetchMembers]);
 
-  // Set default stage when user loads
+  // Load reachable stages from API (fallback to user.scopes.stages)
   useEffect(() => {
-    if (user?.scopes.stages && user.scopes.stages.length > 0 && !selectedStageId) {
-      setSelectedStageId(user.scopes.stages[0].id);
-      setNewStageId(user.scopes.stages[0].id);
+    let isMounted = true;
+    const fetchStages = async () => {
+      try {
+        const res = await api.get('/api/v1/stages');
+        if (res.data?.success && Array.isArray(res.data.stages)) {
+          if (isMounted) setStagesList(res.data.stages);
+        }
+      } catch {
+        // Fallback silently to user.scopes.stages
+      }
+    };
+    fetchStages();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const availableStages = stagesList.length > 0 ? stagesList : (user?.scopes?.stages || []);
+
+  // Set default stage when user or stages load
+  useEffect(() => {
+    if (availableStages.length > 0) {
+      if (!newStageId) setNewStageId(availableStages[0].id);
+      if (!bulkStageId) setBulkStageId(availableStages[0].id);
+
+      // Single-stage users (Level <= 3) default to their assigned stage if not set
+      if (user?.role?.level && user.role.level <= 3 && !selectedStageId) {
+        setSelectedStageId(availableStages[0].id);
+      }
     }
-  }, [user, selectedStageId]);
+  }, [availableStages, user, selectedStageId, newStageId, bulkStageId]);
 
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
     setAddError(null);
 
-    const targetStage = newStageId || selectedStageId || user?.scopes.stages[0]?.id;
+    const targetStage = newStageId || selectedStageId || availableStages[0]?.id;
     if (!targetStage) {
       setAddError('يرجى اختيار المرحلة للمخدوم');
       return;
@@ -145,7 +175,7 @@ export default function MembersListPage() {
     setBulkError(null);
     setBulkSuccess(null);
 
-    const targetStage = selectedStageId || user?.scopes.stages[0]?.id;
+    const targetStage = bulkStageId || selectedStageId || availableStages[0]?.id;
     if (!targetStage) {
       setBulkError('يرجى اختيار المرحلة المستهدفة للاستيراد');
       return;
@@ -227,16 +257,16 @@ export default function MembersListPage() {
             />
           </div>
 
-          {/* Stage Filter Chips Bar */}
-          {user?.scopes.stages && user.scopes.stages.length > 0 && (
-            <div className="flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-none">
+          {/* Stage Filter Chips Bar (FR-3.4 / Multi-stage oversight for General & Sector Secretaries) */}
+          {availableStages.length > 0 && (
+            <div className="flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-none select-none">
               <Chip
                 selected={!selectedStageId}
                 onClick={() => setSelectedStageId('')}
               >
                 الكل
               </Chip>
-              {user.scopes.stages.map((stg) => (
+              {availableStages.map((stg) => (
                 <Chip
                   key={stg.id}
                   selected={selectedStageId === stg.id}
@@ -404,11 +434,11 @@ export default function MembersListPage() {
                       المرحلة
                     </label>
                     <select
-                      value={newStageId}
+                      value={newStageId || selectedStageId || availableStages[0]?.id || ''}
                       onChange={(e) => setNewStageId(e.target.value)}
                       className="w-full h-[46px] bg-bg-surface text-text-primary font-cairo text-body-default rounded-input border border-border-default px-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
                     >
-                      {user?.scopes.stages.map((stg) => (
+                      {availableStages.map((stg) => (
                         <option key={stg.id} value={stg.id}>
                           {stg.name}
                         </option>
@@ -503,6 +533,24 @@ export default function MembersListPage() {
                 <form onSubmit={handleBulkImport} className="flex flex-col gap-3.5">
                   <div className="p-3 bg-bg-muted/60 rounded-lg text-caption text-text-secondary leading-relaxed">
                     <strong>الترويسات المقبولة:</strong> الاسم بالكامل، تاريخ الميلاد (YYYY-MM-DD)، العنوان، رقم الهاتف، اسم الأب، اسم الأم، المدرسة.
+                  </div>
+
+                  {/* Stage Selection for Bulk Import */}
+                  <div className="flex flex-col gap-1.5 text-right">
+                    <label className="text-body-small font-medium text-text-primary">
+                      المرحلة المستهدفة للاستيراد
+                    </label>
+                    <select
+                      value={bulkStageId || selectedStageId || availableStages[0]?.id || ''}
+                      onChange={(e) => setBulkStageId(e.target.value)}
+                      className="w-full h-[46px] bg-bg-surface text-text-primary font-cairo text-body-default rounded-input border border-border-default px-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                    >
+                      {availableStages.map((stg) => (
+                        <option key={stg.id} value={stg.id}>
+                          {stg.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div className="flex flex-col gap-1.5 text-right">

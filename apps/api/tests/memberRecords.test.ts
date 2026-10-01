@@ -148,6 +148,14 @@ describe('Phase 3 — Servant & Member Records Comprehensive Test Suite', () => 
       },
     });
 
+    // Seed Scope Assignment for Sector Secretary (Sector Youth)
+    mockDb._data.scopeAssignments.push({
+      id: 'sa-sectorsec',
+      userId: 'user-sectorsec',
+      sectorId: 'sector-youth',
+      stageId: null,
+    });
+
     // Seed served members
     // Member X in prep-boys assigned to servant A
     const memberX = await mockDb.servedMember.create({
@@ -589,5 +597,91 @@ describe('Phase 3 — Servant & Member Records Comprehensive Test Suite', () => 
     const imported = mockDb._data.servedMembers.filter((m) => m.fullName === 'مينا رأفت نعيم');
     assert.strictEqual(imported.length, 1);
     assert.strictEqual(imported[0].fatherName, 'رأفت نعيم');
+  });
+
+  // =========================================================================
+  // SECTION 6: Hierarchical Stages & Multi-Stage Filtering (FR-3.4)
+  // =========================================================================
+
+  test('6.1 General Secretary queries GET /api/v1/stages -> receives all stages in organization', async () => {
+    const generalToken = makeToken({
+      userId: 'user-generalsec',
+      roleLevel: 5,
+      roleCode: 'GENERAL_SECRETARY',
+    });
+
+    const res = await fetch(`${baseUrl}/api/v1/stages`, {
+      headers: { Authorization: `Bearer ${generalToken}` },
+    });
+
+    assert.strictEqual(res.status, 200);
+    const body = await res.json();
+    assert.strictEqual(body.success, true);
+    assert.strictEqual(body.stages.length, 3);
+    const codes = body.stages.map((s: any) => s.code);
+    assert.ok(codes.includes('PREP_BOYS'));
+    assert.ok(codes.includes('PREP_GIRLS'));
+    assert.ok(codes.includes('PRIMARY_1_2'));
+  });
+
+  test('6.2 Sector Secretary queries GET /api/v1/stages -> receives only assigned sector stages', async () => {
+    const sectorToken = makeToken({
+      userId: 'user-sectorsec',
+      roleLevel: 4,
+      roleCode: 'SECTOR_SECRETARY',
+      sectorIds: ['sector-youth'],
+    });
+
+    const res = await fetch(`${baseUrl}/api/v1/stages`, {
+      headers: { Authorization: `Bearer ${sectorToken}` },
+    });
+
+    assert.strictEqual(res.status, 200);
+    const body = await res.json();
+    assert.strictEqual(body.success, true);
+    assert.strictEqual(body.stages.length, 2);
+    const codes = body.stages.map((s: any) => s.code);
+    assert.ok(codes.includes('PREP_BOYS'));
+    assert.ok(codes.includes('PREP_GIRLS'));
+    assert.ok(!codes.includes('PRIMARY_1_2'));
+  });
+
+  test('6.3 General Secretary filters members by stage -> 200 OK with filtered results', async () => {
+    const generalToken = makeToken({
+      userId: 'user-generalsec',
+      roleLevel: 5,
+      roleCode: 'GENERAL_SECRETARY',
+    });
+
+    // Query Prep Boys stage only
+    const res = await fetch(`${baseUrl}/api/v1/members?stageId=stage-prep-boys`, {
+      headers: { Authorization: `Bearer ${generalToken}` },
+    });
+
+    assert.strictEqual(res.status, 200);
+    const body = await res.json();
+    assert.strictEqual(body.success, true);
+    assert.ok(body.members.length >= 2);
+    assert.ok(body.members.every((m: any) => m.stageId === 'stage-prep-boys'));
+  });
+
+  test('6.4 Sector Secretary filters members by stage within sector -> 200 OK', async () => {
+    const sectorToken = makeToken({
+      userId: 'user-sectorsec',
+      roleLevel: 4,
+      roleCode: 'SECTOR_SECRETARY',
+      stageIds: ['stage-prep-boys', 'stage-prep-girls'],
+      sectorIds: ['sector-youth'],
+    });
+
+    const res = await fetch(`${baseUrl}/api/v1/members?stageId=stage-prep-girls`, {
+      headers: { Authorization: `Bearer ${sectorToken}` },
+    });
+
+    assert.strictEqual(res.status, 200);
+    const body = await res.json();
+    assert.strictEqual(body.success, true);
+    assert.strictEqual(body.members.length, 1);
+    assert.strictEqual(body.members[0].fullName, 'ساندي وجيه غالي');
   });
 });

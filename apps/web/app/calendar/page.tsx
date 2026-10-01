@@ -1,14 +1,16 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { Chip } from '@/components/ui/Chip';
 import { TabBar } from '@/components/layout/TabBar';
 import { EventAttendanceModal } from '@/components/calendar/EventAttendanceModal';
 import { api } from '@/lib/api';
+import { cn } from '@/lib/utils';
 import { getCopticDate } from '@shenoda/shared';
 import {
   Calendar as CalendarIcon,
@@ -64,6 +66,33 @@ export default function CalendarPage() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Dynamic stages list (from API or user.scopes)
+  const [stagesList, setStagesList] = useState<any[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchStages = async () => {
+      try {
+        const res = await api.get('/api/v1/stages');
+        if (res.data?.success && Array.isArray(res.data.stages)) {
+          if (isMounted) setStagesList(res.data.stages);
+        }
+      } catch {
+        // Fallback silently to user.scopes.stages
+      }
+    };
+    fetchStages();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const availableStages = useMemo(() => {
+    return stagesList.length > 0 ? stagesList : (user?.scopes?.stages || []);
+  }, [stagesList, user]);
+
+  const [selectedStageId, setSelectedStageId] = useState<string>('');
+
   // Attendance confirmation modal
   const [activeAttendanceEvent, setActiveAttendanceEvent] = useState<CalendarEvent | null>(null);
 
@@ -86,8 +115,9 @@ export default function CalendarPage() {
       setLoading(true);
       const start = new Date(year, month, 1).toISOString();
       const end = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
+      const stageParam = selectedStageId ? `&stageId=${selectedStageId}` : '';
 
-      const res = await api.get(`/api/v1/calendar?startDate=${start}&endDate=${end}`);
+      const res = await api.get(`/api/v1/calendar?startDate=${start}&endDate=${end}${stageParam}`);
       if (res.data?.success) {
         setEvents(res.data.data);
       }
@@ -100,7 +130,7 @@ export default function CalendarPage() {
 
   useEffect(() => {
     fetchEvents();
-  }, [currentDate]);
+  }, [currentDate, selectedStageId]);
 
   const handlePrevMonth = () => {
     setCurrentDate(new Date(year, month - 1, 1));
@@ -173,6 +203,45 @@ export default function CalendarPage() {
               تدبير السنة
             </Button>
           </header>
+
+          {/* Stage Selector Chips Bar */}
+          {availableStages.length > 1 && (
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar select-none">
+              <span className="text-caption font-bold text-text-secondary whitespace-nowrap ml-1">
+                المرحلة:
+              </span>
+              <Chip
+                selected={!selectedStageId}
+                onClick={() => setSelectedStageId('')}
+                className={cn(
+                  'shrink-0 text-caption transition-all',
+                  !selectedStageId
+                    ? 'bg-brand-primary text-text-inverse shadow-sm'
+                    : 'bg-bg-surface border border-border-default text-text-secondary hover:border-text-secondary hover:text-text-primary'
+                )}
+              >
+                الكل
+              </Chip>
+              {availableStages.map((stage) => {
+                const isSelected = selectedStageId === stage.id;
+                return (
+                  <Chip
+                    key={stage.id}
+                    selected={isSelected}
+                    onClick={() => setSelectedStageId(stage.id)}
+                    className={cn(
+                      'shrink-0 text-caption transition-all',
+                      isSelected
+                        ? 'bg-brand-primary text-text-inverse shadow-sm'
+                        : 'bg-bg-surface border border-border-default text-text-secondary hover:border-text-secondary hover:text-text-primary'
+                    )}
+                  >
+                    {stage.name}
+                  </Chip>
+                );
+              })}
+            </div>
+          )}
 
           {/* Month Navigator Header */}
           <div className="bg-bg-surface border border-border-default rounded-card p-4 shadow-card flex items-center justify-between">

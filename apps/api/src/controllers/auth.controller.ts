@@ -13,6 +13,7 @@ import {
   clearLoginRateLimit,
 } from '../middleware/rateLimiter';
 import { getPhoneVariants } from '@shenoda/shared';
+import { getUserReachableScopes } from '../services/scopeResolver.service';
 
 // Regex for Egyptian mobile phone (allowing optional +2 prefix)
 const EGYPTIAN_PHONE_REGEX = /^(?:\+20|0)?1[0125][0-9]{8}$/;
@@ -210,12 +211,7 @@ export class AuthController {
     clearLoginRateLimit(identifier);
 
     // 6. Collect user scopes
-    const stageIds = user.scopeAssignments
-      .filter((a) => a.stageId)
-      .map((a) => a.stageId as string);
-    const sectorIds = user.scopeAssignments
-      .filter((a) => a.sectorId)
-      .map((a) => a.sectorId as string);
+    const { stages, sectors, stageIds, sectorIds } = await getUserReachableScopes(user);
 
     // 7. Issue Access Token & Refresh Token
     const accessToken = TokenService.generateAccessToken({
@@ -234,14 +230,6 @@ export class AuthController {
 
     // 8. Set HttpOnly Cookie
     res.cookie(REFRESH_COOKIE_NAME, refreshToken, getRefreshCookieOptions());
-
-    // 9. Format response
-    const stages = user.scopeAssignments
-      .filter((a) => a.stage)
-      .map((a) => ({ id: a.stage!.id, name: a.stage!.name, code: a.stage!.code }));
-    const sectors = user.scopeAssignments
-      .filter((a) => a.sector)
-      .map((a) => ({ id: a.sector!.id, name: a.sector!.name, code: a.sector!.code }));
 
     return res.status(200).json({
       success: true,
@@ -329,12 +317,7 @@ export class AuthController {
         });
       }
 
-      const stageIds = user.scopeAssignments
-        .filter((a) => a.stageId)
-        .map((a) => a.stageId as string);
-      const sectorIds = user.scopeAssignments
-        .filter((a) => a.sectorId)
-        .map((a) => a.sectorId as string);
+      const { stages, sectors, stageIds, sectorIds } = await getUserReachableScopes(user);
 
       const accessToken = TokenService.generateAccessToken({
         userId: user.id,
@@ -373,12 +356,8 @@ export class AuthController {
             level: user.role.level,
           },
           scopes: {
-            stages: user.scopeAssignments
-              .filter((a) => a.stage)
-              .map((a) => ({ id: a.stage!.id, name: a.stage!.name, code: a.stage!.code })),
-            sectors: user.scopeAssignments
-              .filter((a) => a.sector)
-              .map((a) => ({ id: a.sector!.id, name: a.sector!.name, code: a.sector!.code })),
+            stages,
+            sectors,
           },
         },
       });
@@ -573,36 +552,34 @@ export class AuthController {
       });
     }
 
-    return res.status(200).json({
-      success: true,
-      user: {
-        id: user.id,
-        fullName: user.fullName,
-        phoneNumber: user.phoneNumber,
-        email: user.email,
-        status: user.status,
-        fatherConfessor: user.fatherConfessor,
-        dateOfBirth: user.dateOfBirth,
-        address: user.address,
-        maritalStatus: user.maritalStatus,
-        spouseName: user.spouseName,
-        educationOrCareer: user.educationOrCareer,
-        role: {
-          id: user.role.id,
-          code: user.role.code,
-          name: user.role.name,
-          level: user.role.level,
-        },
-        scopes: {
-          stages: user.scopeAssignments
-            .filter((a) => a.stage)
-            .map((a) => ({ id: a.stage!.id, name: a.stage!.name, code: a.stage!.code })),
-          sectors: user.scopeAssignments
-            .filter((a) => a.sector)
-            .map((a) => ({ id: a.sector!.id, name: a.sector!.name, code: a.sector!.code })),
-        },
-      },
-    });
+        const { stages, sectors } = await getUserReachableScopes(user);
+
+        return res.status(200).json({
+          success: true,
+          user: {
+            id: user.id,
+            fullName: user.fullName,
+            phoneNumber: user.phoneNumber,
+            email: user.email,
+            status: user.status,
+            fatherConfessor: user.fatherConfessor,
+            dateOfBirth: user.dateOfBirth,
+            address: user.address,
+            maritalStatus: user.maritalStatus,
+            spouseName: user.spouseName,
+            educationOrCareer: user.educationOrCareer,
+            role: {
+              id: user.role.id,
+              code: user.role.code,
+              name: user.role.name,
+              level: user.role.level,
+            },
+            scopes: {
+              stages,
+              sectors,
+            },
+          },
+        });
   }
 
   /**
@@ -750,12 +727,7 @@ export class AuthController {
       },
     });
 
-    const stages = updatedUser.scopeAssignments
-      .filter((a) => a.stage)
-      .map((a) => ({ id: a.stage!.id, name: a.stage!.name, code: a.stage!.code }));
-    const sectors = updatedUser.scopeAssignments
-      .filter((a) => a.sector)
-      .map((a) => ({ id: a.sector!.id, name: a.sector!.name, code: a.sector!.code }));
+    const { stages, sectors } = await getUserReachableScopes(updatedUser);
 
     return res.status(200).json({
       success: true,

@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { Chip } from '@/components/ui/Chip';
 import { TabBar } from '@/components/layout/TabBar';
 import { api } from '@/lib/api';
 import {
@@ -66,6 +67,29 @@ export default function PreparationsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Dynamic stages list (from API or user.scopes)
+  const [stagesList, setStagesList] = useState<any[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchStages = async () => {
+      try {
+        const res = await api.get('/api/v1/stages');
+        if (res.data?.success && Array.isArray(res.data.stages)) {
+          if (isMounted) setStagesList(res.data.stages);
+        }
+      } catch {
+        // Fallback silently to user.scopes.stages
+      }
+    };
+    fetchStages();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const availableStages = stagesList.length > 0 ? stagesList : (user?.scopes?.stages || []);
+
   // Create Modal State
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [lessonDate, setLessonDate] = useState(() => {
@@ -73,7 +97,8 @@ export default function PreparationsPage() {
     nextFriday.setDate(nextFriday.getDate() + ((5 - nextFriday.getDay() + 7) % 7));
     return nextFriday.toISOString().split('T')[0];
   });
-  const [stageId, setStageId] = useState(user?.scopes.stages[0]?.id || '');
+  const [stageId, setStageId] = useState<string>('');
+  const [createStageId, setCreateStageId] = useState<string>('');
   const [title, setTitle] = useState('');
   const [scriptureRef, setScriptureRef] = useState('');
   const [mainObjective, setMainObjective] = useState('');
@@ -81,6 +106,17 @@ export default function PreparationsPage() {
   const [status, setStatus] = useState<PrepStatus>(PrepStatus.SUBMITTED);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // Sync stageId defaults
+  useEffect(() => {
+    if (availableStages.length > 0) {
+      if (!createStageId) setCreateStageId(availableStages[0].id);
+      // For level <= 3 servants, default stageId to their assigned stage
+      if (user?.role?.level && user.role.level <= 3 && !stageId) {
+        setStageId(availableStages[0].id);
+      }
+    }
+  }, [availableStages, stageId, createStageId, user]);
 
   // Review Modal State (For supervisors)
   const [reviewModalPrep, setReviewModalPrep] = useState<PrepItem | null>(null);
@@ -125,7 +161,8 @@ export default function PreparationsPage() {
     e.preventDefault();
     setSubmitError(null);
 
-    if (!title.trim() || !content.trim() || !stageId) {
+    const targetStage = createStageId || stageId || availableStages[0]?.id;
+    if (!title.trim() || !content.trim() || !targetStage) {
       setSubmitError('يرجى ملء جميع الحقول الإلزامية');
       return;
     }
@@ -133,7 +170,7 @@ export default function PreparationsPage() {
     try {
       setIsSubmitting(true);
       const res = await api.post('/api/v1/preparations', {
-        stageId,
+        stageId: targetStage,
         lessonDate,
         title: title.trim(),
         scriptureRef: scriptureRef.trim() || undefined,
@@ -268,6 +305,27 @@ export default function PreparationsPage() {
 
         {/* Main Content Area */}
         <main className="max-w-md mx-auto px-4 pt-3 space-y-3">
+          {/* Stage Selector Chips Bar for Supervisors (FR-5.2 / Multi-stage oversight) */}
+          {availableStages.length > 0 && isSupervisor && (
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar select-none">
+              <Chip
+                selected={!stageId}
+                onClick={() => setStageId('')}
+              >
+                الكل
+              </Chip>
+              {availableStages.map((stg) => (
+                <Chip
+                  key={stg.id}
+                  selected={stageId === stg.id}
+                  onClick={() => setStageId(stg.id)}
+                >
+                  {stg.name}
+                </Chip>
+              ))}
+            </div>
+          )}
+
           {/* Search bar */}
           <div className="relative">
             <Search className="w-4 h-4 text-text-tertiary absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -450,6 +508,24 @@ export default function PreparationsPage() {
                     {submitError}
                   </div>
                 )}
+
+                <div>
+                  <label className="text-caption font-semibold text-text-secondary block mb-1">
+                    المرحلة الدراسية:
+                  </label>
+                  <select
+                    value={createStageId || stageId || availableStages[0]?.id || ''}
+                    onChange={(e) => setCreateStageId(e.target.value)}
+                    className="w-full bg-bg-muted border border-border-default rounded-card px-3 py-2 text-body-small text-text-primary focus:outline-none focus:border-brand-primary font-cairo"
+                    required
+                  >
+                    {availableStages.map((stg) => (
+                      <option key={stg.id} value={stg.id}>
+                        {stg.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
                 <div>
                   <label className="text-caption font-semibold text-text-secondary block mb-1">

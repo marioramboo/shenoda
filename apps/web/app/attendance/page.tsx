@@ -152,16 +152,39 @@ export default function AttendancePage() {
     ServantSessionType.SERVICE_ATTENDANCE
   );
 
+  // Dynamic stages list (from API or user.scopes)
+  const [stagesList, setStagesList] = useState<any[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchStages = async () => {
+      try {
+        const res = await api.get('/api/v1/stages');
+        if (res.data?.success && Array.isArray(res.data.stages)) {
+          if (isMounted) setStagesList(res.data.stages);
+        }
+      } catch {
+        // Fallback silently to user.scopes.stages
+      }
+    };
+    fetchStages();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const availableStages = stagesList.length > 0 ? stagesList : (user?.scopes?.stages || []);
+
   // Stage selection (from user scopes)
-  const primaryStageId = user?.scopes?.stages?.[0]?.id || '';
+  const primaryStageId = availableStages[0]?.id || user?.scopes?.stages?.[0]?.id || '';
   const [selectedStageId, setSelectedStageId] = useState<string>(primaryStageId);
 
-  // Sync selectedStageId when user profile loads asynchronously
+  // Sync selectedStageId when stages load
   useEffect(() => {
-    if (user?.scopes?.stages && user.scopes.stages.length > 0 && !selectedStageId) {
-      setSelectedStageId(user.scopes.stages[0].id);
+    if (availableStages.length > 0 && !selectedStageId) {
+      setSelectedStageId(availableStages[0].id);
     }
-  }, [user, selectedStageId]);
+  }, [availableStages, selectedStageId]);
 
   // Members list & state
   const [members, setMembers] = useState<MemberItem[]>([]);
@@ -731,7 +754,7 @@ export default function AttendancePage() {
                   تسجيل الحضور والمتابعة
                 </h1>
                 <p className="text-caption text-text-secondary mt-0.5">
-                  {user?.scopes.stages[0]?.name || 'المرحلة الدراسية'}
+                  {availableStages.find((s) => s.id === selectedStageId)?.name || user?.scopes.stages[0]?.name || 'المرحلة الدراسية'}
                 </p>
               </div>
 
@@ -808,6 +831,24 @@ export default function AttendancePage() {
                 >
                   <ChevronLeft className="w-5 h-5" />
                 </button>
+              </div>
+            )}
+
+            {/* Stage Selector Chips Bar for multi-stage roles (General & Sector Secretaries) */}
+            {availableStages.length > 1 && (
+              <div className="mt-3 flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar select-none">
+                {availableStages.map((stg) => (
+                  <Chip
+                    key={stg.id}
+                    selected={selectedStageId === stg.id}
+                    onClick={() => {
+                      setSelectedStageId(stg.id);
+                      setSelectedServantId(null);
+                    }}
+                  >
+                    {stg.name}
+                  </Chip>
+                ))}
               </div>
             )}
           </div>

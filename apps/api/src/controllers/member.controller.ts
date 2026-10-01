@@ -55,6 +55,15 @@ export class MemberController {
     } else if (user.roleLevel === 4) {
       // Sector Secretary: stages within sector
       if (stageId) {
+        if (user.stageIds && user.stageIds.length > 0 && !user.stageIds.includes(stageId as string)) {
+          return res.status(403).json({
+            success: false,
+            error: {
+              code: 'ACCESS_DENIED_SCOPE',
+              message: 'المرحلة المطلوبة خارج نطاق إشراف قطاعك',
+            },
+          });
+        }
         permittedStageIds = [stageId as string];
       } else {
         permittedStageIds = user.stageIds || [];

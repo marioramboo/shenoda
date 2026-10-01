@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
@@ -100,6 +100,37 @@ export default function DashboardPage() {
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [createSuccess, setCreateSuccess] = useState<string | null>(null);
+
+  // Dynamic stages list (from API or user.scopes)
+  const [stagesList, setStagesList] = useState<any[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchStages = async () => {
+      try {
+        const res = await api.get('/api/v1/stages');
+        if (res.data?.success && Array.isArray(res.data.stages)) {
+          if (isMounted) setStagesList(res.data.stages);
+        }
+      } catch {
+        // Fallback silently to user.scopes.stages
+      }
+    };
+    fetchStages();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const availableStages = useMemo(() => {
+    return stagesList.length > 0 ? stagesList : (user?.scopes?.stages || []);
+  }, [stagesList, user]);
+
+  useEffect(() => {
+    if (availableStages.length > 0 && !stageId) {
+      setStageId(availableStages[0].id);
+    }
+  }, [availableStages, stageId]);
 
   // Coptic Date
   const copticDate = getCopticDate();
@@ -672,30 +703,30 @@ export default function DashboardPage() {
                     onChange={(e) => setEmail(e.target.value)}
                   />
 
-                  {user?.scopes?.stages && user.scopes.stages.length > 1 ? (
+                  {availableStages.length > 1 ? (
                     <div className="flex flex-col gap-1.5 text-right">
                       <label className="text-caption font-semibold text-text-primary">
                         المرحلة المسند إليها الخادم *
                       </label>
                       <select
-                        value={stageId || user.scopes.stages[0]?.id}
+                        value={stageId || availableStages[0]?.id}
                         onChange={(e) => setStageId(e.target.value)}
                         className="h-11 px-3 rounded-button border border-border-default bg-bg-surface text-body-default text-text-primary focus:outline-none focus:border-brand-primary"
                       >
-                        {user.scopes.stages.map((st) => (
+                        {availableStages.map((st) => (
                           <option key={st.id} value={st.id}>
                             {st.name}
                           </option>
                         ))}
                       </select>
                     </div>
-                  ) : user?.scopes?.stages && user.scopes.stages.length === 1 ? (
+                  ) : availableStages.length === 1 ? (
                     <div className="flex flex-col gap-1 text-right">
                       <label className="text-caption font-semibold text-text-secondary">
                         المرحلة المسندة
                       </label>
                       <div className="h-11 px-3 rounded-button border border-border-default bg-bg-muted flex items-center text-body-default text-text-primary">
-                        {user.scopes.stages[0].name}
+                        {availableStages[0].name}
                       </div>
                     </div>
                   ) : null}
