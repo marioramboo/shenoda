@@ -13,6 +13,9 @@ accountRouter.use(requireAuth);
 // Roles available for assignment
 accountRouter.get('/roles', AccountController.listRoles);
 
+// Servant directory query & search (organization-wide for General Secretary, scoped for supervisors)
+accountRouter.get('/servants', AccountController.listServants);
+
 // General Secretary exclusive servant account creation (FR-1.2, Assumption A7)
 accountRouter.post(
   '/create',

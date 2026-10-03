@@ -735,4 +735,53 @@ describe('Phase 2 — Authentication & Account Management Comprehensive Test Sui
     const historyBody = await historyRes.json();
     assert.ok(historyBody.logs.length >= 1);
   });
+
+  test('4.4 General Secretary CANNOT suspend own account (Self-Suspension Guard) -> 400 Bad Request', async () => {
+    const genSecToken = TokenService.generateAccessToken({
+      userId: 'user-gen-sec',
+      roleLevel: 5,
+      roleCode: 'GENERAL_SECRETARY',
+      orgId: 'org-1',
+      stageIds: [],
+      sectorIds: [],
+    });
+
+    const res = await fetch(`${baseUrl}/api/v1/accounts/user-gen-sec/status`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${genSecToken}`,
+      },
+      body: JSON.stringify({
+        action: 'SUSPEND',
+        reason: 'محاولة إيقاف الحساب الشخصي بالخطأ',
+      }),
+    });
+
+    assert.strictEqual(res.status, 400);
+    const body = await res.json();
+    assert.strictEqual(body.error.code, 'ERR_CANNOT_SUSPEND_SELF');
+  });
+
+  test('4.5 General Secretary can list servants directory across church via GET /api/v1/accounts/servants', async () => {
+    const genSecToken = TokenService.generateAccessToken({
+      userId: 'user-gen-sec',
+      roleLevel: 5,
+      roleCode: 'GENERAL_SECRETARY',
+      orgId: 'org-1',
+      stageIds: [],
+      sectorIds: [],
+    });
+
+    const res = await fetch(`${baseUrl}/api/v1/accounts/servants`, {
+      headers: { Authorization: `Bearer ${genSecToken}` },
+    });
+
+    assert.strictEqual(res.status, 200);
+    const body = await res.json();
+    assert.strictEqual(body.success, true);
+    assert.ok(Array.isArray(body.servants));
+    assert.ok(body.servants.length > 0);
+    assert.ok(body.servants.some((s: any) => s.id === 'user-servant'));
+  });
 });

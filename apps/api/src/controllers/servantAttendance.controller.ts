@@ -330,17 +330,18 @@ export class ServantAttendanceController {
       },
     });
 
-    // Extract unique active users
+    // Extract unique users (include suspended servants if caller is General Secretary Level 5 or explicitly requested)
+    const includeInactive = req.query.includeInactive === 'true' || req.query.includeSuspended === 'true' || user.roleLevel >= 5;
     const userMap = new Map<string, any>();
     for (const sa of scopeAssignments) {
-      if (sa.user && sa.user.status === 'ACTIVE' && !userMap.has(sa.user.id)) {
+      if (sa.user && (includeInactive || sa.user.status === 'ACTIVE') && !userMap.has(sa.user.id)) {
         userMap.set(sa.user.id, sa.user);
       }
     }
 
     const servants = Array.from(userMap.values());
 
-    // Enrich each servant with attendance stats, profile, and evaluation data
+    // Enrich each servant with attendance stats, profile, status, and evaluation data
     const enrichedServants = await Promise.all(
       servants.map(async (s) => {
         const stats = await calculateServantAttendanceRate(s.id, 8);
@@ -351,6 +352,7 @@ export class ServantAttendanceController {
           fullName: s.fullName,
           phoneNumber: s.phoneNumber,
           email: s.email,
+          status: s.status,
           fatherConfessor: s.fatherConfessor || null,
           dateOfBirth: s.dateOfBirth ? (typeof s.dateOfBirth === 'string' ? s.dateOfBirth : s.dateOfBirth.toISOString().split('T')[0]) : null,
           address: s.address || null,

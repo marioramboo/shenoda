@@ -516,6 +516,24 @@ export function createMockPrisma() {
         if (where.id?.in) {
           result = result.filter((u) => where.id.in.includes(u.id));
         }
+        if (where.status) {
+          result = result.filter((u) => u.status === where.status);
+        }
+        if (where.OR && Array.isArray(where.OR)) {
+          result = result.filter((u) => {
+            return where.OR.some((cond: any) => {
+              if (cond.fullName?.contains && u.fullName.toLowerCase().includes(cond.fullName.contains.toLowerCase())) return true;
+              if (cond.phoneNumber?.contains && u.phoneNumber.includes(cond.phoneNumber.contains)) return true;
+              if (cond.email?.contains && u.email?.toLowerCase().includes(cond.email.contains.toLowerCase())) return true;
+              return false;
+            });
+          });
+        }
+        if (where.scopeAssignments?.some?.stageId) {
+          const targetStageId = where.scopeAssignments.some.stageId;
+          const assignedUserIds = scopeAssignments.filter((sa) => sa.stageId === targetStageId).map((sa) => sa.userId);
+          result = result.filter((u) => assignedUserIds.includes(u.id));
+        }
         return result.map((u) => attachRelationsToUser(u));
       },
 

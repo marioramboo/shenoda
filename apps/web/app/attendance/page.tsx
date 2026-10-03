@@ -44,8 +44,16 @@ import {
   Shield,
   Briefcase,
   Award,
+  ArrowLeftRight,
+  PowerOff,
+  RotateCcw,
+  History,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ServantTransferModal } from '@/components/servants/ServantTransferModal';
+import { ServantStopModal } from '@/components/servants/ServantStopModal';
+import { ServantStatusHistoryModal } from '@/components/servants/ServantStatusHistoryModal';
+import { ServantDirectoryModal } from '@/components/servants/ServantDirectoryModal';
 
 interface MemberItem {
   id: string;
@@ -91,6 +99,7 @@ export interface StageServantItem {
   fullName: string;
   phoneNumber?: string;
   email?: string;
+  status?: string;
   fatherConfessor?: string | null;
   dateOfBirth?: string | null;
   address?: string | null;
@@ -241,6 +250,14 @@ export default function AttendancePage() {
   const [isSavingServantAttendance, setIsSavingServantAttendance] = useState(false);
   const [servantFeedbackMessage, setServantFeedbackMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // General Secretary Exclusives (FR-1.4: Transfer & Suspend Servants)
+  const isGeneralSecretary = Boolean(user && (user.role.level >= 5 || user.role.code === 'GENERAL_SECRETARY'));
+  const [transferModalServant, setTransferModalServant] = useState<StageServantItem | null>(null);
+  const [stopModalServant, setStopModalServant] = useState<StageServantItem | null>(null);
+  const [historyModalServant, setHistoryModalServant] = useState<StageServantItem | null>(null);
+  const [isDirectoryModalOpen, setIsDirectoryModalOpen] = useState(false);
+  const [servantsStatusTab, setServantsStatusTab] = useState<'ALL' | 'ACTIVE' | 'SUSPENDED'>('ALL');
+
   // Edit Servant Modal (Level 3+ / أمين الخدمة)
   const [isEditServantModalOpen, setIsEditServantModalOpen] = useState(false);
   const [editingServant, setEditingServant] = useState<StageServantItem | null>(null);
@@ -383,7 +400,7 @@ export default function AttendancePage() {
     if (!selectedStageId) return;
     try {
       setIsLoadingServantsList(true);
-      const res = await api.get(`/api/v1/attendance/servants/list?stageId=${selectedStageId}`);
+      const res = await api.get(`/api/v1/attendance/servants/list?stageId=${selectedStageId}&includeSuspended=true`);
       if (res.data?.success && Array.isArray(res.data.data)) {
         const servantsData: StageServantItem[] = res.data.data;
         setStageServants(servantsData);
@@ -400,6 +417,16 @@ export default function AttendancePage() {
       setIsLoadingServantsList(false);
     }
   };
+
+  const displayedStageServants = useMemo(() => {
+    if (servantsStatusTab === 'ACTIVE') {
+      return stageServants.filter((s) => s.status !== 'SUSPENDED');
+    }
+    if (servantsStatusTab === 'SUSPENDED') {
+      return stageServants.filter((s) => s.status === 'SUSPENDED');
+    }
+    return stageServants;
+  }, [stageServants, servantsStatusTab]);
 
   useEffect(() => {
     if (activeView === 'servants' && isSupervisor) {
@@ -1156,25 +1183,81 @@ export default function AttendancePage() {
                         خدام المرحلة ({stageServants.length})
                       </h3>
                     </div>
-                    <span className="text-caption text-text-secondary">
-                      اختر خادماً لعرض سجله أو تسجيل حضوره أو تعديل بياناته
-                    </span>
+
+                    <div className="flex items-center gap-2">
+                      {isGeneralSecretary && (
+                        <>
+                          {/* Filter Tabs for General Secretary */}
+                          <div className="flex items-center gap-1 bg-bg-muted p-0.5 rounded text-[11px] border border-border-default">
+                            <button
+                              type="button"
+                              onClick={() => setServantsStatusTab('ALL')}
+                              className={cn(
+                                'px-2 py-0.5 rounded font-semibold transition-all',
+                                servantsStatusTab === 'ALL'
+                                  ? 'bg-bg-surface text-brand-primary shadow-xs'
+                                  : 'text-text-secondary hover:text-text-primary'
+                              )}
+                            >
+                              الكل
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setServantsStatusTab('ACTIVE')}
+                              className={cn(
+                                'px-2 py-0.5 rounded font-semibold transition-all',
+                                servantsStatusTab === 'ACTIVE'
+                                  ? 'bg-bg-surface text-status-success shadow-xs'
+                                  : 'text-text-secondary hover:text-text-primary'
+                              )}
+                            >
+                              النشطون
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setServantsStatusTab('SUSPENDED')}
+                              className={cn(
+                                'px-2 py-0.5 rounded font-semibold transition-all',
+                                servantsStatusTab === 'SUSPENDED'
+                                  ? 'bg-bg-surface text-status-danger shadow-xs'
+                                  : 'text-text-secondary hover:text-text-primary'
+                              )}
+                            >
+                              الموقوفون
+                            </button>
+                          </div>
+
+                          {/* Church-wide Servant Directory Button */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setIsDirectoryModalOpen(true)}
+                            className="h-8 px-2.5 text-caption font-semibold gap-1.5 text-brand-primary border-brand-primary/30 hover:bg-brand-primary-soft"
+                            title="دليل وبحث كافة خدام الكنيسة"
+                          >
+                            <Users className="w-3.5 h-3.5" />
+                            <span>دليل كل الخدام</span>
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </div>
 
                   {isLoadingServantsList ? (
                     <div className="text-center py-4 text-caption text-text-secondary">
                       جارٍ تحميل قائمة خدام المرحلة...
                     </div>
-                  ) : stageServants.length === 0 ? (
+                  ) : displayedStageServants.length === 0 ? (
                     <p className="text-caption text-text-secondary text-center py-2">
-                      لا يوجد خدام مسجلين في هذه المرحلة حالياً
+                      لا يوجد خدام مطابقين في هذه المرحلة حالياً
                     </p>
                   ) : (
                     <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
-                      {stageServants.map((s) => {
+                      {displayedStageServants.map((s) => {
                         const isSelected = (selectedServantId || user?.id) === s.id;
                         const isSelf = s.id === user?.id;
-                        const canEdit = !isSelf && s.role.level < (user?.role?.level || 0);
+                        const canEdit = !isSelf && (s.role.level < (user?.role?.level || 0) || isGeneralSecretary);
+                        const isSuspended = s.status === 'SUSPENDED';
 
                         return (
                           <div
@@ -1184,7 +1267,8 @@ export default function AttendancePage() {
                               'relative flex flex-col items-center gap-1.5 p-2.5 rounded-card border min-w-[115px] max-w-[135px] shrink-0 text-center transition-all cursor-pointer',
                               isSelected
                                 ? 'bg-brand-primary/10 border-brand-primary shadow-sm ring-1 ring-brand-primary'
-                                : 'bg-bg-muted/50 border-border-default hover:bg-bg-muted'
+                                : 'bg-bg-muted/50 border-border-default hover:bg-bg-muted',
+                              isSuspended && 'border-status-danger/40 bg-status-danger-soft/20'
                             )}
                           >
                             {canEdit && (
@@ -1204,9 +1288,11 @@ export default function AttendancePage() {
                             <div
                               className={cn(
                                 'w-9 h-9 rounded-full flex items-center justify-center font-bold text-caption',
-                                isSelected
-                                ? 'bg-brand-primary text-white'
-                                : 'bg-bg-surface text-text-primary border border-border-default'
+                                isSuspended
+                                  ? 'bg-status-danger-soft text-status-danger'
+                                  : isSelected
+                                  ? 'bg-brand-primary text-white'
+                                  : 'bg-bg-surface text-text-primary border border-border-default'
                               )}
                             >
                               {s.fullName.charAt(0)}
@@ -1214,15 +1300,19 @@ export default function AttendancePage() {
                             <span className="text-caption font-bold text-text-primary truncate w-full">
                               {s.fullName.split(' ')[0]} {s.fullName.split(' ')[1] || ''}
                             </span>
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1 flex-wrap justify-center">
                               <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-surface border border-border-default text-text-secondary">
                                 {isSelf ? 'أنت' : s.role.name}
                               </span>
-                              {s.stats && (
+                              {isSuspended ? (
+                                <span className="text-[10px] px-1 py-0.5 rounded-full bg-status-danger-soft text-status-danger border border-status-danger/30 font-bold">
+                                  موقوف
+                                </span>
+                              ) : s.stats ? (
                                 <span className="text-[10px] font-bold text-status-success">
                                   {s.stats.attendanceRatePercentage}%
                                 </span>
-                              )}
+                              ) : null}
                             </div>
                           </div>
                         );
@@ -1233,21 +1323,84 @@ export default function AttendancePage() {
                   {/* Action buttons for the selected subordinate */}
                   {selectedServantId && selectedServantId !== user?.id && (
                     <div className="pt-2 border-t border-border-default flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-caption text-text-secondary">
-                        متابعة: <strong className="text-text-primary">{selectedServant?.fullName}</strong>
-                      </span>
                       <div className="flex items-center gap-2">
-                        {selectedServant && selectedServant.role.level < (user?.role?.level || 0) && (
+                        <span className="text-caption text-text-secondary">
+                          متابعة: <strong className="text-text-primary">{selectedServant?.fullName}</strong>
+                        </span>
+                        {selectedServant?.status === 'SUSPENDED' && (
+                          <Badge variant="danger" className="text-[10px]">حساب موقوف</Badge>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {/* Edit Servant (Supervisors and General Secretary) */}
+                        {selectedServant && (selectedServant.role.level < (user?.role?.level || 0) || isGeneralSecretary) && (
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => handleOpenEditServant(selectedServant)}
-                            className="h-8 px-2.5 text-caption font-semibold gap-1.5 text-text-primary hover:bg-bg-muted"
+                            className="h-8 px-2.5 text-caption font-semibold gap-1 text-text-primary hover:bg-bg-muted"
                           >
                             <Pencil className="w-3.5 h-3.5 text-brand-primary" />
-                            <span>تعديل البيانات</span>
+                            <span>تعديل</span>
                           </Button>
                         )}
+
+                        {/* General Secretary Actions: Move / Transfer & Stop / Suspend & History */}
+                        {isGeneralSecretary && selectedServant && (
+                          <>
+                            {/* Transfer to another stage */}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setTransferModalServant(selectedServant)}
+                              className="h-8 px-2.5 text-caption font-semibold gap-1 text-brand-primary border-brand-primary/30 hover:bg-brand-primary-soft"
+                              title="نقل الخادم لمرحلة أخرى (صلاحية الأمين العام)"
+                            >
+                              <ArrowLeftRight className="w-3.5 h-3.5" />
+                              <span>نقل لمرحلة</span>
+                            </Button>
+
+                            {/* Stop or Reactivate */}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setStopModalServant(selectedServant)}
+                              className={cn(
+                                'h-8 px-2.5 text-caption font-semibold gap-1',
+                                selectedServant.status === 'SUSPENDED'
+                                  ? 'text-status-success hover:bg-status-success-soft hover:border-status-success/30'
+                                  : 'text-status-danger hover:bg-status-danger-soft hover:border-status-danger/30'
+                              )}
+                              title={selectedServant.status === 'SUSPENDED' ? 'إعادة تنشيط حساب الخادم' : 'إيقاف حساب الخادم'}
+                            >
+                              {selectedServant.status === 'SUSPENDED' ? (
+                                <>
+                                  <RotateCcw className="w-3.5 h-3.5" />
+                                  <span>تنشيط</span>
+                                </>
+                              ) : (
+                                <>
+                                  <PowerOff className="w-3.5 h-3.5" />
+                                  <span>إيقاف</span>
+                                </>
+                              )}
+                            </Button>
+
+                            {/* Status and Transfer Audit History */}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setHistoryModalServant(selectedServant)}
+                              className="h-8 px-2 text-caption text-text-secondary hover:text-text-primary hover:bg-bg-muted"
+                              title="سجل الحركات والتنقلات"
+                            >
+                              <History className="w-3.5 h-3.5" />
+                            </Button>
+                          </>
+                        )}
+
+                        {/* Record Attendance */}
                         <Button
                           variant="primary"
                           size="sm"
@@ -1258,7 +1411,7 @@ export default function AttendancePage() {
                           className="h-8 px-3 text-caption font-semibold gap-1.5"
                         >
                           <UserCheck className="w-4 h-4" />
-                          <span>تسجيل حضور الخادم</span>
+                          <span>تسجيل حضور</span>
                         </Button>
                       </div>
                     </div>
@@ -2206,6 +2359,65 @@ export default function AttendancePage() {
         )}
 
 
+
+        {/* Modal: General Secretary Transfers Servant to Another Stage */}
+        {transferModalServant && (
+          <ServantTransferModal
+            isOpen={Boolean(transferModalServant)}
+            onClose={() => setTransferModalServant(null)}
+            servant={transferModalServant}
+            currentStageId={selectedStageId}
+            onSuccess={async () => {
+              setServantFeedbackMessage({
+                type: 'success',
+                text: `تم نقل الخادم (${transferModalServant.fullName}) بنجاح!`,
+              });
+              setTimeout(() => setServantFeedbackMessage(null), 4000);
+              await fetchStageServants();
+            }}
+          />
+        )}
+
+        {/* Modal: General Secretary Stops or Reactivates Servant Account */}
+        {stopModalServant && (
+          <ServantStopModal
+            isOpen={Boolean(stopModalServant)}
+            onClose={() => setStopModalServant(null)}
+            servant={stopModalServant}
+            currentStageName={availableStages.find((s) => s.id === selectedStageId)?.name}
+            onSuccess={async () => {
+              const wasSuspended = stopModalServant.status === 'SUSPENDED';
+              setServantFeedbackMessage({
+                type: 'success',
+                text: wasSuspended
+                  ? `تم إعادة تنشيط حساب الخادم (${stopModalServant.fullName}) بنجاح!`
+                  : `تم إيقاف حساب الخادم (${stopModalServant.fullName}) بنجاح!`,
+              });
+              setTimeout(() => setServantFeedbackMessage(null), 4000);
+              await fetchStageServants();
+            }}
+          />
+        )}
+
+        {/* Modal: General Secretary Views Status and Transfer Audit History */}
+        {historyModalServant && (
+          <ServantStatusHistoryModal
+            isOpen={Boolean(historyModalServant)}
+            onClose={() => setHistoryModalServant(null)}
+            servant={historyModalServant}
+          />
+        )}
+
+        {/* Modal: General Secretary Church-Wide Servant Directory */}
+        {isDirectoryModalOpen && (
+          <ServantDirectoryModal
+            isOpen={isDirectoryModalOpen}
+            onClose={() => setIsDirectoryModalOpen(false)}
+            onServantUpdated={async () => {
+              await fetchStageServants();
+            }}
+          />
+        )}
 
         {/* Global Bottom Tab Bar */}
         <TabBar activeTab="attendance" />

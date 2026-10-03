@@ -480,6 +480,18 @@ export class AccountController {
     }
 
     const { userId } = req.params;
+
+    // Self-suspension safeguard
+    if (operator.userId === userId) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'ERR_CANNOT_SUSPEND_SELF',
+          message: 'لا يمكن للأمين العام إيقاف حسابه الشخصي بنفسه لتجنب فقدان صلاحيات إدارة النظام',
+        },
+      });
+    }
+
     const parseResult = updateStatusSchema.safeParse(req.body);
     if (!parseResult.success) {
       return res.status(400).json({
@@ -497,7 +509,10 @@ export class AccountController {
     const targetUser = await prisma.user.findUnique({
       where: { id: userId },
       include: {
-        scopeAssignments: true,
+        role: true,
+        scopeAssignments: {
+          include: { stage: true, sector: true },
+        },
       },
     });
 
@@ -509,8 +524,8 @@ export class AccountController {
     }
 
     const previousStatus = targetUser.status;
-    const currentPrimaryScope = targetUser.scopeAssignments[0];
-    const previousStageId = currentPrimaryScope?.stageId || null;
+    const stageScope = targetUser.scopeAssignments.find((sa: any) => sa.stageId);
+    const previousStageId = stageScope?.stageId || targetUser.scopeAssignments[0]?.stageId || null;
 
     let newStatus = previousStatus;
     let targetStageId: string | null = previousStageId;
@@ -591,9 +606,16 @@ export class AccountController {
       return { updatedUser, auditLog };
     });
 
+    const actionText =
+      action === 'SUSPEND'
+        ? 'إيقاف حساب الخادم'
+        : action === 'ACTIVATE'
+        ? 'إعادة تنشيط حساب الخادم'
+        : 'نقل الخادم للمرحلة الجديدة';
+
     return res.status(200).json({
       success: true,
-      message: `تم تنفيذ عملية (${action}) للحساب بنجاح`,
+      message: `تم تنفيذ عملية (${actionText}) بنجاح`,
       user: {
         id: result.updatedUser.id,
         fullName: result.updatedUser.fullName,
@@ -934,5 +956,119 @@ export class AccountController {
         })),
       },
     });
+  }
+
+  /**
+   * GET /api/v1/accounts/servants
+   * Scoped or Organization-wide servant search/listing for supervisors & General Secretary.
+   * General Secretary (Level 5) can list and search all servants across all stages and sectors.
+   */
+  public static async listServants(req: Request, res: Response) {
+    try {
+      const operator = req.user;
+      if (!operator) {
+        return res.status(401).json({
+          success: false,
+          error: { code: 'AUTH_REQUIRED', message: 'Authentication required' },
+        });
+      }
+
+      if (operator.roleLevel < 3) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'ACCESS_DENIED', message: 'صلاحية عرض قائمة الخدام محصورة في الأمناء والمشرفين' },
+        });
+      }
+
+      const { stageId, sectorId, status, search } = req.query;
+
+      const where: any = {};
+
+      if (status && (status === 'ACTIVE' || status === 'SUSPENDED' || status === 'TRANSFERRED')) {
+        where.status = status;
+      }
+
+      if (search && typeof search === 'string' && search.trim()) {
+        const q = search.trim();
+        where.OR = [
+          { fullName: { contains: q, mode: 'insensitive' } },
+          { phoneNumber: { contains: q } },
+          { email: { contains: q, mode: 'insensitive' } },
+        ];
+      }
+
+      // Scope constraints based on hierarchy
+      let allowedStageIds: string[] | undefined = undefined;
+      let allowedSectorIds: string[] | undefined = undefined;
+
+      if (operator.roleLevel === 3) {
+        allowedStageIds = operator.stageIds;
+      } else if (operator.roleLevel === 4) {
+        allowedSectorIds = operator.sectorIds;
+      }
+      // Level 5 has no scope constraints (organization-wide)
+
+      if (stageId && typeof stageId === 'string') {
+        if (allowedStageIds && !allowedStageIds.includes(stageId)) {
+          return res.status(403).json({
+            success: false,
+            error: { code: 'FORBIDDEN_STAGE', message: 'لا تملك صلاحية الوصول لهذه المرحلة' },
+          });
+        }
+        where.scopeAssignments = { some: { stageId } };
+      } else if (allowedStageIds) {
+        where.scopeAssignments = { some: { stageId: { in: allowedStageIds } } };
+      } else if (sectorId && typeof sectorId === 'string') {
+        where.scopeAssignments = { some: { sectorId } };
+      } else if (allowedSectorIds) {
+        where.scopeAssignments = { some: { sectorId: { in: allowedSectorIds } } };
+      }
+
+      const servants = await prisma.user.findMany({
+        where,
+        include: {
+          role: true,
+          scopeAssignments: {
+            include: { stage: true, sector: true },
+          },
+        },
+        orderBy: [{ status: 'asc' }, { fullName: 'asc' }],
+      });
+
+      return res.status(200).json({
+        success: true,
+        servants: servants.map((s) => ({
+          id: s.id,
+          fullName: s.fullName,
+          phoneNumber: s.phoneNumber,
+          email: s.email,
+          status: s.status,
+          role: {
+            id: s.role.id,
+            name: s.role.name,
+            code: s.role.code,
+            level: s.role.level,
+          },
+          currentStage: s.scopeAssignments.find((sa: any) => sa.stage)?.stage
+            ? {
+                id: s.scopeAssignments.find((sa: any) => sa.stage)!.stage!.id,
+                name: s.scopeAssignments.find((sa: any) => sa.stage)!.stage!.name,
+              }
+            : null,
+          currentSector: s.scopeAssignments.find((sa: any) => sa.sector)?.sector
+            ? {
+                id: s.scopeAssignments.find((sa: any) => sa.sector)!.sector!.id,
+                name: s.scopeAssignments.find((sa: any) => sa.sector)!.sector!.name,
+              }
+            : null,
+        })),
+      });
+    } catch (err: any) {
+      console.error('Failed to list servants:', err);
+      return res.status(500).json({
+        success: false,
+        error: { code: 'INTERNAL_SERVER_ERROR', message: err.message },
+      });
+    }
   }
 }

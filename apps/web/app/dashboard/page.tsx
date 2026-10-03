@@ -34,7 +34,9 @@ import {
   ClipboardList,
   Megaphone,
   BarChart3,
+  ArrowLeftRight,
 } from 'lucide-react';
+import { ServantDirectoryModal } from '@/components/servants/ServantDirectoryModal';
 
 interface ServantDashboardData {
   servant: {
@@ -91,6 +93,7 @@ export default function DashboardPage() {
 
   // Account creation modal state (Level 3+)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isServantDirectoryOpen, setIsServantDirectoryOpen] = useState(false);
   const [fullName, setFullName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [email, setEmail] = useState('');
@@ -654,7 +657,7 @@ export default function DashboardPage() {
               </p>
 
               {user.role.level >= 5 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <Button
                     variant="primary"
                     onClick={() => {
@@ -665,7 +668,17 @@ export default function DashboardPage() {
                     className="h-[40px] gap-1.5 font-semibold text-caption"
                   >
                     <UserPlus className="w-4 h-4" />
-                    <span>إضافة خادم جديد</span>
+                    <span>إضافة خادم</span>
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsServantDirectoryOpen(true)}
+                    className="h-[40px] gap-1.5 font-semibold text-caption text-brand-primary border-brand-primary/30 hover:bg-brand-primary-soft"
+                    title="نقل وإيقاف الخدام وإدارتهم شاملاً"
+                  >
+                    <ArrowLeftRight className="w-4 h-4" />
+                    <span>نقل وإيقاف الخدام</span>
                   </Button>
 
                   <Button
@@ -674,7 +687,7 @@ export default function DashboardPage() {
                     className="h-[40px] gap-1.5 font-semibold text-caption"
                   >
                     <Users className="w-4 h-4" />
-                    <span>متابعة وتعديل الخدام</span>
+                    <span>متابعة الخدام</span>
                   </Button>
 
                   <Button
@@ -683,7 +696,7 @@ export default function DashboardPage() {
                     className="h-[40px] gap-1.5 font-semibold text-caption"
                   >
                     <BookOpen className="w-4 h-4" />
-                    <span>مراجعة التحضيرات</span>
+                    <span>التحضيرات</span>
                   </Button>
                 </div>
               ) : (
@@ -905,6 +918,15 @@ export default function DashboardPage() {
             isOpen={isSpiritualJournalOpen}
             onClose={() => setIsSpiritualJournalOpen(false)}
           />
+
+          {/* Servant Directory & Management Modal for General Secretary */}
+          {isServantDirectoryOpen && (
+            <ServantDirectoryModal
+              isOpen={isServantDirectoryOpen}
+              onClose={() => setIsServantDirectoryOpen(false)}
+              onServantUpdated={fetchDashboardData}
+            />
+          )}
 
         </div>
 
