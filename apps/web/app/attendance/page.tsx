@@ -114,6 +114,23 @@ export interface StageServantItem {
   };
 }
 
+const getRoleDisplayName = (code: string, fallbackName?: string) => {
+  switch (code) {
+    case 'SERVANT':
+      return 'خادم مرحلة (SERVANT)';
+    case 'ASSISTANT_SECRETARY':
+      return 'مساعد أمين الخدمة (ASSISTANT_SECRETARY)';
+    case 'STAGE_SECRETARY':
+      return 'أمين الخدمة / أمين مرحلة (STAGE_SECRETARY)';
+    case 'SECTOR_SECRETARY':
+      return 'أمين قطاع (SECTOR_SECRETARY)';
+    case 'GENERAL_SECRETARY':
+      return 'الأمين العام (GENERAL_SECRETARY)';
+    default:
+      return fallbackName ? `${fallbackName} (${code})` : code;
+  }
+};
+
 export default function AttendancePage() {
   const { user } = useAuth();
   const router = useRouter();
@@ -235,6 +252,7 @@ export default function AttendancePage() {
   const [editTempPassword, setEditTempPassword] = useState('');
   const [isEditingServantLoading, setIsEditingServantLoading] = useState(false);
   const [editServantError, setEditServantError] = useState<string | null>(null);
+  const [rolesList, setRolesList] = useState<any[]>([]);
 
   // 13 Fields: Personal & Church Profile
   const [editFatherConfessor, setEditFatherConfessor] = useState('');
@@ -388,6 +406,72 @@ export default function AttendancePage() {
       fetchStageServants();
     }
   }, [activeView, selectedStageId, isSupervisor]);
+
+  // Fetch available system roles for editing accounts (Supervisor Level 3+)
+  useEffect(() => {
+    if (!isSupervisor) return;
+    let isMounted = true;
+    const fetchRoles = async () => {
+      try {
+        const res = await api.get('/api/v1/accounts/roles');
+        if (res.data?.success && Array.isArray(res.data.roles)) {
+          if (isMounted) setRolesList(res.data.roles);
+        }
+      } catch (err) {
+        console.warn('Failed to load accounts roles:', err);
+      }
+    };
+    fetchRoles();
+    return () => {
+      isMounted = false;
+    };
+  }, [isSupervisor]);
+
+  // Available roles for assignment based on caller authority
+  const availableEditRoles = useMemo(() => {
+    const callerLevel = user?.role?.level ?? 1;
+
+    const defaultRoles = [
+      { code: 'SERVANT', name: 'خادم مرحلة (SERVANT)', level: 1 },
+      { code: 'ASSISTANT_SECRETARY', name: 'مساعد أمين الخدمة (ASSISTANT_SECRETARY)', level: 2 },
+      { code: 'STAGE_SECRETARY', name: 'أمين الخدمة / أمين مرحلة (STAGE_SECRETARY)', level: 3 },
+      { code: 'SECTOR_SECRETARY', name: 'أمين قطاع (SECTOR_SECRETARY)', level: 4 },
+    ];
+
+    let list: Array<{ code: string; name: string; level: number }> = [];
+
+    if (rolesList.length > 0) {
+      list = rolesList.map((r: any) => ({
+        code: r.code,
+        name: getRoleDisplayName(r.code, r.name),
+        level: r.level,
+      }));
+    } else {
+      list = defaultRoles.filter((r) => r.level < callerLevel);
+    }
+
+    // Filter strictly below caller level if not level 5 (General Secretary)
+    if (callerLevel < 5) {
+      list = list.filter((r) => r.level < callerLevel);
+    }
+
+    // Always ensure the target user's current role is included in options so the select matches accurately
+    if (editingServant?.role && !list.some((r) => r.code === editingServant.role.code)) {
+      list.push({
+        code: editingServant.role.code,
+        name: getRoleDisplayName(editingServant.role.code, editingServant.role.name),
+        level: editingServant.role.level,
+      });
+      list.sort((a, b) => a.level - b.level);
+    }
+
+    return list;
+  }, [rolesList, user, editingServant]);
+
+  const canEditRole = Boolean(
+    user &&
+    (user.role.level > (editingServant?.role?.level || 0) || user.role.level >= 5)
+  );
 
   // Fetch servant history for selected servant (or self if servant)
   const fetchServantHistory = async (targetId?: string) => {
@@ -548,7 +632,7 @@ export default function AttendancePage() {
         fullName: editFullName.trim(),
         phoneNumber: editPhoneNumber.trim(),
         email: editEmail.trim() || null,
-        roleCode: editRoleCode,
+        ...(canEditRole ? { roleCode: editRoleCode } : {}),
         fatherConfessor: editFatherConfessor.trim() || null,
         dateOfBirth: editDateOfBirth || null,
         address: editAddress.trim() || null,
@@ -565,6 +649,11 @@ export default function AttendancePage() {
       };
 
       if (editTempPassword.trim()) {
+        if (editTempPassword.trim().length < 8) {
+          setEditServantError('كلمة المرور المؤقتة يجب ألا تقل عن 8 أحرف');
+          setIsEditingServantLoading(false);
+          return;
+        }
         payload.temporaryPassword = editTempPassword.trim();
       }
 
@@ -1549,7 +1638,11 @@ export default function AttendancePage() {
                   </div>
                   <div>
                     <h3 className="text-body font-bold text-text-primary">
-                      تعديل ملف وبيانات الخادم
+                      {editingServant.role.level >= 4
+                        ? 'تعديل ملف وبيانات أمين القطاع'
+                        : editingServant.role.level === 3
+                        ? 'تعديل ملف وبيانات أمين الخدمة'
+                        : 'تعديل ملف وبيانات الخادم'}
                     </h3>
                     <p className="text-caption text-text-secondary">
                       {editingServant.fullName} ({editingServant.role.name})
@@ -1591,7 +1684,9 @@ export default function AttendancePage() {
                   )}
                 >
                   <Award className="w-4 h-4" />
-                  <span>تقييم أمين الخدمة</span>
+                  <span>
+                    {editingServant.role.level >= 3 ? 'تقييم المشرف' : 'تقييم أمين الخدمة'}
+                  </span>
                   <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-status-warning-soft text-status-warning font-semibold border border-status-warning/30 hidden sm:inline-block">
                     خاص بالمشرف
                   </span>
@@ -1842,16 +1937,28 @@ export default function AttendancePage() {
 
                           <div>
                             <label className="text-caption font-semibold text-text-secondary block mb-1">
-                              المسؤولية / الرتبة في المرحلة
+                              المسؤولية / الرتبة الخدمية
                             </label>
                             <select
                               value={editRoleCode}
+                              disabled={!canEditRole}
                               onChange={(e) => setEditRoleCode(e.target.value)}
-                              className="w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary"
+                              className={cn(
+                                'w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary',
+                                !canEditRole && 'opacity-75 cursor-not-allowed bg-bg-surface'
+                              )}
                             >
-                              <option value="SERVANT">خادم مرحلة (SERVANT)</option>
-                              <option value="ASSISTANT_SECRETARY">أمين مساعد للمرحلة (ASSISTANT_SECRETARY)</option>
+                              {availableEditRoles.map((r) => (
+                                <option key={r.code} value={r.code}>
+                                  {r.name}
+                                </option>
+                              ))}
                             </select>
+                            {!canEditRole && (
+                              <p className="text-[11px] text-text-tertiary mt-1">
+                                لا تملك الصلاحية لتغيير رتبة هذا الحساب
+                              </p>
+                            )}
                           </div>
                         </div>
 
@@ -1863,32 +1970,36 @@ export default function AttendancePage() {
                             type="password"
                             value={editTempPassword}
                             onChange={(e) => setEditTempPassword(e.target.value)}
-                            placeholder="كلمة مرور جديدة (6 أحرف على الأقل)..."
+                            placeholder="كلمة مرور جديدة (8 أحرف على الأقل)..."
                             className="w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary"
                           />
                         </div>
                       </div>
                     </div>
                   ) : (
-                    /* TAB 2: SUPERVISOR EVALUATION (تضاف من امين الخدمة) */
+                    /* TAB 2: SUPERVISOR EVALUATION */
                     <div className="space-y-4 animate-fade-in">
                       <div className="p-3 bg-brand-primary-soft/60 border border-brand-primary/20 rounded-card flex items-start gap-2.5">
                         <Shield className="w-5 h-5 text-brand-primary shrink-0 mt-0.5" />
                         <div>
                           <h4 className="text-body-small font-bold text-brand-primary">
-                            تقييم ومتابعة أمين الخدمة (5 بنود سرية)
+                            {user?.role?.level && user.role.level >= 5
+                              ? 'تقييم ومتابعة الأمانة العامة (5 بنود سرية)'
+                              : user?.role?.level === 4
+                              ? 'تقييم ومتابعة أمين القطاع (5 بنود سرية)'
+                              : 'تقييم ومتابعة أمين الخدمة (5 بنود سرية)'}
                           </h4>
                           <p className="text-caption text-text-secondary mt-0.5">
-                            هذه الحقول التقييمية تضاف من أمين الخدمة لمتابعة كفاءة وأداء الخادم، ولا تظهر للمخدومين.
+                            هذه الحقول التقييمية تضاف من المشرف المسؤول لمتابعة كفاءة وأداء الخادم، ولا تظهر للمخدومين.
                           </p>
                         </div>
                       </div>
 
-                      {/* 6) الحالة المادية (تضاف من امين الخدمة) */}
+                      {/* 6) الحالة المادية */}
                       <div>
                         <label className="text-caption font-semibold text-text-secondary flex items-center justify-between mb-1">
                           <span className="font-bold text-text-primary">
-                            6. الحالة المادية (تضاف من أمين الخدمة)
+                            6. الحالة المادية (تقييم المشرف المسؤول)
                           </span>
                           <span className="text-[11px] text-brand-primary">سرية</span>
                         </label>
@@ -1918,11 +2029,11 @@ export default function AttendancePage() {
                         </div>
                       </div>
 
-                      {/* 10) السلوك مع المخدومين (تضاف من امين الخدمة) */}
+                      {/* 10) السلوك مع المخدومين */}
                       <div>
                         <label className="text-caption font-semibold text-text-secondary block mb-1">
                           <span className="font-bold text-text-primary">
-                            10. السلوك مع المخدومين (تضاف من أمين الخدمة)
+                            10. السلوك مع المخدومين (تقييم المشرف المسؤول)
                           </span>
                         </label>
                         <textarea
@@ -1951,11 +2062,11 @@ export default function AttendancePage() {
                         </div>
                       </div>
 
-                      {/* 11) السلوك مع الخدام (تضاف من امين الخدمة) */}
+                      {/* 11) السلوك مع الخدام */}
                       <div>
                         <label className="text-caption font-semibold text-text-secondary block mb-1">
                           <span className="font-bold text-text-primary">
-                            11. السلوك مع الخدام والزملاء (تضاف من أمين الخدمة)
+                            11. السلوك مع الخدام والزملاء (تقييم المشرف المسؤول)
                           </span>
                         </label>
                         <textarea
@@ -1984,11 +2095,11 @@ export default function AttendancePage() {
                         </div>
                       </div>
 
-                      {/* 12) التعاون (تضاف من امين الخدمة) */}
+                      {/* 12) التعاون */}
                       <div>
                         <label className="text-caption font-semibold text-text-secondary block mb-1">
                           <span className="font-bold text-text-primary">
-                            12. التعاون والمشاركة (تضاف من أمين الخدمة)
+                            12. التعاون والمشاركة (تقييم المشرف المسؤول)
                           </span>
                         </label>
                         <input
@@ -2017,11 +2128,11 @@ export default function AttendancePage() {
                         </div>
                       </div>
 
-                      {/* 13) العمل الفردي (تضاف من امين الخدمة) */}
+                      {/* 13) العمل الفردي */}
                       <div>
                         <label className="text-caption font-semibold text-text-secondary block mb-1">
                           <span className="font-bold text-text-primary">
-                            13. العمل الفردي والمبادرة (تضاف من أمين الخدمة)
+                            13. العمل الفردي والمبادرة (تقييم المشرف المسؤول)
                           </span>
                         </label>
                         <input
@@ -2050,10 +2161,10 @@ export default function AttendancePage() {
                         </div>
                       </div>
 
-                      {/* ملاحظات سرية إضافية لأمين الخدمة */}
+                      {/* ملاحظات وتوجيهات إضافية */}
                       <div>
                         <label className="text-caption font-semibold text-text-secondary block mb-1">
-                          ملاحظات وتوجيهات إضافية لأمين الخدمة
+                          ملاحظات وتوجيهات إضافية للمشرف المسؤول
                         </label>
                         <textarea
                           rows={2}
