@@ -28,6 +28,17 @@ export interface AuthUser {
   maritalStatus?: string | null;
   spouseName?: string | null;
   educationOrCareer?: string | null;
+  whatsappPhone?: string | null;
+  whatsappPhoneRaw?: string | null;
+  facebookUrl?: string | null;
+  instagramUrl?: string | null;
+  talents?: string[] | null;
+  siblingsInfo?: Array<{ name: string; age?: number | string }> | null;
+  activities?: string[] | null;
+  isDeacon?: boolean | null;
+  deaconName?: string | null;
+  deaconRank?: string | null;
+  profilePicture?: string | null;
   role: RoleInfo;
   scopes: {
     stages: ScopeItem[];

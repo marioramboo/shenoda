@@ -31,9 +31,13 @@ export const createApp = (beforeRoutesMiddleware?: RequestHandler): Application 
 
   // Security & standard middlewares
   app.use(helmet());
+  const allowedOrigins = Array.from(
+    new Set([env.CORS_ORIGIN, 'http://localhost:3000', 'http://127.0.0.1:3000'].filter(Boolean))
+  );
+
   app.use(
     cors({
-      origin: env.CORS_ORIGIN,
+      origin: allowedOrigins,
       credentials: true,
     })
   );

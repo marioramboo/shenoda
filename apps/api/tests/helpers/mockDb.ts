@@ -16,6 +16,16 @@ export interface MockUser {
   spouseName?: string | null;
   educationOrCareer?: string | null;
   childrenInfo?: any;
+  whatsappPhone?: string | null;
+  facebookUrl?: string | null;
+  instagramUrl?: string | null;
+  talents?: any;
+  siblingsInfo?: any;
+  activities?: any;
+  isDeacon?: boolean | null;
+  deaconName?: string | null;
+  deaconRank?: string | null;
+  profilePicture?: string | null;
   role?: any;
   scopeAssignments?: any[];
   evaluationsReceived?: any[];
@@ -548,6 +558,23 @@ export function createMockPrisma() {
           email: data.email || null,
           passwordHash: data.passwordHash,
           status: data.status || UserStatus.ACTIVE,
+          fatherConfessor: data.fatherConfessor || null,
+          dateOfBirth: data.dateOfBirth || null,
+          address: data.address || null,
+          maritalStatus: data.maritalStatus || null,
+          spouseName: data.spouseName || null,
+          educationOrCareer: data.educationOrCareer || null,
+          childrenInfo: data.childrenInfo || null,
+          whatsappPhone: data.whatsappPhone || null,
+          facebookUrl: data.facebookUrl || null,
+          instagramUrl: data.instagramUrl || null,
+          talents: data.talents || null,
+          siblingsInfo: data.siblingsInfo || null,
+          activities: data.activities || null,
+          isDeacon: data.isDeacon ?? false,
+          deaconName: data.deaconName || null,
+          deaconRank: data.deaconRank || null,
+          profilePicture: data.profilePicture || null,
           createdAt: new Date(),
           updatedAt: new Date(),
         };

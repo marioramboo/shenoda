@@ -49,6 +49,16 @@ const updateAccountSchema = z.object({
   spouseName: z.string().optional().nullable(),
   educationOrCareer: z.string().optional().nullable(),
   childrenInfo: z.any().optional().nullable(),
+  whatsappPhone: z.string().optional().nullable(),
+  facebookUrl: z.string().optional().nullable(),
+  instagramUrl: z.string().optional().nullable(),
+  talents: z.any().optional().nullable(),
+  siblingsInfo: z.any().optional().nullable(),
+  activities: z.any().optional().nullable(),
+  isDeacon: z.boolean().optional().nullable(),
+  deaconName: z.string().optional().nullable(),
+  deaconRank: z.string().optional().nullable(),
+  profilePicture: z.string().optional().nullable(),
 
   // Evaluative fields (added by Stage Secretary / Supervisor)
   financialStatus: z.string().optional().nullable(),
@@ -701,6 +711,16 @@ export class AccountController {
       spouseName,
       educationOrCareer,
       childrenInfo,
+      whatsappPhone,
+      facebookUrl,
+      instagramUrl,
+      talents,
+      siblingsInfo,
+      activities,
+      isDeacon,
+      deaconName,
+      deaconRank,
+      profilePicture,
       financialStatus,
       behaviorWithMembers,
       behaviorWithServants,
@@ -866,6 +886,16 @@ export class AccountController {
     if (spouseName !== undefined) updateData.spouseName = spouseName ? spouseName.trim() : null;
     if (educationOrCareer !== undefined) updateData.educationOrCareer = educationOrCareer ? educationOrCareer.trim() : null;
     if (childrenInfo !== undefined) updateData.childrenInfo = childrenInfo;
+    if (whatsappPhone !== undefined) updateData.whatsappPhone = whatsappPhone ? whatsappPhone.trim() : null;
+    if (facebookUrl !== undefined) updateData.facebookUrl = facebookUrl ? facebookUrl.trim() : null;
+    if (instagramUrl !== undefined) updateData.instagramUrl = instagramUrl ? instagramUrl.trim() : null;
+    if (talents !== undefined) updateData.talents = talents;
+    if (siblingsInfo !== undefined) updateData.siblingsInfo = siblingsInfo;
+    if (activities !== undefined) updateData.activities = activities;
+    if (isDeacon !== undefined) updateData.isDeacon = Boolean(isDeacon);
+    if (deaconName !== undefined) updateData.deaconName = deaconName ? deaconName.trim() : null;
+    if (deaconRank !== undefined) updateData.deaconRank = deaconRank ? deaconRank.trim() : null;
+    if (profilePicture !== undefined) updateData.profilePicture = profilePicture;
 
     const updatedUser = await prisma.user.update({
       where: { id: userId },
@@ -932,6 +962,17 @@ export class AccountController {
         spouseName: updatedUser.spouseName,
         educationOrCareer: updatedUser.educationOrCareer,
         childrenInfo: updatedUser.childrenInfo,
+        whatsappPhone: updatedUser.whatsappPhone || updatedUser.phoneNumber,
+        whatsappPhoneRaw: updatedUser.whatsappPhone || null,
+        facebookUrl: updatedUser.facebookUrl || null,
+        instagramUrl: updatedUser.instagramUrl || null,
+        talents: updatedUser.talents || [],
+        siblingsInfo: updatedUser.siblingsInfo || [],
+        activities: updatedUser.activities || [],
+        isDeacon: updatedUser.isDeacon || false,
+        deaconName: updatedUser.deaconName || null,
+        deaconRank: updatedUser.deaconRank || null,
+        profilePicture: updatedUser.profilePicture || null,
         role: {
           id: updatedUser.role.id,
           code: updatedUser.role.code,
@@ -1043,6 +1084,24 @@ export class AccountController {
           phoneNumber: s.phoneNumber,
           email: s.email,
           status: s.status,
+          fatherConfessor: s.fatherConfessor || null,
+          dateOfBirth: s.dateOfBirth,
+          address: s.address || null,
+          maritalStatus: s.maritalStatus || null,
+          spouseName: s.spouseName || null,
+          educationOrCareer: s.educationOrCareer || null,
+          childrenInfo: s.childrenInfo || [],
+          whatsappPhone: s.whatsappPhone || s.phoneNumber,
+          whatsappPhoneRaw: s.whatsappPhone || null,
+          facebookUrl: s.facebookUrl || null,
+          instagramUrl: s.instagramUrl || null,
+          talents: s.talents || [],
+          siblingsInfo: s.siblingsInfo || [],
+          activities: s.activities || [],
+          isDeacon: s.isDeacon || false,
+          deaconName: s.deaconName || null,
+          deaconRank: s.deaconRank || null,
+          profilePicture: s.profilePicture || null,
           role: {
             id: s.role.id,
             name: s.role.name,

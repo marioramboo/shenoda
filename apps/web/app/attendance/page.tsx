@@ -48,12 +48,38 @@ import {
   PowerOff,
   RotateCcw,
   History,
+  Camera,
+  MessageCircle,
+  Share2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ServantTransferModal } from '@/components/servants/ServantTransferModal';
 import { ServantStopModal } from '@/components/servants/ServantStopModal';
 import { ServantStatusHistoryModal } from '@/components/servants/ServantStatusHistoryModal';
 import { ServantDirectoryModal } from '@/components/servants/ServantDirectoryModal';
+
+const SERVANT_TALENTS_PRESET = [
+  'ألحان وترتيل',
+  'شعر وكتابة',
+  'تمثيل وإلقاء',
+  'تكنولوجيا وبرمجة وميديا',
+  'كرة قدم ورياضة',
+];
+
+const SERVANT_ACTIVITIES_PRESET = [
+  'كورال',
+  'مسرح',
+  'كشافة',
+  'كورة',
+];
+
+const SERVANT_DEACON_RANKS = [
+  'إبصالتس (مرتل)',
+  'أغنسطس (قارئ)',
+  'إيبودياكون (مساعد شماس)',
+  'دياكون (شماس كامل)',
+  'أرشيدياكون (رئيس شمامسة)',
+];
 
 interface MemberItem {
   id: string;
@@ -107,6 +133,17 @@ export interface StageServantItem {
   spouseName?: string | null;
   educationOrCareer?: string | null;
   childrenInfo?: any;
+  whatsappPhone?: string | null;
+  whatsappPhoneRaw?: string | null;
+  facebookUrl?: string | null;
+  instagramUrl?: string | null;
+  talents?: string[] | null;
+  siblingsInfo?: any;
+  activities?: string[] | null;
+  isDeacon?: boolean | null;
+  deaconName?: string | null;
+  deaconRank?: string | null;
+  profilePicture?: string | null;
   role: {
     id: string;
     name: string;
@@ -261,7 +298,7 @@ export default function AttendancePage() {
   // Edit Servant Modal (Level 3+ / أمين الخدمة)
   const [isEditServantModalOpen, setIsEditServantModalOpen] = useState(false);
   const [editingServant, setEditingServant] = useState<StageServantItem | null>(null);
-  const [editServantTab, setEditServantTab] = useState<'profile' | 'evaluation'>('profile');
+  const [editServantTab, setEditServantTab] = useState<'profile' | 'talents' | 'evaluation'>('profile');
   const [editFullName, setEditFullName] = useState('');
   const [editPhoneNumber, setEditPhoneNumber] = useState('');
   const [editEmail, setEditEmail] = useState('');
@@ -279,6 +316,18 @@ export default function AttendancePage() {
   const [editSpouseName, setEditSpouseName] = useState('');
   const [editEducationOrCareer, setEditEducationOrCareer] = useState('');
   const [editChildrenList, setEditChildrenList] = useState<ServantChildItem[]>([]);
+
+  // Extended Profile Fields (WhatsApp, Social, Talents, Activities, Siblings, Deacon, Picture)
+  const [editWhatsappPhone, setEditWhatsappPhone] = useState('');
+  const [editFacebookUrl, setEditFacebookUrl] = useState('');
+  const [editInstagramUrl, setEditInstagramUrl] = useState('');
+  const [editTalents, setEditTalents] = useState<string[]>([]);
+  const [editActivities, setEditActivities] = useState<string[]>([]);
+  const [editSiblingsList, setEditSiblingsList] = useState<Array<{ name: string; age: string }>>([]);
+  const [editIsDeacon, setEditIsDeacon] = useState(false);
+  const [editDeaconName, setEditDeaconName] = useState('');
+  const [editDeaconRank, setEditDeaconRank] = useState('إبصالتس (مرتل)');
+  const [editProfilePicture, setEditProfilePicture] = useState('');
 
   // 13 Fields: Evaluative fields added by Stage Secretary (تضاف من أمين الخدمة)
   const [editFinancialStatus, setEditFinancialStatus] = useState('');
@@ -301,6 +350,29 @@ export default function AttendancePage() {
     setEditChildrenList((prev) =>
       prev.map((item, i) => (i === index ? { ...item, [field]: value } : item))
     );
+  };
+
+  // Helpers for managing servant siblings
+  const handleAddSibling = () => {
+    setEditSiblingsList((prev) => [...prev, { name: '', age: '' }]);
+  };
+
+  const handleRemoveSibling = (index: number) => {
+    setEditSiblingsList((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSiblingChange = (index: number, field: 'name' | 'age', value: string) => {
+    setEditSiblingsList((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item))
+    );
+  };
+
+  const handleToggleServantTalent = (t: string) => {
+    setEditTalents((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
+  };
+
+  const handleToggleServantActivity = (a: string) => {
+    setEditActivities((prev) => (prev.includes(a) ? prev.filter((x) => x !== a) : [...prev, a]));
   };
 
   // Active selected servant object
@@ -628,6 +700,29 @@ export default function AttendancePage() {
     }
     setEditChildrenList(children);
 
+    // Parse extended fields
+    setEditWhatsappPhone(
+      servant.whatsappPhoneRaw || (servant.whatsappPhone !== servant.phoneNumber ? servant.whatsappPhone || '' : '')
+    );
+    setEditFacebookUrl(servant.facebookUrl || '');
+    setEditInstagramUrl(servant.instagramUrl || '');
+    setEditTalents(Array.isArray(servant.talents) ? servant.talents : []);
+    setEditActivities(Array.isArray(servant.activities) ? servant.activities : []);
+
+    let sibs: Array<{ name: string; age: string }> = [];
+    if (servant.siblingsInfo && Array.isArray(servant.siblingsInfo)) {
+      sibs = servant.siblingsInfo.map((s: any) => ({
+        name: typeof s === 'string' ? s : s?.name || '',
+        age: typeof s === 'object' && s?.age ? String(s.age) : '',
+      }));
+    }
+    setEditSiblingsList(sibs);
+
+    setEditIsDeacon(Boolean(servant.isDeacon));
+    setEditDeaconName(servant.deaconName || '');
+    setEditDeaconRank(servant.deaconRank || 'إبصالتس (مرتل)');
+    setEditProfilePicture(servant.profilePicture || '');
+
     // Evaluative fields added by Stage Secretary (6, 10-13)
     const evalData = servant.evaluation;
     setEditFinancialStatus(evalData?.financialStatus || '');
@@ -655,10 +750,18 @@ export default function AttendancePage() {
         .filter((c) => c.name.trim().length > 0)
         .map((c) => ({ name: c.name.trim(), age: c.age.trim() }));
 
+      // Clean siblings list
+      const validSiblings = editSiblingsList
+        .filter((s) => s.name.trim().length > 0)
+        .map((s) => ({ name: s.name.trim(), age: s.age ? Number(s.age) || s.age : null }));
+
       const payload: any = {
         fullName: editFullName.trim(),
         phoneNumber: editPhoneNumber.trim(),
         email: editEmail.trim() || null,
+        whatsappPhone: editWhatsappPhone.trim() || null,
+        facebookUrl: editFacebookUrl.trim() || null,
+        instagramUrl: editInstagramUrl.trim() || null,
         ...(canEditRole ? { roleCode: editRoleCode } : {}),
         fatherConfessor: editFatherConfessor.trim() || null,
         dateOfBirth: editDateOfBirth || null,
@@ -667,6 +770,13 @@ export default function AttendancePage() {
         spouseName: editMaritalStatus === 'متزوج' ? editSpouseName.trim() || null : null,
         educationOrCareer: editEducationOrCareer.trim() || null,
         childrenInfo: validChildren.length > 0 ? validChildren : null,
+        siblingsInfo: validSiblings.length > 0 ? validSiblings : null,
+        talents: editTalents,
+        activities: editActivities,
+        isDeacon: editIsDeacon,
+        deaconName: editIsDeacon ? (editDeaconName.trim() || null) : null,
+        deaconRank: editIsDeacon ? (editDeaconRank || null) : null,
+        profilePicture: editProfilePicture || null,
         financialStatus: editFinancialStatus.trim() || null,
         behaviorWithMembers: editBehaviorWithMembers.trim() || null,
         behaviorWithServants: editBehaviorWithServants.trim() || null,
@@ -1287,7 +1397,7 @@ export default function AttendancePage() {
 
                             <div
                               className={cn(
-                                'w-9 h-9 rounded-full flex items-center justify-center font-bold text-caption',
+                                'w-9 h-9 rounded-full flex items-center justify-center font-bold text-caption overflow-hidden',
                                 isSuspended
                                   ? 'bg-status-danger-soft text-status-danger'
                                   : isSelected
@@ -1295,7 +1405,12 @@ export default function AttendancePage() {
                                   : 'bg-bg-surface text-text-primary border border-border-default'
                               )}
                             >
-                              {s.fullName.charAt(0)}
+                              {s.profilePicture ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={s.profilePicture} alt={s.fullName} className="w-full h-full object-cover" />
+                              ) : (
+                                s.fullName.charAt(0)
+                              )}
                             </div>
                             <span className="text-caption font-bold text-text-primary truncate w-full">
                               {s.fullName.split(' ')[0]} {s.fullName.split(' ')[1] || ''}
@@ -1304,6 +1419,14 @@ export default function AttendancePage() {
                               <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-surface border border-border-default text-text-secondary">
                                 {isSelf ? 'أنت' : s.role.name}
                               </span>
+                              {s.isDeacon && (
+                                <span
+                                  className="text-[9px] px-1 py-0.2 rounded-full bg-[#E6F4EA] text-[#137333] border border-[#CEEAD6] font-bold"
+                                  title={`شماس: ${s.deaconRank || 'مرتل'}`}
+                                >
+                                  شماس
+                                </span>
+                              )}
                               {isSuspended ? (
                                 <span className="text-[10px] px-1 py-0.5 rounded-full bg-status-danger-soft text-status-danger border border-status-danger/30 font-bold">
                                   موقوف
@@ -1811,26 +1934,39 @@ export default function AttendancePage() {
                 </button>
               </div>
 
-              {/* Navigation Tabs between Personal Data & Supervisor Evaluation */}
-              <div className="flex border-b border-border-default bg-bg-muted/30 px-4 pt-2 gap-2 shrink-0">
+              {/* Navigation Tabs between Personal Data, Talents & Supervisor Evaluation */}
+              <div className="flex border-b border-border-default bg-bg-muted/30 px-4 pt-2 gap-2 shrink-0 overflow-x-auto">
                 <button
                   type="button"
                   onClick={() => setEditServantTab('profile')}
                   className={cn(
-                    'flex items-center gap-2 py-2.5 px-3.5 text-caption sm:text-body-small font-bold border-b-2 transition-all',
+                    'flex items-center gap-1.5 py-2.5 px-3 text-caption sm:text-body-small font-bold border-b-2 transition-all whitespace-nowrap',
                     editServantTab === 'profile'
                       ? 'border-brand-primary text-brand-primary'
                       : 'border-transparent text-text-secondary hover:text-text-primary'
                   )}
                 >
                   <User className="w-4 h-4" />
-                  <span>البيانات الشخصية والكنسية</span>
+                  <span>البيانات الأساسية والتواصل</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditServantTab('talents')}
+                  className={cn(
+                    'flex items-center gap-1.5 py-2.5 px-3 text-caption sm:text-body-small font-bold border-b-2 transition-all whitespace-nowrap',
+                    editServantTab === 'talents'
+                      ? 'border-brand-primary text-brand-primary'
+                      : 'border-transparent text-text-secondary hover:text-text-primary'
+                  )}
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>الشموسية والمواهب والأسرة</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setEditServantTab('evaluation')}
                   className={cn(
-                    'flex items-center gap-2 py-2.5 px-3.5 text-caption sm:text-body-small font-bold border-b-2 transition-all relative',
+                    'flex items-center gap-1.5 py-2.5 px-3 text-caption sm:text-body-small font-bold border-b-2 transition-all relative whitespace-nowrap',
                     editServantTab === 'evaluation'
                       ? 'border-brand-primary text-brand-primary'
                       : 'border-transparent text-text-secondary hover:text-text-primary'
@@ -1876,7 +2012,7 @@ export default function AttendancePage() {
                         </div>
                         <div>
                           <label className="text-caption font-semibold text-text-secondary block mb-1">
-                            5. التليفون (01xxxxxxxxx) *
+                            5. التليفون الأساسي (01xxxxxxxxx) *
                           </label>
                           <input
                             type="tel"
@@ -1884,6 +2020,69 @@ export default function AttendancePage() {
                             value={editPhoneNumber}
                             onChange={(e) => setEditPhoneNumber(e.target.value)}
                             placeholder="01xxxxxxxxx"
+                            dir="ltr"
+                            className="w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary text-left"
+                          />
+                        </div>
+                      </div>
+
+                      {/* WhatsApp Phone & Email */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-caption font-semibold text-text-secondary block mb-1">
+                            رقم الواتساب (WhatsApp)
+                          </label>
+                          <input
+                            type="tel"
+                            value={editWhatsappPhone}
+                            onChange={(e) => setEditWhatsappPhone(e.target.value)}
+                            placeholder="افتراضياً: نفس رقم الهاتف الأساسي"
+                            dir="ltr"
+                            className="w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary text-left"
+                          />
+                          <p className="text-[11px] text-text-secondary mt-0.5">
+                            اتركه فارغاً إذا كان مطابقاً للرقم الأساسي
+                          </p>
+                        </div>
+                        <div>
+                          <label className="text-caption font-semibold text-text-secondary block mb-1">
+                            البريد الإلكتروني (اختياري)
+                          </label>
+                          <input
+                            type="email"
+                            value={editEmail}
+                            onChange={(e) => setEditEmail(e.target.value)}
+                            placeholder="servant@example.com"
+                            dir="ltr"
+                            className="w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary text-left"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Social Media: Facebook & Instagram */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-caption font-semibold text-text-secondary block mb-1">
+                            رابط فيسبوك (Facebook)
+                          </label>
+                          <input
+                            type="text"
+                            value={editFacebookUrl}
+                            onChange={(e) => setEditFacebookUrl(e.target.value)}
+                            placeholder="https://facebook.com/username"
+                            dir="ltr"
+                            className="w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary text-left"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-caption font-semibold text-text-secondary block mb-1">
+                            رابط انستجرام (Instagram)
+                          </label>
+                          <input
+                            type="text"
+                            value={editInstagramUrl}
+                            onChange={(e) => setEditInstagramUrl(e.target.value)}
+                            placeholder="https://instagram.com/username"
                             dir="ltr"
                             className="w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary text-left"
                           />
@@ -1964,7 +2163,7 @@ export default function AttendancePage() {
                         </div>
                       </div>
 
-                      {/* 7) متزوج (اسم الزوج/ة) */}
+                      {/* 7) متزوج (اسم الزوج/ة) - تعديلها بواسطة أمين الخدمة فما فوق */}
                       <div className="p-3 bg-bg-muted/40 rounded-card border border-border-default space-y-2.5">
                         <div className="flex items-center justify-between">
                           <label className="text-caption font-bold text-text-primary">
@@ -2014,8 +2213,264 @@ export default function AttendancePage() {
                         )}
                       </div>
 
+                      {/* Additional Account Details: Role, Temp Password */}
+                      <div className="pt-2 border-t border-border-default space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-caption font-semibold text-text-secondary block mb-1">
+                              المسؤولية / الرتبة الخدمية
+                            </label>
+                            <select
+                              value={editRoleCode}
+                              disabled={!canEditRole}
+                              onChange={(e) => setEditRoleCode(e.target.value)}
+                              className={cn(
+                                'w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary',
+                                !canEditRole && 'opacity-75 cursor-not-allowed bg-bg-surface'
+                              )}
+                            >
+                              {availableEditRoles.map((r) => (
+                                <option key={r.code} value={r.code}>
+                                  {r.name}
+                                </option>
+                              ))}
+                            </select>
+                            {!canEditRole && (
+                              <p className="text-[11px] text-text-tertiary mt-1">
+                                لا تملك الصلاحية لتغيير رتبة هذا الحساب
+                              </p>
+                            )}
+                          </div>
+
+                          <div>
+                            <label className="text-caption font-semibold text-text-secondary block mb-1">
+                              تعيين كلمة مرور جديدة (اتركه فارغاً للإبقاء)
+                            </label>
+                            <input
+                              type="password"
+                              value={editTempPassword}
+                              onChange={(e) => setEditTempPassword(e.target.value)}
+                              placeholder="كلمة مرور جديدة (8 أحرف على الأقل)..."
+                              className="w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : editServantTab === 'talents' ? (
+                    /* TAB 2: DEACON, TALENTS, ACTIVITIES, SIBLINGS & CHILDREN */
+                    <div className="space-y-4 animate-fade-in">
+                      {/* Profile Picture */}
+                      <div className="p-3.5 bg-bg-muted/40 rounded-card border border-border-default flex items-center gap-4">
+                        <div className="relative w-16 h-16 rounded-full overflow-hidden bg-bg-surface border-2 border-brand-primary flex items-center justify-center shrink-0">
+                          {editProfilePicture ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={editProfilePicture}
+                              alt="صورة الخادم"
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <User className="w-8 h-8 text-brand-primary" />
+                          )}
+                        </div>
+                        <div className="flex-1 space-y-1.5">
+                          <label className="text-caption font-bold text-text-primary block">
+                            صورة الخادم الشخصية
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <label className="cursor-pointer px-3 py-1 bg-brand-primary text-white text-caption font-semibold rounded-pill hover:bg-brand-primary-light transition-colors flex items-center gap-1">
+                              <Camera className="w-3.5 h-3.5" />
+                              <span>رفع صورة</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    const reader = new FileReader();
+                                    reader.onloadend = () => setEditProfilePicture(reader.result as string);
+                                    reader.readAsDataURL(file);
+                                  }
+                                }}
+                                className="hidden"
+                              />
+                            </label>
+                            {editProfilePicture && (
+                              <button
+                                type="button"
+                                onClick={() => setEditProfilePicture('')}
+                                className="text-status-danger text-caption hover:underline font-semibold"
+                              >
+                                حذف الصورة
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Deacon Status */}
+                      <div className="p-3.5 bg-bg-muted/40 rounded-card border border-border-default space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Award className="w-4 h-4 text-brand-primary" />
+                            <span className="font-bold text-text-primary text-body-small">
+                              الرتبة الشماسية (شماس)
+                            </span>
+                          </div>
+                          <label className="flex items-center gap-2 cursor-pointer text-caption font-semibold">
+                            <input
+                              type="checkbox"
+                              checked={editIsDeacon}
+                              onChange={(e) => setEditIsDeacon(e.target.checked)}
+                              className="w-4 h-4 rounded text-brand-primary focus:ring-brand-primary"
+                            />
+                            <span>شماس مُرسم</span>
+                          </label>
+                        </div>
+
+                        {editIsDeacon && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-border-default">
+                            <div>
+                              <label className="text-caption font-semibold text-text-secondary block mb-1">
+                                اسم الشماس في الرسامة
+                              </label>
+                              <input
+                                type="text"
+                                value={editDeaconName}
+                                onChange={(e) => setEditDeaconName(e.target.value)}
+                                placeholder="مثال: الشماس بطرس / أثناسيوس"
+                                className="w-full bg-bg-surface border border-border-default rounded-card p-2 text-body-small text-text-primary focus:outline-none focus:border-brand-primary"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-caption font-semibold text-text-secondary block mb-1">
+                                رتبة الشماسية
+                              </label>
+                              <select
+                                value={editDeaconRank}
+                                onChange={(e) => setEditDeaconRank(e.target.value)}
+                                className="w-full bg-bg-surface border border-border-default rounded-card p-2 text-body-small text-text-primary focus:outline-none focus:border-brand-primary"
+                              >
+                                {SERVANT_DEACON_RANKS.map((rk) => (
+                                  <option key={rk} value={rk}>
+                                    {rk}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Church Activities */}
+                      <div className="p-3.5 bg-bg-muted/40 rounded-card border border-border-default space-y-2">
+                        <span className="font-bold text-text-primary text-body-small block">
+                          الأنشطة الكنسية المشترك بها (كورال, مسرح, كشافة, كورة)
+                        </span>
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          {SERVANT_ACTIVITIES_PRESET.map((act) => {
+                            const isSelected = editActivities.includes(act);
+                            return (
+                              <button
+                                key={act}
+                                type="button"
+                                onClick={() => handleToggleServantActivity(act)}
+                                className={cn(
+                                  'px-3 py-1 rounded-pill text-caption font-semibold transition-all border',
+                                  isSelected
+                                    ? 'bg-brand-primary text-white border-brand-primary shadow-xs'
+                                    : 'bg-bg-surface text-text-secondary border-border-default hover:bg-bg-muted'
+                                )}
+                              >
+                                {act} {isSelected ? '✓' : '+'}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Talents */}
+                      <div className="p-3.5 bg-bg-muted/40 rounded-card border border-border-default space-y-2">
+                        <span className="font-bold text-text-primary text-body-small block">
+                          المواهب والمهارات (ألحان/ترتيل، شعر وكتابة، تمثيل وإلقاء، تكنولوجيا، كورة)
+                        </span>
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          {SERVANT_TALENTS_PRESET.map((tal) => {
+                            const isSelected = editTalents.includes(tal);
+                            return (
+                              <button
+                                key={tal}
+                                type="button"
+                                onClick={() => handleToggleServantTalent(tal)}
+                                className={cn(
+                                  'px-3 py-1 rounded-pill text-caption font-semibold transition-all border',
+                                  isSelected
+                                    ? 'bg-brand-accent text-white border-brand-accent shadow-xs'
+                                    : 'bg-bg-surface text-text-secondary border-border-default hover:bg-bg-muted'
+                                )}
+                              >
+                                {tal} {isSelected ? '★' : '+'}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Siblings */}
+                      <div className="p-3.5 bg-bg-muted/40 rounded-card border border-border-default space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-caption font-bold text-text-primary block">
+                            بيانات الأخوة والأخوات وأعمارهم
+                          </span>
+                          <button
+                            type="button"
+                            onClick={handleAddSibling}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-pill bg-brand-primary-soft text-brand-primary text-caption font-bold hover:bg-brand-primary/20 transition-colors"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>إضافة أخ / أخت</span>
+                          </button>
+                        </div>
+
+                        {editSiblingsList.length === 0 ? (
+                          <p className="text-[11px] text-text-tertiary text-center py-2">
+                            لم تتم إضافة أخوة
+                          </p>
+                        ) : (
+                          <div className="space-y-2 pt-1">
+                            {editSiblingsList.map((sib, index) => (
+                              <div key={index} className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  placeholder="اسم الأخ / الأخت..."
+                                  value={sib.name}
+                                  onChange={(e) => handleSiblingChange(index, 'name', e.target.value)}
+                                  className="flex-1 bg-bg-surface border border-border-default rounded-card p-2 text-body-small text-text-primary focus:outline-none focus:border-brand-primary"
+                                />
+                                <input
+                                  type="number"
+                                  placeholder="السن..."
+                                  value={sib.age}
+                                  onChange={(e) => handleSiblingChange(index, 'age', e.target.value)}
+                                  className="w-20 bg-bg-surface border border-border-default rounded-card p-2 text-body-small text-text-primary focus:outline-none focus:border-brand-primary text-center"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveSibling(index)}
+                                  className="p-2 rounded-full text-status-danger hover:bg-status-danger-soft transition-colors"
+                                  title="حذف"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
                       {/* 9) الأبناء (اختياري) وسنهم */}
-                      <div className="p-3 bg-bg-muted/40 rounded-card border border-border-default space-y-2.5">
+                      <div className="p-3.5 bg-bg-muted/40 rounded-card border border-border-default space-y-2.5">
                         <div className="flex items-center justify-between">
                           <div>
                             <span className="text-caption font-bold text-text-primary block">
@@ -2069,64 +2524,6 @@ export default function AttendancePage() {
                             ))}
                           </div>
                         )}
-                      </div>
-
-                      {/* Additional Account Details: Email, Role, Temp Password */}
-                      <div className="pt-2 border-t border-border-default space-y-3">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div>
-                            <label className="text-caption font-semibold text-text-secondary block mb-1">
-                              البريد الإلكتروني (اختياري)
-                            </label>
-                            <input
-                              type="email"
-                              value={editEmail}
-                              onChange={(e) => setEditEmail(e.target.value)}
-                              placeholder="servant@example.com"
-                              dir="ltr"
-                              className="w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary text-left"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="text-caption font-semibold text-text-secondary block mb-1">
-                              المسؤولية / الرتبة الخدمية
-                            </label>
-                            <select
-                              value={editRoleCode}
-                              disabled={!canEditRole}
-                              onChange={(e) => setEditRoleCode(e.target.value)}
-                              className={cn(
-                                'w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary',
-                                !canEditRole && 'opacity-75 cursor-not-allowed bg-bg-surface'
-                              )}
-                            >
-                              {availableEditRoles.map((r) => (
-                                <option key={r.code} value={r.code}>
-                                  {r.name}
-                                </option>
-                              ))}
-                            </select>
-                            {!canEditRole && (
-                              <p className="text-[11px] text-text-tertiary mt-1">
-                                لا تملك الصلاحية لتغيير رتبة هذا الحساب
-                              </p>
-                            )}
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="text-caption font-semibold text-text-secondary block mb-1">
-                            تعيين كلمة مرور جديدة (اتركه فارغاً للإبقاء على الحالية)
-                          </label>
-                          <input
-                            type="password"
-                            value={editTempPassword}
-                            onChange={(e) => setEditTempPassword(e.target.value)}
-                            placeholder="كلمة مرور جديدة (8 أحرف على الأقل)..."
-                            className="w-full bg-bg-muted border border-border-default rounded-card p-2.5 text-body-small text-text-primary focus:outline-none focus:border-brand-primary"
-                          />
-                        </div>
                       </div>
                     </div>
                   ) : (

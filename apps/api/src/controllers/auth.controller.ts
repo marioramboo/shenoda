@@ -68,6 +68,16 @@ const updateProfileSchema = z.object({
   maritalStatus: z.string().optional().nullable(),
   spouseName: z.string().optional().nullable(),
   educationOrCareer: z.string().optional().nullable(),
+  whatsappPhone: z.string().optional().nullable(),
+  facebookUrl: z.string().optional().nullable(),
+  instagramUrl: z.string().optional().nullable(),
+  talents: z.any().optional().nullable(),
+  siblingsInfo: z.any().optional().nullable(),
+  activities: z.any().optional().nullable(),
+  isDeacon: z.boolean().optional().nullable(),
+  deaconName: z.string().optional().nullable(),
+  deaconRank: z.string().optional().nullable(),
+  profilePicture: z.string().optional().nullable(),
   currentPassword: z.string().optional(),
   newPassword: z.string().min(8, 'كلمة المرور الجديدة يجب ألا تقل عن 8 أحرف').optional(),
 });
@@ -568,6 +578,17 @@ export class AuthController {
             maritalStatus: user.maritalStatus,
             spouseName: user.spouseName,
             educationOrCareer: user.educationOrCareer,
+            whatsappPhone: user.whatsappPhone || user.phoneNumber,
+            whatsappPhoneRaw: user.whatsappPhone || null,
+            facebookUrl: user.facebookUrl || null,
+            instagramUrl: user.instagramUrl || null,
+            talents: user.talents || [],
+            siblingsInfo: user.siblingsInfo || [],
+            activities: user.activities || [],
+            isDeacon: user.isDeacon || false,
+            deaconName: user.deaconName || null,
+            deaconRank: user.deaconRank || null,
+            profilePicture: user.profilePicture || null,
             role: {
               id: user.role.id,
               code: user.role.code,
@@ -616,6 +637,16 @@ export class AuthController {
       maritalStatus,
       spouseName,
       educationOrCareer,
+      whatsappPhone,
+      facebookUrl,
+      instagramUrl,
+      talents,
+      siblingsInfo,
+      activities,
+      isDeacon,
+      deaconName,
+      deaconRank,
+      profilePicture,
       currentPassword,
       newPassword,
     } = parseResult.data;
@@ -636,6 +667,29 @@ export class AuthController {
         success: false,
         error: { code: 'USER_NOT_FOUND', message: 'المستخدم غير موجود' },
       });
+    }
+
+    // Role check: maritalStatus can only be modified by Stage Secretary and above (Level 3+)
+    const callerLevel = req.user.roleLevel ?? user.role?.level ?? 1;
+    if (callerLevel < 3) {
+      if (maritalStatus !== undefined && maritalStatus !== user.maritalStatus) {
+        return res.status(403).json({
+          success: false,
+          error: {
+            code: 'FORBIDDEN_MARITAL_STATUS_UPDATE',
+            message: 'تعديل الحالة الاجتماعية مقتصر حصرياً على رتبة أمين الخدمة فما فوق',
+          },
+        });
+      }
+      if (spouseName !== undefined && spouseName !== user.spouseName) {
+        return res.status(403).json({
+          success: false,
+          error: {
+            code: 'FORBIDDEN_MARITAL_STATUS_UPDATE',
+            message: 'تعديل بيانات شريك الحياة مقتصر حصرياً على رتبة أمين الخدمة فما فوق',
+          },
+        });
+      }
     }
 
     // Phone uniqueness check
@@ -717,6 +771,16 @@ export class AuthController {
         maritalStatus: maritalStatus !== undefined ? maritalStatus : undefined,
         spouseName: spouseName !== undefined ? spouseName : undefined,
         educationOrCareer: educationOrCareer !== undefined ? educationOrCareer : undefined,
+        whatsappPhone: whatsappPhone !== undefined ? (whatsappPhone?.trim() || null) : undefined,
+        facebookUrl: facebookUrl !== undefined ? (facebookUrl?.trim() || null) : undefined,
+        instagramUrl: instagramUrl !== undefined ? (instagramUrl?.trim() || null) : undefined,
+        talents: talents !== undefined ? talents : undefined,
+        siblingsInfo: siblingsInfo !== undefined ? siblingsInfo : undefined,
+        activities: activities !== undefined ? activities : undefined,
+        isDeacon: isDeacon !== undefined ? isDeacon : undefined,
+        deaconName: deaconName !== undefined ? (deaconName?.trim() || null) : undefined,
+        deaconRank: deaconRank !== undefined ? (deaconRank?.trim() || null) : undefined,
+        profilePicture: profilePicture !== undefined ? profilePicture : undefined,
         passwordHash: newPasswordHash || undefined,
       },
       include: {
@@ -744,6 +808,17 @@ export class AuthController {
         maritalStatus: updatedUser.maritalStatus,
         spouseName: updatedUser.spouseName,
         educationOrCareer: updatedUser.educationOrCareer,
+        whatsappPhone: updatedUser.whatsappPhone || updatedUser.phoneNumber,
+        whatsappPhoneRaw: updatedUser.whatsappPhone || null,
+        facebookUrl: updatedUser.facebookUrl || null,
+        instagramUrl: updatedUser.instagramUrl || null,
+        talents: updatedUser.talents || [],
+        siblingsInfo: updatedUser.siblingsInfo || [],
+        activities: updatedUser.activities || [],
+        isDeacon: updatedUser.isDeacon || false,
+        deaconName: updatedUser.deaconName || null,
+        deaconRank: updatedUser.deaconRank || null,
+        profilePicture: updatedUser.profilePicture || null,
         role: {
           id: updatedUser.role.id,
           code: updatedUser.role.code,

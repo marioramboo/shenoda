@@ -179,10 +179,22 @@ model User {
   fatherConfessor   String?   // اب الاعتراف
   dateOfBirth       DateTime?
   address           String?
-  maritalStatus     String?   // Single / Married
+  maritalStatus     String?   // Single / Married (Editable only by Stage Secretary Level 3+)
   spouseName        String?
   educationOrCareer String?   // Studying / Military / Graduated
   childrenInfo      Json?     // Array of { name, age }
+
+  // Extended Profile Fields
+  whatsappPhone     String?   // رقم الواتساب (الافتراضي هو رقم الهاتف الأساسي)
+  facebookUrl       String?   // رابط فيسبوك
+  instagramUrl      String?   // رابط انستجرام
+  talents           Json?     // مواهب: ألحان/ترتيل، شعر وكتابة، تمثيل وإلقاء، تكنولوجيا، كورة
+  siblingsInfo      Json?     // الأخوة وأعمارهم: Array of { name, age }
+  activities        Json?     // أنشطة: كورال، مسرح، كشافة، كورة
+  isDeacon          Boolean?  @default(false) // هل هو شماس
+  deaconName        String?   // اسم الشماس في الرسامة
+  deaconRank        String?   // رتبة الشماسية (إبصالتس، أغنسطس، إيبودياكون، دياكون، أرشيدياكون)
+  profilePicture    String?   // صورة الخادم (رابط أو Base64)
 
   // System & Audit
   createdAt DateTime @default(now())
