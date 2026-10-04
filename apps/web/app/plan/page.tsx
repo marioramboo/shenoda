@@ -22,6 +22,7 @@ import {
   Calendar,
   Layers,
   ChevronLeft,
+  ChevronRight,
   FileText,
   Plus,
   X,
@@ -182,11 +183,14 @@ export default function StagePlanPage() {
   const { user } = useAuth();
   const router = useRouter();
 
-  // 3 Primary Plan Sections requested by user:
-  // 1. meetings: تدبير اجتماع خدام
-  // 2. service: تدبير الخدمة
-  // 3. lessons: تحضير الدروس
-  const [activePlanTab, setActivePlanTab] = useState<'meetings' | 'service' | 'lessons'>('lessons');
+  // Photo 3: 2 Primary Plan Sections:
+  // 1. service: تدبير الخدمة (Default)
+  // 2. meetings: تدبير اجتماع خدام
+  const [activePlanTab, setActivePlanTab] = useState<'service' | 'meetings'>('service');
+
+  // Calendar State (Photo 3)
+  const [calendarMonthDate, setCalendarMonthDate] = useState<Date>(() => new Date(2026, 9, 1));
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
 
   const [selectedTerm, setSelectedTerm] = useState<'term1' | 'term2'>('term1');
   const [loading, setLoading] = useState(true);
@@ -435,6 +439,44 @@ export default function StagePlanPage() {
   const lessonEvents = useMemo(() => {
     return allEvents.filter((e) => e.category === EventCategory.SPIRITUAL_LESSON);
   }, [allEvents]);
+
+  const toDateKey = (dateStr?: string | null): string => {
+    if (!dateStr) return '';
+    try {
+      return new Date(dateStr).toISOString().split('T')[0];
+    } catch {
+      return '';
+    }
+  };
+
+  const filteredMeetingEvents = useMemo(() => {
+    if (!selectedCalendarDate) return meetingEvents;
+    return meetingEvents.filter((e) => toDateKey(e.startDate) === selectedCalendarDate);
+  }, [meetingEvents, selectedCalendarDate]);
+
+  const filteredServiceEvents = useMemo(() => {
+    if (!selectedCalendarDate) return serviceEvents;
+    return serviceEvents.filter((e) => toDateKey(e.startDate) === selectedCalendarDate);
+  }, [serviceEvents, selectedCalendarDate]);
+
+  const calendarDaysGrid = useMemo(() => {
+    const year = calendarMonthDate.getFullYear();
+    const month = calendarMonthDate.getMonth();
+    const firstDay = new Date(year, month, 1).getDay();
+    const offset = (firstDay + 1) % 7;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    const cells: Array<{ day: number; dateKey: string; hasEvent: boolean } | null> = [];
+    for (let i = 0; i < offset; i++) {
+      cells.push(null);
+    }
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const hasEvent = allEvents.some((e) => toDateKey(e.startDate) === dateKey);
+      cells.push({ day: d, dateKey, hasEvent });
+    }
+    return cells;
+  }, [calendarMonthDate, allEvents]);
 
   // Open Add Event Modal for a specific tab
   const handleOpenAddEvent = (type: 'meeting' | 'service' | 'lesson') => {
@@ -925,9 +967,9 @@ export default function StagePlanPage() {
                 <ArrowRight className="w-5 h-5" />
               </Link>
               <div>
-                <h1 className="text-h2 font-bold text-text-primary">خطة وتدبير المرحلة</h1>
+                <h1 className="text-h2 font-bold text-text-primary">تدبير الخدمة</h1>
                 <p className="text-caption text-text-secondary">
-                  تدبير اجتماعات الخدام، الخدمة العامة، وتحضير المنهج
+                  تدبير فعاليات الخدمة واجتماعات الخدام والتقويم الشهري
                 </p>
               </div>
             </div>
@@ -1002,32 +1044,14 @@ export default function StagePlanPage() {
             </div>
           </section>
 
-          {/* The 3 Primary Plan Tabs Requested by User */}
-          <div className="bg-bg-surface border border-border-default rounded-card p-1.5 shadow-card flex items-center gap-1">
-            {/* 1. تدبير اجتماع خدام */}
-            <button
-              type="button"
-              onClick={() => setActivePlanTab('meetings')}
-              className={cn(
-                'flex-1 py-2 px-1.5 rounded-button text-caption font-bold transition-all flex flex-col sm:flex-row items-center justify-center gap-1.5 cursor-pointer text-center',
-                activePlanTab === 'meetings'
-                  ? 'bg-brand-primary text-white shadow-sm'
-                  : 'text-text-secondary hover:text-text-primary hover:bg-bg-muted'
-              )}
-            >
-              <Users className="w-4 h-4 shrink-0" />
-              <span>اجتماع خدام</span>
-              <span className={cn('text-[10px] px-1.5 py-0.2 rounded-full', activePlanTab === 'meetings' ? 'bg-white/20 text-white' : 'bg-bg-muted text-text-secondary')}>
-                {meetingEvents.length}
-              </span>
-            </button>
-
-            {/* 2. تدبير الخدمة */}
+          {/* Photo 3: 2 Primary Plan Tabs: تدبير الخدمة & اجتماع الخدام */}
+          <div className="bg-bg-surface border border-border-default rounded-card p-1.5 shadow-card flex items-center gap-1.5">
+            {/* 1. تدبير الخدمة */}
             <button
               type="button"
               onClick={() => setActivePlanTab('service')}
               className={cn(
-                'flex-1 py-2 px-1.5 rounded-button text-caption font-bold transition-all flex flex-col sm:flex-row items-center justify-center gap-1.5 cursor-pointer text-center',
+                'flex-1 py-2.5 px-3 rounded-button text-caption font-bold transition-all flex items-center justify-center gap-2 cursor-pointer text-center',
                 activePlanTab === 'service'
                   ? 'bg-brand-primary text-white shadow-sm'
                   : 'text-text-secondary hover:text-text-primary hover:bg-bg-muted'
@@ -1035,28 +1059,47 @@ export default function StagePlanPage() {
             >
               <Church className="w-4 h-4 shrink-0" />
               <span>تدبير الخدمة</span>
-              <span className={cn('text-[10px] px-1.5 py-0.2 rounded-full', activePlanTab === 'service' ? 'bg-white/20 text-white' : 'bg-bg-muted text-text-secondary')}>
+              <span className={cn('text-[11px] px-2 py-0.5 rounded-full font-bold', activePlanTab === 'service' ? 'bg-white/20 text-white' : 'bg-bg-muted text-text-secondary')}>
                 {serviceEvents.length}
               </span>
             </button>
 
-            {/* 3. تحضير الدروس */}
+            {/* 2. اجتماع الخدام */}
             <button
               type="button"
-              onClick={() => setActivePlanTab('lessons')}
+              onClick={() => setActivePlanTab('meetings')}
               className={cn(
-                'flex-1 py-2 px-1.5 rounded-button text-caption font-bold transition-all flex flex-col sm:flex-row items-center justify-center gap-1.5 cursor-pointer text-center',
-                activePlanTab === 'lessons'
+                'flex-1 py-2.5 px-3 rounded-button text-caption font-bold transition-all flex items-center justify-center gap-2 cursor-pointer text-center',
+                activePlanTab === 'meetings'
                   ? 'bg-brand-primary text-white shadow-sm'
                   : 'text-text-secondary hover:text-text-primary hover:bg-bg-muted'
               )}
             >
-              <BookOpen className="w-4 h-4 shrink-0" />
-              <span>تحضير الدروس</span>
-              <span className={cn('text-[10px] px-1.5 py-0.2 rounded-full', activePlanTab === 'lessons' ? 'bg-white/20 text-white' : 'bg-bg-muted text-text-secondary')}>
-                {lessonEvents.length}
+              <Users className="w-4 h-4 shrink-0" />
+              <span>اجتماع الخدام</span>
+              <span className={cn('text-[11px] px-2 py-0.5 rounded-full font-bold', activePlanTab === 'meetings' ? 'bg-white/20 text-white' : 'bg-bg-muted text-text-secondary')}>
+                {meetingEvents.length}
               </span>
             </button>
+          </div>
+
+          {/* Quick link to Lesson Prep (Photos 7 & 8: /prep) */}
+          <div className="bg-brand-primary/5 border border-brand-primary/15 rounded-card p-2.5 flex items-center justify-between gap-2 text-right">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center shrink-0">
+                <BookOpen className="w-3.5 h-3.5" />
+              </div>
+              <span className="text-caption font-semibold text-text-primary">
+                منهج وتحضير الدروس الأسبوعية
+              </span>
+            </div>
+            <Link
+              href="/prep"
+              className="text-[11px] font-bold text-brand-primary hover:underline flex items-center gap-0.5 shrink-0"
+            >
+              <span>فتح المنهج</span>
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </Link>
           </div>
 
           {/* ======================================================== */}
@@ -1093,13 +1136,22 @@ export default function StagePlanPage() {
                 )}
               </div>
 
-              {meetingEvents.length === 0 ? (
+              {filteredMeetingEvents.length === 0 ? (
                 <div className="p-6 bg-bg-surface border border-dashed border-border-default rounded-card text-center flex flex-col items-center gap-2">
                   <CalendarDays className="w-8 h-8 text-text-tertiary" />
                   <p className="text-body-small font-semibold text-text-secondary">
-                    لا توجد مواعيد اجتماعات خدام مسجلة حتى الآن
+                    {selectedCalendarDate ? 'لا توجد اجتماعات في هذا اليوم المحدد' : 'لا توجد مواعيد اجتماعات خدام مسجلة حتى الآن'}
                   </p>
-                  {canManageMeetings ? (
+                  {selectedCalendarDate && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCalendarDate(null)}
+                      className="text-caption font-bold text-brand-primary underline"
+                    >
+                      إلغاء التصفية وعرض الكل
+                    </button>
+                  )}
+                  {canManageMeetings && !selectedCalendarDate && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -1109,15 +1161,12 @@ export default function StagePlanPage() {
                       <Plus className="w-4 h-4 ml-1" />
                       <span>جدولة أول اجتماع خدام</span>
                     </Button>
-                  ) : (
-                    <p className="text-caption text-text-tertiary max-w-sm mt-0.5 leading-relaxed">
-                      مواعيد اجتماعات الخدام ومجالس الأمناء يتم تدبيرها وجدولتها حصرياً بواسطة الأمين العام.
-                    </p>
                   )}
                 </div>
               ) : (
-                <div className="flex flex-col gap-2.5">
-                  {meetingEvents.map((evt) => {
+                <div className="flex flex-col gap-3">
+                  {filteredMeetingEvents.map((evt) => {
+                    const isVolunteered = evt.volunteers.some((v) => v.userId === user?.id);
                     const formattedDate = new Date(evt.startDate).toLocaleDateString('ar-EG', {
                       weekday: 'long',
                       day: 'numeric',
@@ -1128,81 +1177,113 @@ export default function StagePlanPage() {
                     return (
                       <div
                         key={evt.id}
-                        className="bg-bg-surface border border-border-default rounded-card p-3.5 shadow-card text-right flex flex-col gap-2 hover:border-brand-primary/40 transition-all"
+                        className="bg-bg-surface border border-border-default rounded-card p-4 shadow-card text-right flex flex-col gap-3 hover:border-brand-primary/40 transition-all"
                       >
-                        <div className="flex items-center justify-between flex-wrap gap-1.5">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <Badge variant="accent">
-                              {EVENT_CATEGORY_ARABIC[evt.category]}
-                            </Badge>
-                            {evt.requiresAllServants && (
-                              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 flex items-center gap-1">
-                                <ShieldAlert className="w-3 h-3 text-amber-600 dark:text-amber-400" />
-                                <span>حضور إلزامي لجميع الخدام</span>
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-[11px] text-text-secondary flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
+                        {/* Header: Title and Date (Photo 3) */}
+                        <div className="flex items-center justify-between flex-wrap gap-2 pb-2.5 border-b border-border-default">
+                          <h3 className="text-body-default font-bold text-text-primary">
+                            {evt.title}
+                          </h3>
+                          <span className="text-[11px] font-semibold text-text-secondary flex items-center gap-1 bg-bg-muted px-2.5 py-1 rounded-full">
+                            <Clock className="w-3.5 h-3.5 text-brand-primary" />
                             {formattedDate}
                           </span>
                         </div>
 
-                        <h3 className="text-body-default font-bold text-text-primary">
-                          {evt.title}
-                        </h3>
-
-                        {getEventDisplayDescription(evt) && (
-                          <p className="text-caption text-text-secondary leading-relaxed">
-                            {getEventDisplayDescription(evt)}
-                          </p>
-                        )}
-
-                        {evt.location && (
-                          <div className="flex items-center gap-1.5 text-caption text-text-secondary bg-bg-muted/60 px-2.5 py-1.5 rounded-card">
-                            <MapPin className="w-3.5 h-3.5 text-brand-accent shrink-0" />
-                            <span className="truncate">{evt.location}</span>
+                        {/* Photo 3 Structured Fields: النوع، عدد الخدام المطلوبة، المكان، الملحوظات */}
+                        <div className="space-y-1.5 text-caption">
+                          <div className="flex items-start gap-1.5">
+                            <span className="font-bold text-text-primary shrink-0">• النوع:</span>
+                            <span className="text-text-secondary">{EVENT_CATEGORY_ARABIC[evt.category] || evt.category}</span>
                           </div>
-                        )}
 
-                        {/* Actions: View Attendees / Volunteers & Secretary controls */}
-                        <div className="flex items-center justify-between pt-2 border-t border-border-default mt-1 flex-wrap gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleOpenViewVolunteers(evt)}
-                            className="h-7 text-[11px] px-2.5 gap-1.5 font-semibold text-brand-primary border-brand-primary/30 hover:bg-brand-primary/10"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            <span>كشف الخدام المسجلين ({evt.volunteers?.length || 0})</span>
-                          </Button>
+                          <div className="flex items-start gap-1.5">
+                            <span className="font-bold text-text-primary shrink-0">• عدد الخدام المطلوبة:</span>
+                            <span className="text-amber-700 dark:text-amber-300 font-bold">
+                              جميع خدام المرحلة (إلزامي) — مسجل {evt.volunteers?.length || 0}
+                            </span>
+                          </div>
 
-                          {canManageMeetings && (
-                            <div className="flex items-center gap-2">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleOpenEditEvent(evt, 'meeting')}
-                                className="h-7 text-[11px] px-2.5 gap-1 font-semibold text-brand-primary border-brand-primary/30 hover:bg-brand-primary/10"
-                              >
-                                <Pencil className="w-3 h-3" />
-                                <span>تعديل</span>
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                disabled={deleteEventLoading === evt.id}
-                                onClick={() => handleDeleteMeeting(evt.id)}
-                                className="h-7 text-[11px] px-2.5 gap-1 font-semibold text-status-danger border-status-danger/30 hover:bg-status-danger-soft hover:text-status-danger"
-                              >
-                                <X className="w-3 h-3" />
-                                <span>{deleteEventLoading === evt.id ? 'جارٍ الحذف...' : 'حذف'}</span>
-                              </Button>
+                          {evt.location && (
+                            <div className="flex items-start gap-1.5">
+                              <span className="font-bold text-text-primary shrink-0">• المكان:</span>
+                              <span className="text-text-secondary">{evt.location}</span>
                             </div>
                           )}
+
+                          {getEventDisplayDescription(evt) && (
+                            <div className="flex items-start gap-1.5">
+                              <span className="font-bold text-text-primary shrink-0">• الملحوظات:</span>
+                              <span className="text-text-secondary leading-relaxed">{getEventDisplayDescription(evt)}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Actions (Photo 3): تسجيل حضور + كشف الخدام */}
+                        <div className="flex items-center justify-between pt-2.5 border-t border-border-default flex-wrap gap-2">
+                          <Button
+                            variant={isVolunteered ? 'outline' : 'primary'}
+                            size="sm"
+                            isLoading={volunteerActionLoading === evt.id}
+                            onClick={() => handleVolunteerToggle(evt)}
+                            className={cn(
+                              'h-8 px-3 text-caption font-bold gap-1.5',
+                              isVolunteered
+                                ? 'text-status-success border-status-success/40 bg-status-success-soft hover:bg-status-success-soft/80'
+                                : 'bg-brand-primary text-white hover:bg-brand-primary/90'
+                            )}
+                          >
+                            {isVolunteered ? (
+                              <>
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>تم تسجيل حضورك بنجاح</span>
+                              </>
+                            ) : (
+                              <>
+                                <Check className="w-3.5 h-3.5" />
+                                <span>تسجيل حضور</span>
+                              </>
+                            )}
+                          </Button>
+
+                          <div className="flex items-center gap-1.5">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleOpenViewVolunteers(evt)}
+                              className="h-8 text-[11px] px-2.5 gap-1.5 font-semibold text-brand-primary border-brand-primary/30 hover:bg-brand-primary/10"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>كشف الخدام ({evt.volunteers?.length || 0})</span>
+                            </Button>
+
+                            {canManageMeetings && (
+                              <>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleOpenEditEvent(evt, 'meeting')}
+                                  className="h-8 text-caption px-2 text-text-secondary hover:text-brand-primary"
+                                  title="تعديل"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={deleteEventLoading === evt.id}
+                                  onClick={() => handleDeleteMeeting(evt.id)}
+                                  className="h-8 text-caption px-2 text-status-danger border-status-danger/30 hover:bg-status-danger-soft"
+                                  title="حذف"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
                         </div>
                       </div>
                     );
@@ -1241,13 +1322,22 @@ export default function StagePlanPage() {
                 )}
               </div>
 
-              {serviceEvents.length === 0 ? (
+              {filteredServiceEvents.length === 0 ? (
                 <div className="p-6 bg-bg-surface border border-dashed border-border-default rounded-card text-center flex flex-col items-center gap-2">
                   <Calendar className="w-8 h-8 text-text-tertiary" />
                   <p className="text-body-small text-text-secondary">
-                    لا توجد فعاليات خدمة أو رحلات مسجلة بعد
+                    {selectedCalendarDate ? 'لا توجد فعاليات خدمة في هذا اليوم المحدد' : 'لا توجد فعاليات خدمة أو رحلات مسجلة بعد'}
                   </p>
-                  {canManagePlan && (
+                  {selectedCalendarDate && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCalendarDate(null)}
+                      className="text-caption font-bold text-brand-primary underline"
+                    >
+                      إلغاء التصفية وعرض الكل
+                    </button>
+                  )}
+                  {canManagePlan && !selectedCalendarDate && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -1260,8 +1350,8 @@ export default function StagePlanPage() {
                   )}
                 </div>
               ) : (
-                <div className="flex flex-col gap-2.5">
-                  {serviceEvents.map((evt) => {
+                <div className="flex flex-col gap-3">
+                  {filteredServiceEvents.map((evt) => {
                     const isVolunteered = evt.volunteers.some((v) => v.userId === user?.id);
                     const formattedDate = new Date(evt.startDate).toLocaleDateString('ar-EG', {
                       weekday: 'long',
@@ -1273,60 +1363,90 @@ export default function StagePlanPage() {
                     return (
                       <div
                         key={evt.id}
-                        className="bg-bg-surface border border-border-default rounded-card p-3.5 shadow-card text-right flex flex-col gap-2.5 hover:border-brand-primary/40 transition-all"
+                        className="bg-bg-surface border border-border-default rounded-card p-4 shadow-card text-right flex flex-col gap-3 hover:border-brand-primary/40 transition-all"
                       >
-                        <div className="flex items-center justify-between flex-wrap gap-1.5">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-caption font-bold px-2 py-0.5 rounded-full bg-brand-primary-soft text-brand-primary">
-                              {EVENT_CATEGORY_ARABIC[evt.category] || evt.category}
-                            </span>
-                            {evt.requiresAllServants && (
-                              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 flex items-center gap-1">
-                                <ShieldAlert className="w-3 h-3 text-amber-600 dark:text-amber-400" />
-                                <span>حضور إلزامي لجميع الخدام</span>
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-[11px] text-text-secondary flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
+                        {/* Header: Title and Date (Photo 3) */}
+                        <div className="flex items-center justify-between flex-wrap gap-2 pb-2.5 border-b border-border-default">
+                          <h3 className="text-body-default font-bold text-text-primary">
+                            {evt.title}
+                          </h3>
+                          <span className="text-[11px] font-semibold text-text-secondary flex items-center gap-1 bg-bg-muted px-2.5 py-1 rounded-full">
+                            <Clock className="w-3.5 h-3.5 text-brand-primary" />
                             {formattedDate}
                           </span>
                         </div>
 
-                        <div>
-                          <h3 className="text-body-default font-bold text-text-primary">
-                            {evt.title}
-                          </h3>
+                        {/* Photo 3 Structured Fields: النوع، عدد الخدام المطلوبة، المكان، الملحوظات */}
+                        <div className="space-y-1.5 text-caption">
+                          <div className="flex items-start gap-1.5">
+                            <span className="font-bold text-text-primary shrink-0">• النوع:</span>
+                            <span className="text-text-secondary">{EVENT_CATEGORY_ARABIC[evt.category] || evt.category}</span>
+                          </div>
+
+                          <div className="flex items-start gap-1.5">
+                            <span className="font-bold text-text-primary shrink-0">• عدد الخدام المطلوبة:</span>
+                            <span className="text-text-secondary">
+                              {evt.requiresAllServants
+                                ? 'جميع خدام المرحلة (إلزامي)'
+                                : evt.maxVolunteers
+                                ? `${evt.maxVolunteers} خدام (تم تطوع ${evt.volunteers?.length || 0})`
+                                : `مفتوح للجميع (تم تطوع ${evt.volunteers?.length || 0})`}
+                            </span>
+                          </div>
+
+                          {evt.location && (
+                            <div className="flex items-start gap-1.5">
+                              <span className="font-bold text-text-primary shrink-0">• المكان:</span>
+                              <span className="text-text-secondary">{evt.location}</span>
+                            </div>
+                          )}
+
                           {getEventDisplayDescription(evt) && (
-                            <p className="text-caption text-text-secondary mt-1 leading-relaxed">
-                              {getEventDisplayDescription(evt)}
-                            </p>
+                            <div className="flex items-start gap-1.5">
+                              <span className="font-bold text-text-primary shrink-0">• الملحوظات:</span>
+                              <span className="text-text-secondary leading-relaxed">{getEventDisplayDescription(evt)}</span>
+                            </div>
                           )}
                         </div>
 
-                        {evt.location && (
-                          <div className="flex items-center gap-1.5 text-caption text-text-secondary bg-bg-muted/60 px-2.5 py-1.5 rounded-card">
-                            <MapPin className="w-3.5 h-3.5 text-brand-accent shrink-0" />
-                            <span className="truncate">{evt.location}</span>
-                          </div>
-                        )}
-
-                        <div className="flex items-center justify-between pt-2 border-t border-border-default mt-0.5 flex-wrap gap-2">
+                        {/* Actions (Photo 3): تسجيل حضور + كشف المتطوعين */}
+                        <div className="flex items-center justify-between pt-2.5 border-t border-border-default flex-wrap gap-2">
                           <Button
-                            variant="outline"
+                            variant={isVolunteered ? 'outline' : 'primary'}
                             size="sm"
-                            onClick={() => handleOpenViewVolunteers(evt)}
-                            className="h-7 px-2.5 text-caption font-semibold gap-1.5 text-brand-primary border-brand-primary/30 hover:bg-brand-primary/10"
+                            isLoading={volunteerActionLoading === evt.id}
+                            onClick={() => handleVolunteerToggle(evt)}
+                            className={cn(
+                              'h-8 px-3 text-caption font-bold gap-1.5',
+                              isVolunteered
+                                ? 'text-status-success border-status-success/40 bg-status-success-soft hover:bg-status-success-soft/80'
+                                : 'bg-brand-primary text-white hover:bg-brand-primary/90'
+                            )}
                           >
-                            <Eye className="w-3.5 h-3.5" />
-                            <span>
-                              {evt.requiresAllServants ? 'كشف الخدام المسجلين' : 'المتطوعين المسجلين'}{' '}
-                              ({evt.volunteers?.length || 0}
-                              {evt.maxVolunteers && !evt.requiresAllServants ? ` / ${evt.maxVolunteers}` : ''})
-                            </span>
+                            {isVolunteered ? (
+                              <>
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>تم تسجيل حضورك بنجاح</span>
+                              </>
+                            ) : (
+                              <>
+                                <Check className="w-3.5 h-3.5" />
+                                <span>تسجيل حضور</span>
+                              </>
+                            )}
                           </Button>
 
                           <div className="flex items-center gap-1.5">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleOpenViewVolunteers(evt)}
+                              className="h-8 px-2.5 text-caption font-semibold gap-1 text-text-secondary hover:text-brand-primary"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>كشف الخدام ({evt.volunteers?.length || 0})</span>
+                            </Button>
+
                             {canManagePlan && (
                               <>
                                 <Button
@@ -1334,10 +1454,10 @@ export default function StagePlanPage() {
                                   variant="outline"
                                   size="sm"
                                   onClick={() => handleOpenEditEvent(evt, 'service')}
-                                  className="h-7 text-[11px] px-2 gap-1 font-semibold text-text-secondary hover:text-brand-primary border-border-default hover:bg-bg-muted"
+                                  className="h-8 text-caption px-2 text-text-secondary hover:text-brand-primary"
+                                  title="تعديل"
                                 >
-                                  <Pencil className="w-3 h-3" />
-                                  <span>تعديل</span>
+                                  <Pencil className="w-3.5 h-3.5" />
                                 </Button>
                                 <Button
                                   type="button"
@@ -1345,33 +1465,13 @@ export default function StagePlanPage() {
                                   size="sm"
                                   disabled={deleteEventLoading === evt.id}
                                   onClick={() => handleDeleteServiceEvent(evt.id)}
-                                  className="h-7 text-[11px] px-2 gap-1 font-semibold text-status-danger border-status-danger/30 hover:bg-status-danger-soft hover:text-status-danger"
+                                  className="h-8 text-caption px-2 text-status-danger border-status-danger/30 hover:bg-status-danger-soft"
+                                  title="حذف"
                                 >
-                                  <X className="w-3 h-3" />
-                                  <span>{deleteEventLoading === evt.id ? '...' : 'حذف'}</span>
+                                  <X className="w-3.5 h-3.5" />
                                 </Button>
                               </>
                             )}
-
-                            <Button
-                              variant={isVolunteered ? 'outline' : 'primary'}
-                              size="sm"
-                              isLoading={volunteerActionLoading === evt.id}
-                              onClick={() => handleVolunteerToggle(evt)}
-                              className={cn(
-                                'h-7 px-2.5 text-caption font-semibold gap-1',
-                                isVolunteered && 'text-status-success border-status-success/40 bg-status-success-soft'
-                              )}
-                            >
-                              {isVolunteered ? (
-                                <>
-                                  <Check className="w-3 h-3" />
-                                  <span>مسجل بالفعالية</span>
-                                </>
-                              ) : (
-                                <span>تطوع بالخدمة</span>
-                              )}
-                            </Button>
                           </div>
                         </div>
                       </div>
@@ -1383,231 +1483,124 @@ export default function StagePlanPage() {
           )}
 
           {/* ======================================================== */}
-          {/* TAB 3: تحضير الدروس */}
+          {/* Photo 3: Calendar View (تقويم الشهر)                     */}
           {/* ======================================================== */}
-          {activePlanTab === 'lessons' && (
-            <section className="flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-body-default font-bold text-text-primary flex items-center gap-1.5">
-                    <BookOpen className="w-4 h-4 text-brand-primary" />
-                    <span>جدول الدروس وتحضيرات الخدام</span>
-                  </h2>
-                  <p className="text-[11px] text-text-secondary mt-0.5">
-                    البيانات الأساسية بالتدبير وتحضيرات الخدام ومتابعتها
-                  </p>
-                </div>
-
-                {canManagePlan && (
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={() => handleOpenAddEvent('lesson')}
-                    className="gap-1 font-bold h-8 px-2.5 text-caption"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>إضافة درس للمنهج</span>
-                  </Button>
-                )}
+          <section className="bg-bg-surface border border-border-default rounded-card p-4 shadow-card flex flex-col gap-3 text-right">
+            {/* Calendar Header with Month Navigation */}
+            <div className="flex items-center justify-between pb-2 border-b border-border-default">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-brand-primary" />
+                <h3 className="text-body-default font-bold text-text-primary">
+                  تقويم الفعاليات والأنشطة
+                </h3>
               </div>
 
-              {lessonEvents.length === 0 ? (
-                <div className="p-6 bg-bg-surface border border-dashed border-border-default rounded-card text-center flex flex-col items-center gap-2">
-                  <BookOpen className="w-8 h-8 text-text-tertiary" />
-                  <p className="text-body-small text-text-secondary">
-                    لم يقم أمين الخدمة بإضافة دروس للمنهج حتى الآن
-                  </p>
-                  {canManagePlan && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleOpenAddEvent('lesson')}
-                      className="font-semibold text-caption mt-1"
-                    >
-                      <Plus className="w-4 h-4 ml-1" />
-                      <span>إضافة أول درس بالمنهج</span>
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                <div className="flex flex-col gap-3">
-                  {lessonEvents.map((evt, idx) => {
-                    const formattedDate = new Date(evt.startDate).toLocaleDateString('ar-EG', {
-                      weekday: 'long',
-                      day: 'numeric',
-                      month: 'long',
-                      year: 'numeric',
-                    });
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = new Date(calendarMonthDate);
+                    next.setMonth(next.getMonth() - 1);
+                    setCalendarMonthDate(next);
+                  }}
+                  className="w-7 h-7 rounded-button border border-border-default flex items-center justify-center text-text-secondary hover:bg-bg-muted"
+                  title="الشهر السابق"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
 
-                    const userPrep = getUserPrepForEvent(evt);
+                <span className="text-caption font-bold text-text-primary min-w-[100px] text-center">
+                  {calendarMonthDate.toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' })}
+                </span>
 
-                    return (
-                      <div
-                        key={evt.id}
-                        className="bg-bg-surface border border-border-default rounded-card p-4 shadow-card text-right flex flex-col gap-3 hover:border-brand-primary/40 transition-all"
-                      >
-                        {/* Header: Lesson order, Delivery Date & Prep Status in التدبير */}
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-caption font-bold px-2.5 py-0.5 rounded-full bg-brand-primary/10 text-brand-primary border border-brand-primary/20">
-                              الدرس {idx + 1}
-                            </span>
-                            {evt.requiresAllServants && (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 flex items-center gap-1">
-                                <ShieldAlert className="w-3 h-3 text-amber-600 dark:text-amber-400" />
-                                <span>إلزامي لجميع الخدام</span>
-                              </span>
-                            )}
-                            {userPrep && (
-                              <span className={cn(
-                                "text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1",
-                                userPrep.status === 'REVIEWED'
-                                  ? "bg-status-success-soft text-status-success border-status-success/30"
-                                  : userPrep.status === 'DRAFT'
-                                  ? "bg-status-danger-soft text-status-danger border-status-danger/30"
-                                  : "bg-brand-primary-soft text-brand-primary border-brand-primary/30"
-                              )}>
-                                {userPrep.status === 'DRAFT' ? (
-                                  <AlertCircle className="w-3 h-3 text-status-danger" />
-                                ) : (
-                                  <CheckCircle2 className="w-3 h-3" />
-                                )}
-                                <span>{userPrep.status === 'REVIEWED' ? 'معتمد' : userPrep.status === 'DRAFT' ? 'مطلوب تعديل' : 'تم التحضير'}</span>
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-[11px] text-text-secondary flex items-center gap-1 font-medium">
-                            <Clock className="w-3.5 h-3.5 text-brand-primary" />
-                            تاريخ الإلقاء: {formattedDate}
-                          </span>
-                        </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = new Date(calendarMonthDate);
+                    next.setMonth(next.getMonth() + 1);
+                    setCalendarMonthDate(next);
+                  }}
+                  className="w-7 h-7 rounded-button border border-border-default flex items-center justify-center text-text-secondary hover:bg-bg-muted"
+                  title="الشهر التالي"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
 
-                        {/* Title in التدبير */}
-                        <div>
-                          <h3 className="text-body-default font-bold text-text-primary leading-tight">
-                            {evt.title}
-                          </h3>
-                        </div>
+            {/* Active Date Filter notice */}
+            {selectedCalendarDate && (
+              <div className="bg-brand-primary/10 border border-brand-primary/25 rounded-card p-2 flex items-center justify-between text-caption text-brand-primary font-semibold">
+                <span>
+                  تصفية حسب: {new Date(selectedCalendarDate).toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long' })}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedCalendarDate(null)}
+                  className="text-[11px] font-bold underline hover:text-brand-accent cursor-pointer"
+                >
+                  عرض جميع الفعاليات
+                </button>
+              </div>
+            )}
 
-                        {/* Bible Verse in التدبير */}
-                        {evt.bibleVerse && (
-                          <div className="bg-brand-primary-soft/40 border border-brand-primary/20 rounded-card p-2 text-caption text-brand-primary flex items-start gap-1.5">
-                            <Bookmark className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                            <div>
-                              <span className="font-bold ml-1">الآية المقررة:</span>
-                              <span className="font-medium">{evt.bibleVerse}</span>
-                            </div>
-                          </div>
+            {/* Days of Week Header (Starting from Saturday as customary in Egypt) */}
+            <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-bold text-text-secondary py-1 border-b border-border-default/60">
+              <span>سبت</span>
+              <span>أحد</span>
+              <span>إثنين</span>
+              <span>ثلاثاء</span>
+              <span>أربعاء</span>
+              <span>خميس</span>
+              <span>جمعة</span>
+            </div>
+
+            {/* Calendar Days Grid */}
+            <div className="grid grid-cols-7 gap-1">
+              {calendarDaysGrid.map((cell, idx) => {
+                if (!cell) {
+                  return <div key={`empty-${idx}`} className="h-9 rounded-button bg-bg-muted/20" />;
+                }
+
+                const isSelected = selectedCalendarDate === cell.dateKey;
+                const isToday = cell.dateKey === toDateKey(new Date().toISOString());
+
+                return (
+                  <button
+                    key={cell.dateKey}
+                    type="button"
+                    onClick={() => {
+                      if (selectedCalendarDate === cell.dateKey) {
+                        setSelectedCalendarDate(null);
+                      } else {
+                        setSelectedCalendarDate(cell.dateKey);
+                      }
+                    }}
+                    className={cn(
+                      'h-9 rounded-button flex flex-col items-center justify-center relative transition-all text-caption cursor-pointer border',
+                      isSelected
+                        ? 'bg-brand-primary text-white border-brand-primary shadow-sm font-bold'
+                        : cell.hasEvent
+                        ? 'bg-brand-accent/15 border-brand-accent/40 text-brand-primary font-bold hover:bg-brand-accent/25'
+                        : isToday
+                        ? 'border-brand-primary/40 text-brand-primary font-bold bg-bg-muted/40'
+                        : 'border-transparent text-text-secondary hover:bg-bg-muted/60'
+                    )}
+                  >
+                    <span className="text-[12px]">{cell.day}</span>
+                    {cell.hasEvent && (
+                      <span
+                        className={cn(
+                          'w-1.5 h-1.5 rounded-full mt-0.5',
+                          isSelected ? 'bg-white' : 'bg-brand-accent'
                         )}
-
-                        {/* Mandatory References in التدبير */}
-                        {evt.references && (
-                          <div className="bg-bg-muted/70 border border-border-default rounded-card p-2 text-caption text-text-secondary flex items-start gap-1.5">
-                            <FileText className="w-3.5 h-3.5 text-brand-accent shrink-0 mt-0.5" />
-                            <div>
-                              <span className="font-bold text-text-primary ml-1">المراجع الكنسية المقررة:</span>
-                              <span>{evt.references}</span>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Rejection / Modification Request Notice */}
-                        {userPrep && userPrep.status === 'DRAFT' && (userPrep.reviewerNotes || userPrep.reviewedByName) && (
-                          <div className="bg-status-danger-soft/80 border border-status-danger/30 rounded-card p-3 flex flex-col gap-2 shadow-sm text-right">
-                            <div className="flex items-center justify-between gap-2 flex-wrap">
-                              <div className="flex items-center gap-1.5 text-status-danger font-bold text-caption">
-                                <AlertCircle className="w-4 h-4 shrink-0" />
-                                <span>مطلوب تعديل التحضير</span>
-                              </div>
-                              {userPrep.reviewedByName && (
-                                <span className="text-[11px] font-medium text-status-danger bg-status-danger/10 px-2 py-0.5 rounded-full border border-status-danger/20">
-                                  بواسطة: <strong className="font-bold">{userPrep.reviewedByName}</strong> {userPrep.reviewedByRole ? `(${userPrep.reviewedByRole})` : ''}
-                                </span>
-                              )}
-                            </div>
-
-                            {userPrep.reviewerNotes ? (
-                              <div className="bg-white/80 dark:bg-bg-surface/90 border border-status-danger/25 rounded-md p-2.5 text-body-small text-text-primary">
-                                <span className="text-[11px] font-bold text-status-danger block mb-1">
-                                  سبب الرفض وملاحظات التعديل:
-                                </span>
-                                <p className="whitespace-pre-wrap leading-relaxed">{userPrep.reviewerNotes}</p>
-                              </div>
-                            ) : (
-                              <p className="text-[11px] text-status-danger/90">
-                                تم طلب إعادة صياغة وتعديل الدرس من قِبل المشرف، يرجى مراجعة محتوى الدرس وتعديله.
-                              </p>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Approved Notes / Feedback */}
-                        {userPrep && userPrep.status === 'REVIEWED' && userPrep.reviewerNotes && (
-                          <div className="bg-status-success-soft/70 border border-status-success/30 rounded-card p-3 flex flex-col gap-1.5 shadow-sm text-right">
-                            <div className="flex items-center justify-between gap-2 flex-wrap">
-                              <div className="flex items-center gap-1.5 text-status-success font-bold text-caption">
-                                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                                <span>تم اعتماد الدرس بنجاح</span>
-                              </div>
-                              {userPrep.reviewedByName && (
-                                <span className="text-[11px] font-medium text-status-success bg-status-success/10 px-2 py-0.5 rounded-full border border-status-success/20">
-                                  المعتمد: <strong className="font-bold">{userPrep.reviewedByName}</strong> {userPrep.reviewedByRole ? `(${userPrep.reviewedByRole})` : ''}
-                                </span>
-                              )}
-                            </div>
-                            <div className="bg-white/80 dark:bg-bg-surface/90 border border-status-success/25 rounded-md p-2.5 text-body-small text-text-primary">
-                              <span className="text-[11px] font-bold text-status-success block mb-1">
-                                ملاحظات وتوجيهات المشرف:
-                              </span>
-                              <p className="whitespace-pre-wrap leading-relaxed">{userPrep.reviewerNotes}</p>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Action Buttons: Preparation is required for Servant, Assistant Secretary, and Stage Secretary */}
-                        <div className="pt-2 border-t border-border-default flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                          {userPrep ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleOpenPrepModal(evt, userPrep)}
-                              className="flex-1 h-8 text-caption font-bold gap-1.5 border-brand-primary text-brand-primary bg-brand-primary-soft hover:bg-brand-primary/20 shadow-sm transition-colors"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                              <span>تعديل تحضيري للدرس</span>
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="primary"
-                              size="sm"
-                              onClick={() => handleOpenPrepModal(evt)}
-                              className="flex-1 h-8 text-caption font-bold gap-1.5 bg-status-success hover:bg-status-success/90 shadow-sm"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                              <span>إضافة تحضيري للدرس</span>
-                            </Button>
-                          )}
-
-                          {isSupervisor && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleInspectLesson(evt)}
-                              className="flex-1 sm:flex-initial h-8 px-3 text-caption font-bold gap-1 text-brand-primary border-brand-primary/30 hover:bg-brand-primary-soft"
-                              title="متابعة كشف تحضيرات خدام المرحلة واعتمادها"
-                            >
-                              <Users className="w-3.5 h-3.5" />
-                              <span>كشف تحضيرات المرحلة</span>
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-          )}
+                      />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
 
           {/* ======================================================== */}
           {/* MODAL 1: إضافة تدبير (درس روحي / اجتماع خدام / فعالية) */}

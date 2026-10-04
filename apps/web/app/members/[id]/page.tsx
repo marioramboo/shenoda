@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
@@ -10,22 +9,35 @@ import { Badge } from '@/components/ui/Badge';
 import { MemberEditDrawer } from '@/components/members/MemberEditDrawer';
 import { TabBar } from '@/components/layout/TabBar';
 import { api } from '@/lib/api';
+import { cn } from '@/lib/utils';
 import {
   ArrowRight,
   Phone,
   MessageCircle,
-  MapPin,
-  Calendar,
-  School,
-  GraduationCap,
-  Heart,
-  Users,
-  Shield,
+  Facebook,
+  Instagram,
   Edit3,
   Loader2,
-  CheckCircle2,
   AlertCircle,
+  AlertTriangle,
+  HeartHandshake,
+  Shield,
+  X,
+  CheckCircle2,
 } from 'lucide-react';
+
+const todayLocal = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+const normalizeUrl = (url?: string | null, base?: string) => {
+  if (!url) return null;
+  const u = url.trim();
+  if (!u) return null;
+  if (/^https?:\/\//i.test(u)) return u;
+  return `${base || 'https://'}${u.replace(/^@/, '')}`;
+};
 
 export default function MemberProfilePage() {
   const { user } = useAuth();
@@ -34,38 +46,94 @@ export default function MemberProfilePage() {
   const memberId = params?.id as string;
 
   const [member, setMember] = useState<any | null>(null);
-  const [accessLevel, setAccessLevel] = useState<string>('NONE');
-  const [isAssigned, setIsAssigned] = useState<boolean>(false);
+  const [isAssigned, setIsAssigned] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Edit Drawer
+  const [attendanceRate, setAttendanceRate] = useState<number | null>(null);
+  const [visitCount, setVisitCount] = useState<number>(0);
+  const [needsFollowUp, setNeedsFollowUp] = useState(false);
+
   const [isEditDrawerOpen, setIsEditDrawerOpen] = useState(false);
+
+  // Visitation modal
+  const [isVisitOpen, setIsVisitOpen] = useState(false);
+  const [visitNotes, setVisitNotes] = useState('');
+  const [visitDate, setVisitDate] = useState(todayLocal());
+  const [visitSaving, setVisitSaving] = useState(false);
+  const [visitError, setVisitError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const fetchExtras = useCallback(async (stageId: string) => {
+    try {
+      const stats = await api.get(`/api/v1/attendance/members/${memberId}/stats`);
+      setAttendanceRate(stats.data?.data?.week8?.attendanceRatePercentage ?? null);
+    } catch {
+      setAttendanceRate(null);
+    }
+    try {
+      const visits = await api.get('/api/v1/attendance/members', {
+        params: { memberId, sessionType: 'PASTORAL_VISITATION', stageId },
+      });
+      setVisitCount((visits.data?.data || []).filter((r: any) => r.status === 'PRESENT').length);
+    } catch {
+      setVisitCount(0);
+    }
+    try {
+      const alerts = await api.get('/api/v1/attendance/alerts', {
+        params: { stageId, status: 'ACTIVE' },
+      });
+      setNeedsFollowUp(
+        (alerts.data?.data || []).some((a: any) => (a.memberId || a.member?.id) === memberId)
+      );
+    } catch {
+      setNeedsFollowUp(false);
+    }
+  }, [memberId]);
 
   const fetchMember = useCallback(async () => {
     if (!memberId) return;
-
     try {
       setIsLoading(true);
       setErrorMsg(null);
       const res = await api.get(`/api/v1/members/${memberId}`);
       if (res.data?.success) {
         setMember(res.data.member);
-        setAccessLevel(res.data.accessLevel);
         setIsAssigned(res.data.isAssigned);
+        fetchExtras(res.data.member.stageId);
       }
     } catch (err: any) {
-      setErrorMsg(
-        err.response?.data?.error?.message || 'تعذر تحميل ملف المخدوم'
-      );
+      setErrorMsg(err.response?.data?.error?.message || 'تعذر تحميل ملف المخدوم');
     } finally {
       setIsLoading(false);
     }
-  }, [memberId]);
+  }, [memberId, fetchExtras]);
 
   useEffect(() => {
     fetchMember();
   }, [fetchMember]);
+
+  const saveVisit = async () => {
+    setVisitError(null);
+    try {
+      setVisitSaving(true);
+      await api.post('/api/v1/attendance/members/batch', {
+        stageId: member.stageId,
+        sessionType: 'PASTORAL_VISITATION',
+        sessionDate: visitDate,
+        records: [{ memberId, status: 'PRESENT', notes: visitNotes.trim() || undefined }],
+      });
+      setIsVisitOpen(false);
+      setVisitNotes('');
+      setToast('تم تسجيل الافتقاد بنجاح');
+      setTimeout(() => setToast(null), 3000);
+      fetchExtras(member.stageId);
+    } catch (err: any) {
+      setVisitError(err.response?.data?.error?.message || 'تعذر حفظ الافتقاد');
+    } finally {
+      setVisitSaving(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -95,244 +163,267 @@ export default function MemberProfilePage() {
     );
   }
 
-  // Calculate age
   const birthDate = new Date(member.dateOfBirth);
-  const ageYears = Math.floor(
-    (Date.now() - birthDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000)
-  );
+  const ageYears = Math.floor((Date.now() - birthDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
 
-  // Clean phone number for WhatsApp
   const rawPhone = member.phoneNumber?.replace(/\D/g, '') || '';
   const waPhone = rawPhone.startsWith('01') ? '2' + rawPhone : rawPhone;
+  const assignedServant = member.servantAssignments?.[0]?.servant;
 
-  // Primary assigned servant
-  const primaryAssignment = member.servantAssignments?.[0];
-  const assignedServant = primaryAssignment?.servant;
+  const level = user?.role.level || 1;
+  const canEdit = level >= 2 || (level === 1 && isAssigned);
+  const canVisit = level >= 2 || isAssigned;
 
-  const canEdit =
-    (user?.role.level || 1) >= 2 || (user?.role.level === 1 && isAssigned);
+  const socialButtons = [
+    {
+      id: 'call',
+      label: 'اتصال',
+      href: member.phoneNumber ? `tel:${member.phoneNumber}` : null,
+      icon: Phone,
+      cls: 'bg-brand-primary-soft text-brand-primary',
+    },
+    {
+      id: 'whatsapp',
+      label: 'واتساب',
+      href: waPhone ? `https://wa.me/${waPhone}` : null,
+      icon: MessageCircle,
+      cls: 'bg-status-success-soft text-status-success',
+    },
+    {
+      id: 'facebook',
+      label: 'فيسبوك',
+      href: normalizeUrl(member.facebookUrl, 'https://facebook.com/'),
+      icon: Facebook,
+      cls: 'bg-status-info-soft text-status-info',
+    },
+    {
+      id: 'instagram',
+      label: 'إنستجرام',
+      href: normalizeUrl(member.instagramUrl, 'https://instagram.com/'),
+      icon: Instagram,
+      cls: 'bg-brand-accent-soft text-brand-accent',
+    },
+  ];
 
   return (
     <ProtectedRoute>
-      <div dir="rtl" className="min-h-screen bg-bg-app flex flex-col items-center p-4 sm:p-6 pb-24">
-        <div className="w-full max-w-[480px] flex flex-col gap-4">
-          {/* Top Bar */}
-          <header className="flex items-center justify-between bg-bg-surface border border-border-default rounded-card p-4 shadow-card">
-            <div className="flex items-center gap-2.5">
-              <Link
-                href="/members"
-                className="w-9 h-9 rounded-button flex items-center justify-center text-text-secondary hover:bg-bg-muted transition-colors"
-                title="العودة للقائمة"
-              >
-                <ArrowRight className="w-5 h-5" />
-              </Link>
-              <div>
-                <h1 className="text-body-default font-bold text-text-primary">ملف المخدوم</h1>
-                <p className="text-caption text-text-secondary">
-                  {member.stage?.name || 'مرحلة الخدمة'}
-                </p>
-              </div>
-            </div>
-
+      <div dir="rtl" className="min-h-screen bg-bg-app flex flex-col items-center pb-24">
+        <div className="w-full max-w-[480px] flex flex-col">
+          {/* App bar */}
+          <header className="sticky top-0 z-30 bg-brand-primary text-white shadow-card h-14 px-3 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => router.push('/members')}
+              aria-label="الرجوع"
+              className="w-9 h-9 rounded-button flex items-center justify-center hover:bg-white/10"
+            >
+              <ArrowRight className="w-5 h-5" />
+            </button>
+            <h1 className="flex-1 text-h2 font-bold">ملف المخدوم</h1>
             {canEdit && (
-              <Button
-                variant="primary"
-                size="sm"
+              <button
+                id="member-edit"
+                type="button"
                 onClick={() => setIsEditDrawerOpen(true)}
-                className="gap-1.5 h-[36px]"
+                className="h-9 px-3 rounded-button bg-white/15 hover:bg-white/25 text-caption font-semibold flex items-center gap-1.5 transition-colors"
               >
                 <Edit3 className="w-4 h-4" />
-                <span>{user?.role.level === 1 ? 'تعديل التقييم' : 'تعديل السجل'}</span>
-              </Button>
+                {level === 1 ? 'تعديل التقييم' : 'تعديل'}
+              </button>
             )}
           </header>
 
-          {/* 1. Member Header Card */}
-          <section className="bg-bg-surface border border-border-default rounded-card p-5 shadow-card flex flex-col items-center text-center">
-            {/* Avatar */}
-            <div className="w-20 h-20 rounded-full bg-brand-primary-soft text-brand-primary font-bold text-2xl flex items-center justify-center border-2 border-brand-accent/30 shadow-sm mb-3">
-              {member.fullName
-                .trim()
-                .split(/\s+/)
-                .slice(0, 2)
-                .map((w: string) => w.charAt(0))
-                .join('') || 'م'}
-            </div>
-
-            <h2 className="text-h1 font-bold text-brand-primary">{member.fullName}</h2>
-            <p className="text-body-small text-text-secondary mt-0.5 flex items-center gap-1.5">
-              <span>{member.stage?.name}</span>
-              <span>•</span>
-              <span>{ageYears} سنة</span>
-              {member.educationalGrade && (
-                <>
-                  <span>•</span>
-                  <span>{member.educationalGrade}</span>
-                </>
-              )}
-            </p>
-
-            {/* Assigned Servant Badge */}
-            <div className="mt-3">
-              {assignedServant ? (
-                <Badge variant="primary" withDot>
-                  الخادم المسئول: {assignedServant.fullName}
-                </Badge>
-              ) : (
-                <Badge variant="neutral">غير مسند لخادم بعد</Badge>
-              )}
-            </div>
-
-            {/* Quick Actions Row: Call, WhatsApp, Location */}
-            <div className="flex items-center justify-center gap-3 mt-4 pt-4 border-t border-border-default w-full">
-              {member.phoneNumber ? (
-                <>
-                  <a
-                    href={`tel:${member.phoneNumber}`}
-                    className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 px-3 bg-brand-primary-soft text-brand-primary rounded-button text-body-small font-medium hover:bg-[#d8e3f0] transition-colors"
-                  >
-                    <Phone className="w-4 h-4" />
-                    <span>اتصال</span>
-                  </a>
-
-                  <a
-                    href={`https://wa.me/${waPhone}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 px-3 bg-status-success-soft text-status-success rounded-button text-body-small font-medium hover:bg-[#d6f0df] transition-colors"
-                  >
-                    <MessageCircle className="w-4 h-4" />
-                    <span>واتساب</span>
-                  </a>
-                </>
-              ) : (
-                <span className="text-caption text-text-disabled">لا يوجد رقم هاتف مسجل</span>
-              )}
-            </div>
-          </section>
-
-          {/* 2. Quick Statistics (2 Columns) */}
-          <section className="grid grid-cols-2 gap-3">
-            <div className="bg-bg-surface border border-border-default rounded-card p-4 shadow-card text-right flex flex-col justify-between">
-              <span className="text-caption text-text-secondary">نسبة الحضور</span>
-              <div className="flex items-baseline gap-2 mt-1">
-                <span className="text-2xl font-bold text-status-success">85%</span>
-                <Badge variant="success" className="text-caption">ممتاز</Badge>
+          <main className="px-4 py-4 flex flex-col gap-4">
+            {/* Identity */}
+            <section className="bg-bg-surface border border-border-default rounded-card p-5 shadow-card flex flex-col items-center text-center">
+              <div className="w-20 h-20 rounded-full bg-brand-primary-soft text-brand-primary font-bold text-2xl flex items-center justify-center border-2 border-brand-accent/40 mb-3">
+                {member.fullName.trim().split(/\s+/).slice(0, 2).map((w: string) => w.charAt(0)).join('') || 'م'}
               </div>
-              <span className="text-caption text-text-secondary mt-1">
-                حضور منتظم بمدارس الأحد
-              </span>
-            </div>
-
-            <div className="bg-bg-surface border border-border-default rounded-card p-4 shadow-card text-right flex flex-col justify-between">
-              <span className="text-caption text-text-secondary">سجل الافتقاد</span>
-              <div className="flex items-baseline gap-2 mt-1">
-                <span className="text-2xl font-bold text-brand-primary">4</span>
-                <span className="text-caption text-text-secondary">افتقادات</span>
+              <h2 className="text-h1 font-bold text-brand-primary">{member.fullName}</h2>
+              <p className="text-body-small text-text-secondary mt-0.5">
+                {ageYears} سنة • {member.stage?.name}
+                {member.educationalGrade ? ` • ${member.educationalGrade}` : ''}
+              </p>
+              <div className="mt-3">
+                {assignedServant ? (
+                  <Badge variant="primary" withDot>الخادم المسئول: {assignedServant.fullName}</Badge>
+                ) : (
+                  <Badge variant="neutral">غير مسند لخادم بعد</Badge>
+                )}
               </div>
-              <span className="text-caption text-text-secondary mt-1">
-                خلال الفصل الدراسي الحالي
-              </span>
-            </div>
-          </section>
 
-          {/* 3. Evaluative & Spiritual Status Card (Assumption A2 Core) */}
-          <section className="bg-bg-surface border border-border-default rounded-card p-5 shadow-card text-right flex flex-col gap-3.5">
-            <div className="flex items-center justify-between pb-2.5 border-b border-border-default">
-              <div className="flex items-center gap-2">
+              <div className="grid grid-cols-4 gap-2 mt-4 pt-4 border-t border-border-default w-full">
+                {socialButtons.map((b) => {
+                  const Icon = b.icon;
+                  const enabled = Boolean(b.href);
+                  return enabled ? (
+                    <a
+                      key={b.id}
+                      id={`member-${b.id}`}
+                      href={b.href!}
+                      target={b.id === 'call' ? undefined : '_blank'}
+                      rel="noopener noreferrer"
+                      className={cn('flex flex-col items-center gap-1 py-2.5 rounded-button text-caption font-semibold transition-opacity hover:opacity-80', b.cls)}
+                    >
+                      <Icon className="w-5 h-5" />
+                      {b.label}
+                    </a>
+                  ) : (
+                    <div
+                      key={b.id}
+                      className="flex flex-col items-center gap-1 py-2.5 rounded-button text-caption font-semibold bg-bg-muted text-text-disabled"
+                    >
+                      <Icon className="w-5 h-5" />
+                      {b.label}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            {/* Stats + visitation */}
+            <section className="grid grid-cols-2 gap-3">
+              <div className="bg-bg-surface border border-border-default rounded-card p-4 shadow-card text-right">
+                <span className="text-caption text-text-secondary">نسبة الحضور (8 أسابيع)</span>
+                <div className="flex items-baseline gap-2 mt-1">
+                  <span className={cn('text-2xl font-bold', (attendanceRate ?? 100) >= 70 ? 'text-status-success' : 'text-status-danger')}>
+                    {attendanceRate ?? '—'}{attendanceRate !== null && '%'}
+                  </span>
+                </div>
+                <span className="text-caption text-text-secondary">القداس والخدمة</span>
+              </div>
+
+              <div className="bg-bg-surface border border-border-default rounded-card p-4 shadow-card text-right flex flex-col justify-between gap-2">
+                <div>
+                  <span className="text-caption text-text-secondary">سجل الافتقاد</span>
+                  <div className="flex items-baseline gap-1.5 mt-1">
+                    <span className="text-2xl font-bold text-brand-primary">{visitCount}</span>
+                    <span className="text-caption text-text-secondary">افتقاد</span>
+                  </div>
+                </div>
+                {canVisit && (
+                  <Button
+                    id="member-log-visit"
+                    variant={needsFollowUp ? 'primary' : 'secondary'}
+                    size="sm"
+                    onClick={() => setIsVisitOpen(true)}
+                    className="gap-1.5"
+                  >
+                    <HeartHandshake className="w-4 h-4" />
+                    عمل افتقاد
+                  </Button>
+                )}
+              </div>
+            </section>
+
+            {needsFollowUp && (
+              <div className="flex items-center gap-2 px-4 py-3 rounded-card bg-status-danger-soft border border-[#F5C2BE] text-status-danger text-body-small font-semibold">
+                <AlertTriangle className="w-5 h-5 shrink-0" />
+                يحتاج افتقاد: غياب متكرر لعدة أسابيع متتالية
+              </div>
+            )}
+
+            {/* Servant evaluation */}
+            <section className="bg-bg-surface border border-border-default rounded-card p-5 shadow-card text-right flex flex-col gap-3">
+              <div className="flex items-center gap-2 pb-2.5 border-b border-border-default">
                 <Shield className="w-5 h-5 text-brand-accent" />
-                <h3 className="text-h2 font-semibold text-text-primary">تقييم الخادم المسئول</h3>
+                <h3 className="text-h2 font-semibold text-text-primary">تقييم الخادم</h3>
               </div>
-              <span className="text-caption text-brand-accent font-bold px-2 py-0.5 bg-brand-accent-soft rounded-pill">
-                Assumption A2
-              </span>
-            </div>
+              {[
+                ['الحالة المادية', member.financialStatus, 'لم يتم تسجيل الحالة المادية بعد'],
+                ['سلوكه في الخدمة', member.behaviorInService, 'لا توجد ملاحظات حول السلوك في الخدمة'],
+                ['اندماجه مع زملائه', member.peerIntegration, 'لا توجد ملاحظات حول الاندماج'],
+              ].map(([label, value, empty]) => (
+                <div key={label as string}>
+                  <span className="text-caption text-text-secondary block font-semibold mb-0.5">{label}:</span>
+                  <p className="text-body-small text-text-primary bg-bg-muted/40 p-2.5 rounded-lg border border-border-default leading-relaxed">
+                    {(value as string) || (empty as string)}
+                  </p>
+                </div>
+              ))}
+            </section>
 
-            <div className="flex flex-col gap-3 text-body-small">
-              <div>
-                <span className="text-caption text-text-secondary block font-semibold mb-0.5">
-                  الحالة المادية:
-                </span>
-                <p className="text-text-primary font-medium bg-bg-muted/40 p-2.5 rounded-lg border border-border-default">
-                  {member.financialStatus || 'لم يتم تسجيل الحالة المادية بعد'}
-                </p>
+            {/* Personal data */}
+            <section className="bg-bg-surface border border-border-default rounded-card p-5 shadow-card text-right flex flex-col gap-3">
+              <h3 className="text-h2 font-semibold text-text-primary pb-2.5 border-b border-border-default">
+                البيانات الشخصية
+              </h3>
+              <div className="grid grid-cols-2 gap-3 text-body-small">
+                {[
+                  ['تاريخ الميلاد', birthDate.toLocaleDateString('ar-EG')],
+                  ['العنوان', member.address],
+                  ['اسم الأب', member.fatherName],
+                  ['اسم الأم', member.motherName],
+                  ['المدرسة / الكلية', member.schoolOrUniversity],
+                  ['أب الاعتراف', member.fatherConfessor],
+                  ['رقم الهاتف', member.phoneNumber],
+                ].map(([label, value]) => (
+                  <div key={label as string}>
+                    <span className="text-caption text-text-secondary block">{label}:</span>
+                    <span className="font-medium text-text-primary">{(value as string) || '—'}</span>
+                  </div>
+                ))}
               </div>
-
-              <div>
-                <span className="text-caption text-text-secondary block font-semibold mb-0.5">
-                  سلوكه في الخدمة:
-                </span>
-                <p className="text-text-primary bg-bg-muted/40 p-2.5 rounded-lg border border-border-default leading-relaxed">
-                  {member.behaviorInService || 'لا توجد ملاحظات مسجلة حول السلوك في الخدمة'}
-                </p>
-              </div>
-
-              <div>
-                <span className="text-caption text-text-secondary block font-semibold mb-0.5">
-                  اندماجه مع زملائه:
-                </span>
-                <p className="text-text-primary bg-bg-muted/40 p-2.5 rounded-lg border border-border-default leading-relaxed">
-                  {member.peerIntegration || 'لا توجد ملاحظات مسجلة حول الاندماج الاجتماعي'}
-                </p>
-              </div>
-            </div>
-          </section>
-
-          {/* 4. Personal & Family Data Section */}
-          <section className="bg-bg-surface border border-border-default rounded-card p-5 shadow-card text-right flex flex-col gap-3">
-            <h3 className="text-h2 font-semibold text-text-primary pb-2.5 border-b border-border-default">
-              البيانات الشخصية والعائلية
-            </h3>
-
-            <div className="grid grid-cols-2 gap-3 text-body-small">
-              <div>
-                <span className="text-caption text-text-secondary block">تاريخ الميلاد:</span>
-                <span className="font-medium text-text-primary">
-                  {new Date(member.dateOfBirth).toLocaleDateString('ar-EG')}
-                </span>
-              </div>
-
-              <div>
-                <span className="text-caption text-text-secondary block">العنوان:</span>
-                <span className="font-medium text-text-primary">{member.address}</span>
-              </div>
-
-              <div>
-                <span className="text-caption text-text-secondary block">اسم الأب:</span>
-                <span className="font-medium text-text-primary">{member.fatherName || '—'}</span>
-              </div>
-
-              <div>
-                <span className="text-caption text-text-secondary block">اسم الأم:</span>
-                <span className="font-medium text-text-primary">{member.motherName || '—'}</span>
-              </div>
-
-              <div>
-                <span className="text-caption text-text-secondary block">المدرسة / الكلية:</span>
-                <span className="font-medium text-text-primary">
-                  {member.schoolOrUniversity || '—'}
-                </span>
-              </div>
-
-              <div>
-                <span className="text-caption text-text-secondary block">أب الاعتراف:</span>
-                <span className="font-medium text-text-primary">
-                  {member.fatherConfessor || '—'}
-                </span>
-              </div>
-            </div>
-          </section>
+            </section>
+          </main>
         </div>
 
-        {/* Member Edit Drawer */}
+        {/* Visitation modal */}
+        {isVisitOpen && (
+          <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end sm:items-center justify-center p-4">
+            <div dir="rtl" className="w-full max-w-[440px] bg-bg-surface rounded-card shadow-elevated p-5 text-right relative">
+              <button
+                type="button"
+                onClick={() => setIsVisitOpen(false)}
+                aria-label="إغلاق"
+                className="absolute top-4 left-4 text-text-secondary hover:text-text-primary p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <h3 className="text-h2 font-bold text-brand-primary mb-1">تسجيل افتقاد</h3>
+              <p className="text-caption text-text-secondary mb-4">{member.fullName}</p>
+
+              {visitError && (
+                <div className="mb-3 p-3 bg-status-danger-soft border border-[#F5C2BE] rounded-lg text-caption text-status-danger">
+                  {visitError}
+                </div>
+              )}
+
+              <label className="text-body-small font-medium text-text-primary block mb-1">تاريخ الافتقاد</label>
+              <input
+                type="date"
+                value={visitDate}
+                onChange={(e) => setVisitDate(e.target.value)}
+                className="w-full h-[46px] rounded-input border border-border-default px-3 mb-3 bg-bg-surface text-body-default focus:outline-none focus:ring-2 focus:ring-brand-primary"
+              />
+              <label className="text-body-small font-medium text-text-primary block mb-1">ملاحظات الافتقاد</label>
+              <textarea
+                rows={4}
+                value={visitNotes}
+                onChange={(e) => setVisitNotes(e.target.value)}
+                placeholder="مثال: تم الاتصال وزيارة البيت، الأسرة بخير..."
+                className="w-full rounded-input border border-border-default p-3 bg-bg-surface text-body-default focus:outline-none focus:ring-2 focus:ring-brand-primary resize-none"
+              />
+              <Button variant="primary" fullWidth isLoading={visitSaving} onClick={saveVisit} className="mt-4 h-[46px]">
+                حفظ الافتقاد
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {toast && (
+          <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-button bg-status-success text-white text-body-small shadow-elevated flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4" /> {toast}
+          </div>
+        )}
+
         <MemberEditDrawer
           isOpen={isEditDrawerOpen}
           onClose={() => setIsEditDrawerOpen(false)}
           member={member}
-          onSuccess={(updated) => setMember(updated)}
+          onSuccess={(updated) => setMember((prev: any) => ({ ...prev, ...updated }))}
         />
 
-        {/* Global Bottom Tab Bar */}
         <TabBar activeTab="members" />
       </div>
     </ProtectedRoute>

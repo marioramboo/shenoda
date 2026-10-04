@@ -1,32 +1,88 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import Link from 'next/link';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
-import { MemberRow } from '@/components/ui/MemberRow';
 import { Chip } from '@/components/ui/Chip';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
 import { api } from '@/lib/api';
 import { TabBar } from '@/components/layout/TabBar';
+import {
+  MemberSessionType,
+  ServantSessionType,
+  SERVANT_SESSION_LABELS,
+  getAllowedSessionsForRole,
+} from '@shenoda/shared';
+import { cn } from '@/lib/utils';
 import {
   Users,
   Search,
   UserPlus,
   UploadCloud,
-  Filter,
-  ArrowRight,
-  CheckCircle2,
-  AlertCircle,
+  AlertTriangle,
+  ChevronLeft,
   X,
   Phone,
-  Calendar,
   MapPin,
   Loader2,
-  Sparkles,
+  Settings2,
 } from 'lucide-react';
+
+type AttStatus = 'PRESENT' | 'ABSENT' | 'EXCUSED';
+
+const STATUS_BUTTONS: { key: AttStatus; label: string; active: string }[] = [
+  { key: 'PRESENT', label: 'حاضر', active: 'bg-status-success text-white border-status-success' },
+  { key: 'ABSENT', label: 'غائب', active: 'bg-status-danger text-white border-status-danger' },
+  { key: 'EXCUSED', label: 'معتذر', active: 'bg-status-warning text-white border-status-warning' },
+];
+
+// Sketch chips: القداس / الخدمة / الأنشطة (+ الافتقاد)
+const MEMBER_SESSION_CHIPS: { key: MemberSessionType; label: string }[] = [
+  { key: MemberSessionType.MASS, label: 'القداس' },
+  { key: MemberSessionType.SERVICE_ATTENDANCE, label: 'الخدمة' },
+  { key: MemberSessionType.ACTIVITY_CLUB_TRIP_CONF, label: 'الأنشطة' },
+  { key: MemberSessionType.PASTORAL_VISITATION, label: 'الافتقاد' },
+];
+
+const todayLocal = () => {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
+};
+
+const initialsOf = (name: string) =>
+  name.trim().split(/\s+/).slice(0, 2).map((w) => w.charAt(0)).join('') || 'م';
+
+const StatusButtons: React.FC<{
+  value?: AttStatus;
+  disabled?: boolean;
+  onPick: (s: AttStatus) => void;
+  idPrefix: string;
+}> = ({ value, disabled, onPick, idPrefix }) => (
+  <div className="grid grid-cols-3 gap-2">
+    {STATUS_BUTTONS.map((b) => (
+      <button
+        key={b.key}
+        id={`${idPrefix}-${b.key}`}
+        type="button"
+        disabled={disabled}
+        onClick={() => onPick(b.key)}
+        className={cn(
+          'h-9 rounded-button border text-caption font-semibold transition-all active:scale-[0.97] disabled:opacity-50',
+          value === b.key
+            ? b.active
+            : 'bg-bg-surface border-border-default text-text-secondary hover:bg-bg-muted'
+        )}
+      >
+        {b.label}
+      </button>
+    ))}
+  </div>
+);
 
 export default function MembersListPage() {
   const { user } = useAuth();
@@ -67,6 +123,160 @@ export default function MembersListPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [bulkSuccess, setBulkSuccess] = useState<string | null>(null);
+
+  // ---- Attendance on member cards -------------------------------------------------
+  const [viewTab, setViewTab] = useState<'members' | 'servants'>('members');
+  const [sessionType, setSessionType] = useState<MemberSessionType>(MemberSessionType.MASS);
+  const [sessionDate, setSessionDate] = useState<string>(todayLocal());
+  const [statusMap, setStatusMap] = useState<Record<string, AttStatus>>({});
+  const [alertMemberIds, setAlertMemberIds] = useState<Set<string>>(new Set());
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  // ---- Servants tab (level 3+) ----------------------------------------------------
+  const [servants, setServants] = useState<any[]>([]);
+  const [servantsLoading, setServantsLoading] = useState(false);
+  const [servantSession, setServantSession] = useState<ServantSessionType>(ServantSessionType.MASS);
+  const [servantStatusMap, setServantStatusMap] = useState<Record<string, AttStatus>>({});
+
+  const isSupervisor = (user?.role?.level ?? 1) >= 3;
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  // Recorded attendance for the chosen stage / session / date
+  useEffect(() => {
+    if (!selectedStageId) {
+      setStatusMap({});
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get('/api/v1/attendance/members', {
+          params: { stageId: selectedStageId, sessionType, sessionDate },
+        });
+        const map: Record<string, AttStatus> = {};
+        for (const r of res.data?.data || []) map[r.memberId] = r.status;
+        if (!cancelled) setStatusMap(map);
+      } catch {
+        if (!cancelled) setStatusMap({});
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedStageId, sessionType, sessionDate]);
+
+  // Active absence alerts => "يحتاج افتقاد" badge
+  useEffect(() => {
+    if (!selectedStageId) {
+      setAlertMemberIds(new Set());
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get('/api/v1/attendance/alerts', {
+          params: { stageId: selectedStageId, status: 'ACTIVE' },
+        });
+        const ids = new Set<string>();
+        for (const a of res.data?.data || []) {
+          const id = a.memberId || a.member?.id;
+          if (id) ids.add(id);
+        }
+        if (!cancelled) setAlertMemberIds(ids);
+      } catch {
+        if (!cancelled) setAlertMemberIds(new Set());
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedStageId]);
+
+  const markAttendance = async (memberId: string, status: AttStatus) => {
+    if (!selectedStageId) return;
+    const previous = statusMap[memberId];
+    setStatusMap((m) => ({ ...m, [memberId]: status }));
+    setSavingId(memberId);
+    try {
+      await api.post('/api/v1/attendance/members/batch', {
+        stageId: selectedStageId,
+        sessionType,
+        sessionDate,
+        records: [{ memberId, status }],
+      });
+    } catch (err: any) {
+      setStatusMap((m) => {
+        const next = { ...m };
+        if (previous) next[memberId] = previous;
+        else delete next[memberId];
+        return next;
+      });
+      showToast(err.response?.data?.error?.message || 'تعذر حفظ الحضور، حاول مرة أخرى');
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  // Servants list for the stage
+  useEffect(() => {
+    if (viewTab !== 'servants' || !isSupervisor || !selectedStageId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setServantsLoading(true);
+        const res = await api.get('/api/v1/attendance/servants/list', {
+          params: { stageId: selectedStageId },
+        });
+        if (!cancelled && res.data?.success) setServants(res.data.data || []);
+      } catch {
+        if (!cancelled) setServants([]);
+      } finally {
+        if (!cancelled) setServantsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [viewTab, isSupervisor, selectedStageId]);
+
+  useEffect(() => {
+    setServantStatusMap({});
+  }, [servantSession, sessionDate, selectedStageId]);
+
+  const markServant = async (servantUserId: string, status: AttStatus) => {
+    const previous = servantStatusMap[servantUserId];
+    setServantStatusMap((m) => ({ ...m, [servantUserId]: status }));
+    setSavingId(servantUserId);
+    try {
+      await api.post('/api/v1/attendance/servants/batch', {
+        stageId: selectedStageId,
+        sessionType: servantSession,
+        sessionDate,
+        records: [{ servantUserId, status }],
+      });
+    } catch (err: any) {
+      setServantStatusMap((m) => {
+        const next = { ...m };
+        if (previous) next[servantUserId] = previous;
+        else delete next[servantUserId];
+        return next;
+      });
+      showToast(err.response?.data?.error?.message || 'تعذر حفظ حضور الخادم');
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const allowedServantSessions = useMemo(
+    () => getAllowedSessionsForRole(user?.role?.level ?? 1),
+    [user]
+  );
+
 
   // Fetch members
   const fetchMembers = useCallback(async () => {
@@ -124,7 +334,7 @@ export default function MembersListPage() {
       if (!bulkStageId) setBulkStageId(availableStages[0].id);
 
       // Single-stage users (Level <= 3) default to their assigned stage if not set
-      if (user?.role?.level && user.role.level <= 3 && !selectedStageId) {
+      if (!selectedStageId) {
         setSelectedStageId(availableStages[0].id);
       }
     }
@@ -209,102 +419,185 @@ export default function MembersListPage() {
 
   const canManage = (user?.role.level || 1) >= 2;
 
+  const currentStageName =
+    availableStages.find((s: any) => s.id === selectedStageId)?.name || 'المرحلة';
+
+  const visibleServants = servants.filter((s) => s.id !== user?.id);
+
   return (
     <ProtectedRoute>
-      <div dir="rtl" className="min-h-screen bg-bg-app flex flex-col items-center p-4 sm:p-6 pb-24">
-        <div className="w-full max-w-[480px] flex flex-col gap-4">
-          {/* Top Bar Navigation */}
-          <header className="flex items-center justify-between bg-bg-surface border border-border-default rounded-card p-4 shadow-card">
-            <div className="flex items-center gap-2.5">
-              <Link
-                href="/dashboard"
-                className="w-9 h-9 rounded-button flex items-center justify-center text-text-secondary hover:bg-bg-muted transition-colors"
-                title="العودة للوحة التحكم"
-              >
-                <ArrowRight className="w-5 h-5" />
-              </Link>
-              <div>
-                <h1 className="text-h2 font-bold text-text-primary">قائمة المخدومين</h1>
-                <p className="text-caption text-text-secondary">
-                  سجلات مخدومي الخدمة الكنسية (FR-3.4)
-                </p>
+      <div dir="rtl" className="min-h-screen bg-bg-app flex flex-col items-center pb-24">
+        <div className="w-full max-w-[480px] flex flex-col">
+          {/* App bar + switcher */}
+          <header className="sticky top-0 z-30 bg-brand-primary text-white shadow-card">
+            <div className="h-14 px-4 flex items-center justify-between gap-2">
+              <div className="min-w-0 text-right">
+                <h1 className="text-h2 font-bold leading-tight truncate">
+                  {viewTab === 'servants' ? 'الخدام' : 'المخدومين'} ({currentStageName})
+                </h1>
               </div>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              {canManage && (
-                <Button
-                  variant="outline"
-                  size="sm"
+              {canManage && viewTab === 'members' && (
+                <button
+                  id="members-bulk-import"
+                  type="button"
                   onClick={() => setIsBulkModalOpen(true)}
-                  className="gap-1 text-caption h-[36px]"
+                  aria-label="استيراد جماعي"
+                  className="w-9 h-9 rounded-button flex items-center justify-center hover:bg-white/10 transition-colors"
                 >
-                  <UploadCloud className="w-4 h-4 text-brand-primary" />
-                  <span className="hidden sm:inline">استيراد CSV</span>
-                </Button>
+                  <UploadCloud className="w-5 h-5" />
+                </button>
               )}
             </div>
+
+            {isSupervisor && (
+              <div className="grid grid-cols-2 border-t border-white/10">
+                {(['servants', 'members'] as const).map((t) => (
+                  <button
+                    key={t}
+                    id={`members-tab-${t}`}
+                    type="button"
+                    onClick={() => setViewTab(t)}
+                    className={cn(
+                      'h-11 text-body-small font-bold transition-colors border-b-[3px]',
+                      viewTab === t
+                        ? 'border-brand-accent text-white bg-white/10'
+                        : 'border-transparent text-white/70 hover:text-white'
+                    )}
+                  >
+                    {t === 'servants' ? 'الخدام' : 'المخدومين'}
+                  </button>
+                ))}
+              </div>
+            )}
           </header>
 
-          {/* Search Bar */}
-          <div className="relative w-full">
-            <Input
-              placeholder="ابحث بالاسم أو رقم الهاتف..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              iconLeading={<Search className="w-4 h-4 text-text-secondary" />}
-              className="h-[46px] bg-bg-surface text-body-default shadow-card"
-            />
+          <div className="px-4 pt-3 flex flex-col gap-3">
+            {/* Stage chips (only when more than one stage is reachable) */}
+            {availableStages.length > 1 && (
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none select-none">
+                {availableStages.map((stg: any) => (
+                  <Chip
+                    key={stg.id}
+                    selected={selectedStageId === stg.id}
+                    onClick={() => setSelectedStageId(stg.id)}
+                  >
+                    {stg.name}
+                  </Chip>
+                ))}
+              </div>
+            )}
+
+            {/* Session chips + date */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none select-none">
+              {viewTab === 'members'
+                ? MEMBER_SESSION_CHIPS.map((c) => (
+                    <Chip key={c.key} selected={sessionType === c.key} onClick={() => setSessionType(c.key)}>
+                      {c.label}
+                    </Chip>
+                  ))
+                : allowedServantSessions.map((s) => (
+                    <Chip key={s} selected={servantSession === s} onClick={() => setServantSession(s)}>
+                      {SERVANT_SESSION_LABELS[s].ar}
+                    </Chip>
+                  ))}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                id="members-session-date"
+                type="date"
+                value={sessionDate}
+                onChange={(e) => setSessionDate(e.target.value || todayLocal())}
+                className="h-10 px-3 rounded-input border border-border-default bg-bg-surface text-body-small text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-primary"
+              />
+              {viewTab === 'members' && (
+                <div className="flex-1">
+                  <Input
+                    placeholder="ابحث بالاسم أو الهاتف..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    iconLeading={<Search className="w-4 h-4 text-text-secondary" />}
+                    className="h-10 bg-bg-surface text-body-small"
+                  />
+                </div>
+              )}
+            </div>
+
+            {viewTab === 'members' && user?.role.level === 1 && (
+              <label className="flex items-center justify-between bg-bg-surface border border-border-default rounded-card px-4 py-2.5">
+                <span className="text-caption font-semibold text-text-primary">
+                  عرض المخدومين المسندين لي فقط
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={assignedOnly}
+                  onClick={() => setAssignedOnly(!assignedOnly)}
+                  className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors ${
+                    assignedOnly ? 'bg-brand-primary' : 'bg-bg-muted'
+                  }`}
+                >
+                  <div
+                    className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                      assignedOnly ? '-translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </label>
+            )}
           </div>
 
-          {/* Stage Filter Chips Bar (FR-3.4 / Multi-stage oversight for General & Sector Secretaries) */}
-          {availableStages.length > 0 && (
-            <div className="flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-none select-none">
-              <Chip
-                selected={!selectedStageId}
-                onClick={() => setSelectedStageId('')}
-              >
-                الكل
-              </Chip>
-              {availableStages.map((stg) => (
-                <Chip
-                  key={stg.id}
-                  selected={selectedStageId === stg.id}
-                  onClick={() => setSelectedStageId(stg.id)}
+          {/* List */}
+          <main className="px-4 py-3 flex flex-col gap-3">
+            {viewTab === 'servants' ? (
+              <>
+                {servantsLoading ? (
+                  <div className="py-12 flex justify-center">
+                    <Loader2 className="w-7 h-7 animate-spin text-brand-primary" />
+                  </div>
+                ) : visibleServants.length === 0 ? (
+                  <div className="bg-bg-surface border border-border-default rounded-card p-8 text-center text-body-small text-text-secondary">
+                    لا يوجد خدام في هذه المرحلة
+                  </div>
+                ) : (
+                  visibleServants.map((s) => (
+                    <div
+                      key={s.id}
+                      className="bg-bg-surface border border-border-default rounded-card p-3.5 shadow-card flex flex-col gap-3"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-11 h-11 rounded-full bg-brand-primary-soft text-brand-primary font-bold flex items-center justify-center shrink-0">
+                          {initialsOf(s.fullName)}
+                        </div>
+                        <div className="flex-1 min-w-0 text-right">
+                          <h3 className="text-body-default font-bold text-text-primary truncate">{s.fullName}</h3>
+                          <p className="text-caption text-text-secondary">{s.role?.name}</p>
+                        </div>
+                        {s.status === 'SUSPENDED' ? (
+                          <Badge variant="neutral">موقوف</Badge>
+                        ) : (
+                          <Badge variant="success">{s.stats?.attendanceRatePercentage ?? 100}%</Badge>
+                        )}
+                      </div>
+                      <StatusButtons
+                        idPrefix={`servant-${s.id}`}
+                        value={servantStatusMap[s.id]}
+                        disabled={savingId === s.id || s.status === 'SUSPENDED'}
+                        onPick={(st) => markServant(s.id, st)}
+                      />
+                    </div>
+                  ))
+                )}
+                <button
+                  type="button"
+                  onClick={() => router.push('/attendance?view=servants')}
+                  className="mt-1 flex items-center justify-center gap-2 h-11 rounded-button border border-border-default bg-bg-surface text-body-small font-semibold text-brand-primary hover:bg-bg-muted transition-colors"
                 >
-                  {stg.name}
-                </Chip>
-              ))}
-            </div>
-          )}
-
-          {/* Servant Assignment Filter Toggle (For Level 1 Servants) */}
-          {user?.role.level === 1 && (
-            <div className="flex items-center justify-between bg-bg-surface border border-border-default rounded-card px-4 py-2.5 shadow-2xs">
-              <span className="text-caption font-semibold text-text-primary">
-                عرض المخدومين المسندين لي فقط
-              </span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={assignedOnly}
-                onClick={() => setAssignedOnly(!assignedOnly)}
-                className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors ${
-                  assignedOnly ? 'bg-brand-primary' : 'bg-bg-muted'
-                }`}
-              >
-                <div
-                  className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                    assignedOnly ? '-translate-x-5' : 'translate-x-0'
-                  }`}
-                />
-              </button>
-            </div>
-          )}
-
-          {/* Members List Container */}
-          <main className="flex flex-col gap-2.5">
-            {isLoading ? (
+                  <Settings2 className="w-4 h-4" />
+                  إدارة بيانات الخدام ومتابعتهم التفصيلية
+                </button>
+              </>
+            ) : isLoading ? (
               <div className="py-12 flex flex-col items-center justify-center gap-2 text-text-secondary">
                 <Loader2 className="w-7 h-7 animate-spin text-brand-primary" />
                 <span className="text-body-small">جاري تحميل سجلات المخدومين...</span>
@@ -314,43 +607,70 @@ export default function MembersListPage() {
                 {errorMsg}
               </div>
             ) : members.length === 0 ? (
-              <div className="bg-bg-surface border border-border-default rounded-card p-8 text-center flex flex-col items-center justify-center shadow-card">
+              <div className="bg-bg-surface border border-border-default rounded-card p-8 text-center flex flex-col items-center shadow-card">
                 <Users className="w-12 h-12 text-text-secondary/40 mb-2" />
-                <h3 className="text-body-default font-bold text-text-primary">
-                  لا يوجد مخدومين مسجلين
-                </h3>
+                <h3 className="text-body-default font-bold text-text-primary">لا يوجد مخدومين مسجلين</h3>
                 <p className="text-caption text-text-secondary mt-1 max-w-xs">
                   {canManage
                     ? 'يمكنك إضافة مخدوم جديد أو استخدام خاصية الاستيراد الجماعي.'
                     : 'لم يتم العثور على مخدومين مطابقين لمعايير البحث في هذه المرحلة.'}
                 </p>
-                {canManage && (
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={() => setIsAddModalOpen(true)}
-                    className="mt-4 gap-1.5"
-                  >
-                    <UserPlus className="w-4 h-4" />
-                    <span>إضافة مخدوم الآن</span>
-                  </Button>
-                )}
               </div>
             ) : (
-              members.map((member) => (
-                <MemberRow
-                  key={member.id}
-                  id={member.id}
-                  name={member.fullName}
-                  subtitle={`${member.stage?.name || 'مرحلة غير محددة'} • ${member.address}`}
-                  badgeText={member.isAssigned ? 'مسند إليك' : undefined}
-                  badgeVariant={member.isAssigned ? 'success' : undefined}
-                  onClick={() => router.push(`/members/${member.id}`)}
-                />
-              ))
+              members.map((member) => {
+                const needsFollowUp = alertMemberIds.has(member.id);
+                const canMark = Boolean(selectedStageId) && ((user?.role.level || 1) >= 2 || member.isAssigned);
+                return (
+                  <div
+                    key={member.id}
+                    className={cn(
+                      'bg-bg-surface border rounded-card p-3.5 shadow-card flex flex-col gap-3',
+                      needsFollowUp ? 'border-status-danger/40' : 'border-border-default'
+                    )}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/members/${member.id}`)}
+                      className="flex items-center gap-3 text-right w-full"
+                    >
+                      <div className="w-11 h-11 rounded-full bg-brand-primary-soft text-brand-primary font-bold flex items-center justify-center shrink-0 border border-[#D5E1F0]">
+                        {initialsOf(member.fullName)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-body-default font-bold text-text-primary truncate">{member.fullName}</h3>
+                        <p className="text-caption text-text-secondary truncate">
+                          {member.educationalGrade || member.stage?.name}
+                        </p>
+                      </div>
+                      {needsFollowUp ? (
+                        <Badge variant="danger" className="shrink-0">
+                          <AlertTriangle className="w-3.5 h-3.5" />
+                          يحتاج افتقاد
+                        </Badge>
+                      ) : (
+                        <Badge variant="success" withDot className="shrink-0">ملتزم</Badge>
+                      )}
+                      <ChevronLeft className="w-4 h-4 text-text-secondary shrink-0" />
+                    </button>
+                    {canMark && (
+                      <StatusButtons
+                        idPrefix={`member-${member.id}`}
+                        value={statusMap[member.id]}
+                        disabled={savingId === member.id}
+                        onPick={(st) => markAttendance(member.id, st)}
+                      />
+                    )}
+                  </div>
+                );
+              })
             )}
           </main>
 
+          {toast && (
+            <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 max-w-[90%] px-4 py-2.5 rounded-button bg-text-primary text-white text-body-small shadow-elevated">
+              {toast}
+            </div>
+          )}
           {/* Floating Action Button (FAB) for Assistant Secretaries (Level >= 2) */}
           {canManage && (
             <div className="fixed bottom-20 left-4 z-30 sm:static sm:mt-2">

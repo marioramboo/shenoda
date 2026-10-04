@@ -89,4 +89,51 @@ export class SpiritualLifeService {
       where: { id: entryId },
     });
   }
+
+  /**
+   * Returns the caller's checked items for the given period keys (owner-only).
+   */
+  static async getChecklist(callerUserId: string, periodKeys: string[]) {
+    return prisma.spiritualChecklistEntry.findMany({
+      where: { userId: callerUserId, periodKey: { in: periodKeys } },
+      select: { itemKey: true, periodKey: true },
+    });
+  }
+
+  /**
+   * Checks or unchecks a single checklist item for the caller.
+   */
+  static async setChecklistItem(data: {
+    userId: string;
+    itemKey: string;
+    periodKey: string;
+    done: boolean;
+  }) {
+    if (data.done) {
+      await prisma.spiritualChecklistEntry.upsert({
+        where: {
+          userId_itemKey_periodKey: {
+            userId: data.userId,
+            itemKey: data.itemKey,
+            periodKey: data.periodKey,
+          },
+        },
+        update: {},
+        create: {
+          userId: data.userId,
+          itemKey: data.itemKey,
+          periodKey: data.periodKey,
+        },
+      });
+    } else {
+      await prisma.spiritualChecklistEntry.deleteMany({
+        where: {
+          userId: data.userId,
+          itemKey: data.itemKey,
+          periodKey: data.periodKey,
+        },
+      });
+    }
+    return { itemKey: data.itemKey, periodKey: data.periodKey, done: data.done };
+  }
 }

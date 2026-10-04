@@ -231,6 +231,7 @@ model User {
   lessonPrepsAuthored        LessonPreparation[]  @relation("PrepAuthor")
   lessonPrepsReviewed        LessonPreparation[]  @relation("PrepReviewer")
   spiritualLifeEntries       SpiritualLifeEntry[]
+  spiritualChecklistEntries  SpiritualChecklistEntry[]
 
   // Phase 6: Year Plan & Calendar
   yearPlansPublished         YearPlan[]                    @relation("PublishedYearPlans")
@@ -354,6 +355,8 @@ model ServedMember {
   address             String
   phoneNumber         String?      // Minor or primary guardian phone
   fatherConfessor     String?      // Optional for younger stages
+  facebookUrl         String?
+  instagramUrl        String?
 
   // Family & Academic Background
   fatherName          String?
@@ -640,6 +643,22 @@ model SpiritualLifeEntry {
 
   @@index([userId, entryDate])
   @@map("spiritual_life_entries")
+}
+
+// Private spiritual checklist (daily / weekly / monthly items). Owner-only (NFR-3.4).
+// periodKey: daily 'YYYY-MM-DD', weekly 'YYYY-Www', monthly 'YYYY-MM'.
+model SpiritualChecklistEntry {
+  id         String   @id @default(uuid())
+  userId     String
+  itemKey    String   // e.g. PRAYER_MORNING, BIBLE_OLD, FASTING, CONFESSION
+  periodKey  String
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, itemKey, periodKey])
+  @@index([userId, periodKey])
+  @@map("spiritual_checklist_entries")
 }
 
 // -------------------------------------------------------------

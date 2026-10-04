@@ -4,14 +4,24 @@ import React from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
-  LayoutDashboard,
+  Home,
   Users,
-  ClipboardCheck,
+  BookOpenCheck,
   CalendarCheck2,
-  UserCheck,
+  Menu,
 } from 'lucide-react';
 
-export type TabKey = 'dashboard' | 'members' | 'attendance' | 'plan' | 'profile';
+/**
+ * 'attendance' and 'profile' are kept as legacy keys: both live under "More" now.
+ */
+export type TabKey =
+  | 'dashboard'
+  | 'members'
+  | 'prep'
+  | 'plan'
+  | 'more'
+  | 'attendance'
+  | 'profile';
 
 export interface TabBarProps {
   activeTab?: TabKey;
@@ -19,43 +29,30 @@ export interface TabBarProps {
   className?: string;
 }
 
+type PrimaryTabKey = 'dashboard' | 'members' | 'prep' | 'plan' | 'more';
+
 const TABS: {
-  key: TabKey;
+  key: PrimaryTabKey;
   label: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
-  {
-    key: 'dashboard',
-    label: 'الرئيسية',
-    href: '/dashboard',
-    icon: LayoutDashboard,
-  },
-  {
-    key: 'members',
-    label: 'المخدومين',
-    href: '/members',
-    icon: Users,
-  },
-  {
-    key: 'attendance',
-    label: 'الحضور',
-    href: '/attendance',
-    icon: ClipboardCheck,
-  },
-  {
-    key: 'plan',
-    label: 'الخطة',
-    href: '/plan',
-    icon: CalendarCheck2,
-  },
-  {
-    key: 'profile',
-    label: 'حسابي',
-    href: '/profile',
-    icon: UserCheck,
-  },
+  { key: 'dashboard', label: 'الرئيسية', href: '/dashboard', icon: Home },
+  { key: 'members', label: 'المخدومين', href: '/members', icon: Users },
+  { key: 'prep', label: 'تحضير', href: '/prep', icon: BookOpenCheck },
+  { key: 'plan', label: 'تدبير', href: '/plan', icon: CalendarCheck2 },
+  { key: 'more', label: 'المزيد', href: '/more', icon: Menu },
 ];
+
+function inferTab(pathname: string | null): PrimaryTabKey {
+  if (!pathname) return 'dashboard';
+  if (pathname.startsWith('/dashboard')) return 'dashboard';
+  if (pathname.startsWith('/members')) return 'members';
+  if (pathname.startsWith('/prep') || pathname.startsWith('/preparations')) return 'prep';
+  if (pathname.startsWith('/plan') || pathname.startsWith('/calendar') || pathname.startsWith('/year-plan'))
+    return 'plan';
+  return 'more';
+}
 
 export const TabBar: React.FC<TabBarProps> = ({
   activeTab,
@@ -65,23 +62,12 @@ export const TabBar: React.FC<TabBarProps> = ({
   const router = useRouter();
   const pathname = usePathname();
 
-  // Inferred tab from current pathname if activeTab is not explicitly specified
-  const currentTab: TabKey =
-    activeTab ||
-    (pathname?.startsWith('/members')
-      ? 'members'
-      : pathname?.startsWith('/attendance')
-      ? 'attendance'
-      : pathname?.startsWith('/plan')
-      ? 'plan'
-      : pathname?.startsWith('/profile')
-      ? 'profile'
-      : 'dashboard');
+  const normalizedActive: PrimaryTabKey | undefined =
+    activeTab === 'attendance' || activeTab === 'profile' ? 'more' : activeTab;
+  const currentTab: PrimaryTabKey = normalizedActive || inferTab(pathname);
 
   const handleTabClick = (tab: (typeof TABS)[number]) => {
-    if (onTabChange) {
-      onTabChange(tab.key);
-    }
+    onTabChange?.(tab.key);
     if (pathname !== tab.href) {
       router.push(tab.href);
     }
@@ -103,8 +89,10 @@ export const TabBar: React.FC<TabBarProps> = ({
           return (
             <button
               key={tab.key}
+              id={`tab-${tab.key}`}
               type="button"
               onClick={() => handleTabClick(tab)}
+              aria-current={isActive ? 'page' : undefined}
               className={cn(
                 'flex flex-col items-center justify-center flex-1 h-full py-1 text-caption transition-colors duration-150 select-none relative cursor-pointer',
                 isActive

@@ -9,4 +9,6 @@ spiritualLifeRouter.use(requireAuth);
 spiritualLifeRouter.post('/', SpiritualLifeController.create);
 spiritualLifeRouter.get('/', SpiritualLifeController.getMyEntries);
 spiritualLifeRouter.get('/me', SpiritualLifeController.getMyEntries);
+spiritualLifeRouter.get('/checklist', SpiritualLifeController.getChecklist);
+spiritualLifeRouter.put('/checklist', SpiritualLifeController.setChecklistItem);
 spiritualLifeRouter.delete('/:id', SpiritualLifeController.delete);

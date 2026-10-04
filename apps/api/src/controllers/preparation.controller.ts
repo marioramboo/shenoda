@@ -6,6 +6,7 @@ export function formatPreparation(prep: any) {
   if (!prep) return prep;
   let visualAid = null;
   let extraReferences = null;
+  let elements = null;
   let servantReflection = null;
   let eventId = null;
   let submittedAt = prep.createdAt;
@@ -13,6 +14,7 @@ export function formatPreparation(prep: any) {
   if (prep.attachments && typeof prep.attachments === 'object' && !Array.isArray(prep.attachments)) {
     visualAid = (prep.attachments as any).visualAid || null;
     extraReferences = (prep.attachments as any).extraReferences || null;
+    elements = (prep.attachments as any).elements || null;
     servantReflection = (prep.attachments as any).servantReflection || null;
     eventId = (prep.attachments as any).eventId || null;
     if ((prep.attachments as any).submittedAt) {
@@ -30,6 +32,7 @@ export function formatPreparation(prep: any) {
     ...prep,
     visualAid,
     extraReferences,
+    elements,
     servantReflection,
     eventId,
     submittedAt,
@@ -68,6 +71,7 @@ export class PreparationController {
       eventId,
       visualAid,
       extraReferences,
+      elements,
       servantReflection,
     } = req.body;
 
@@ -143,6 +147,7 @@ export class PreparationController {
       eventId: eventId || null,
       visualAid: visualAid ? visualAid.trim() : null,
       extraReferences: extraReferences ? extraReferences.trim() : null,
+      elements: elements ? String(elements).trim() : null,
       servantReflection: servantReflection ? servantReflection.trim() : null,
       submittedAt: new Date().toISOString(),
     };
@@ -427,6 +432,7 @@ export class PreparationController {
       const hasStructuredFields =
         req.body.visualAid !== undefined ||
         req.body.extraReferences !== undefined ||
+        req.body.elements !== undefined ||
         req.body.servantReflection !== undefined ||
         req.body.attachments !== undefined;
 
@@ -438,6 +444,7 @@ export class PreparationController {
           ...incomingAttachments,
           ...(req.body.visualAid !== undefined ? { visualAid: req.body.visualAid ? req.body.visualAid.trim() : null } : {}),
           ...(req.body.extraReferences !== undefined ? { extraReferences: req.body.extraReferences ? req.body.extraReferences.trim() : null } : {}),
+          ...(req.body.elements !== undefined ? { elements: req.body.elements ? String(req.body.elements).trim() : null } : {}),
           ...(req.body.servantReflection !== undefined ? { servantReflection: req.body.servantReflection ? req.body.servantReflection.trim() : null } : {}),
           updatedAt: new Date().toISOString(),
         };

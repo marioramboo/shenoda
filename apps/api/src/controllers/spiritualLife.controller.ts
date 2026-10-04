@@ -2,6 +2,28 @@ import { Request, Response } from 'express';
 import { SpiritualLifeService } from '../services/spiritualLife.service';
 import { SpiritualSacrament as PrismaSpiritualSacrament } from '@prisma/client';
 
+const PERIOD_KEY_REGEX = /^\d{4}(-\d{2}(-\d{2})?|-W\d{2})$/;
+
+const CHECKLIST_ITEM_KEYS = [
+  // daily
+  'PRAYER_MORNING',
+  'PRAYER_SUNSET',
+  'PRAYER_SLEEP',
+  'PRAYER_PERSONAL',
+  'BIBLE_OLD',
+  'BIBLE_NEW',
+  // weekly
+  'FASTING',
+  'MASS',
+  'COMMUNION',
+  'SPIRITUAL_BOOK',
+  'SPIRITUAL_TRAINING',
+  'SELF_ACCOUNTING',
+  'PRAYER_FOR_SERVICE',
+  // monthly
+  'CONFESSION',
+];
+
 export class SpiritualLifeController {
   /**
    * POST /api/v1/spiritual-life (FR-6.1)
@@ -139,5 +161,80 @@ export class SpiritualLifeController {
         timestamp: new Date().toISOString(),
       });
     }
+  }
+
+  /**
+   * GET /api/v1/spiritual-life/checklist?periods=a,b,c
+   * Returns the caller's own checked items for the requested period keys.
+   */
+  static async getChecklist(req: Request, res: Response) {
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'AUTH_REQUIRED', message: 'Authentication required' },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (req.query.userId && req.query.userId !== user.userId) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'ERR_SPIRITUAL_DATA_FIREWALL',
+          message: 'Forbidden: Spiritual life records are strictly private.',
+        },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const periods = String(req.query.periods || '')
+      .split(',')
+      .map((p) => p.trim())
+      .filter((p) => PERIOD_KEY_REGEX.test(p))
+      .slice(0, 10);
+
+    const rows = await SpiritualLifeService.getChecklist(user.userId, periods);
+    return res.status(200).json({
+      success: true,
+      data: rows,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * PUT /api/v1/spiritual-life/checklist
+   * Body: { itemKey, periodKey, done }
+   */
+  static async setChecklistItem(req: Request, res: Response) {
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'AUTH_REQUIRED', message: 'Authentication required' },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const { itemKey, periodKey, done } = req.body || {};
+    if (!CHECKLIST_ITEM_KEYS.includes(itemKey) || !PERIOD_KEY_REGEX.test(String(periodKey))) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_REQUEST', message: 'itemKey or periodKey is invalid' },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const result = await SpiritualLifeService.setChecklistItem({
+      userId: user.userId,
+      itemKey,
+      periodKey,
+      done: Boolean(done),
+    });
+    return res.status(200).json({
+      success: true,
+      data: result,
+      timestamp: new Date().toISOString(),
+    });
   }
 }

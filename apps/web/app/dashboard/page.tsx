@@ -1,184 +1,38 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { Badge } from '@/components/ui/Badge';
 import { TabBar } from '@/components/layout/TabBar';
-import { SpiritualJournal } from '@/components/spiritual/SpiritualJournal';
+import { ChurchLogo } from '@/components/layout/ChurchLogo';
+import { NotificationDrawer } from '@/components/layout/NotificationDrawer';
+import { PollCard, PollItem } from '@/components/polls/PollCard';
 import { api } from '@/lib/api';
 import { getCopticDate } from '@shenoda/shared';
-import {
-  User,
-  Shield,
-  Layers,
-  LogOut,
-  UserPlus,
-  CheckCircle2,
-  Check,
-  AlertCircle,
-  X,
-  Phone,
-  Lock,
-  Users,
-  ChevronLeft,
-  BookOpen,
-  CalendarCheck,
-  HeartHandshake,
-  Clock,
-  Sparkles,
-  ExternalLink,
-  ClipboardList,
-  Megaphone,
-  BarChart3,
-  ArrowLeftRight,
-} from 'lucide-react';
-import { ServantDirectoryModal } from '@/components/servants/ServantDirectoryModal';
+import { cn } from '@/lib/utils';
+import { Bell, Megaphone, Pin, Vote, User, Loader2, ChevronLeft } from 'lucide-react';
 
-interface ServantDashboardData {
-  servant: {
-    id: string;
-    roleCode: string;
-    roleLevel: number;
-  };
-  metrics: {
-    attendanceRatePercentage: number;
-    attendancePresentCount: number;
-    attendanceTotalSessions: number;
-    preparationsCount: number;
-    assignedMembersCount: number;
-    daysSinceLastConfession: number | null;
-  };
-  upcomingLessons: Array<{
-    id: string;
-    title: string;
-    lessonDate: string;
-    scriptureRef: string | null;
-    status: string;
-    reviewerNotes?: string | null;
-    reviewedByName?: string | null;
-    reviewedByRole?: string | null;
-    reviewedByLevel?: number | null;
-    stage?: { id: string; name: string };
-  }>;
-  assignedMembers: Array<{
-    id: string;
-    fullName: string;
-    phoneNumber: string | null;
-    educationalGrade: string;
-  }>;
-  urgentAbsenceAlerts: Array<{
-    id: string;
-    consecutiveCount: number;
-    lastAttendedDate: string | null;
-    member?: {
-      id: string;
-      fullName: string;
-      phoneNumber: string | null;
-      educationalGrade: string;
-    };
-  }>;
+interface AnnouncementItem {
+  id: string;
+  title: string;
+  content: string;
+  isPinned: boolean;
+  createdAt: string;
+  isRead: boolean;
+  author?: { fullName: string; role?: { name: string } };
 }
 
-export default function DashboardPage() {
-  const { user, logout } = useAuth();
+export default function HomePage() {
   const router = useRouter();
+  const { user } = useAuth();
 
+  const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
+  const [polls, setPolls] = useState<PollItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dashboardData, setDashboardData] = useState<ServantDashboardData | null>(null);
-  const [isSpiritualJournalOpen, setIsSpiritualJournalOpen] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
 
-  // Account creation modal state (Level 3+)
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [isServantDirectoryOpen, setIsServantDirectoryOpen] = useState(false);
-  const [fullName, setFullName] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [email, setEmail] = useState('');
-  const [roleCode, setRoleCode] = useState('SERVANT');
-  const [stageId, setStageId] = useState('');
-  const [sectorId, setSectorId] = useState('');
-  const [sectorName, setSectorName] = useState('');
-  const [selectedStageIds, setSelectedStageIds] = useState<string[]>([]);
-  const [tempPassword, setTempPassword] = useState('InitPassword2026!');
-  const [createLoading, setCreateLoading] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
-  const [createSuccess, setCreateSuccess] = useState<string | null>(null);
-
-  const handleToggleStage = (stId: string) => {
-    setSelectedStageIds((prev) =>
-      prev.includes(stId) ? prev.filter((id) => id !== stId) : [...prev, stId]
-    );
-  };
-
-  // Dynamic roles and stages list
-  const [stagesList, setStagesList] = useState<any[]>([]);
-  const [rolesList, setRolesList] = useState<any[]>([]);
-
-  useEffect(() => {
-    let isMounted = true;
-    const fetchStagesAndRoles = async () => {
-      try {
-        const res = await api.get('/api/v1/stages');
-        if (res.data?.success && Array.isArray(res.data.stages)) {
-          if (isMounted) setStagesList(res.data.stages);
-        }
-      } catch {
-        // Fallback silently to user.scopes.stages
-      }
-
-      try {
-        const resRoles = await api.get('/api/v1/accounts/roles');
-        if (resRoles.data?.success && Array.isArray(resRoles.data.roles)) {
-          if (isMounted) setRolesList(resRoles.data.roles);
-        }
-      } catch {
-        // Fallback silently to static list
-      }
-    };
-    fetchStagesAndRoles();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const availableStages = useMemo(() => {
-    return stagesList.length > 0 ? stagesList : (user?.scopes?.stages || []);
-  }, [stagesList, user]);
-
-  const availableSectors = useMemo(() => {
-    return user?.scopes?.sectors || [];
-  }, [user]);
-
-  const availableRoles = useMemo(() => {
-    if (rolesList.length > 0) {
-      return rolesList;
-    }
-    const callerLevel = user?.role?.level ?? 1;
-    const defaultRoles = [
-      { code: 'SERVANT', name: 'خادم مرحلة', level: 1 },
-      { code: 'ASSISTANT_SECRETARY', name: 'مساعد أمين الخدمة', level: 2 },
-      { code: 'STAGE_SECRETARY', name: 'أمين الخدمة / أمين مرحلة', level: 3 },
-      { code: 'SECTOR_SECRETARY', name: 'أمين قطاع', level: 4 },
-    ];
-    return defaultRoles.filter((r) => r.level < callerLevel);
-  }, [rolesList, user]);
-
-  useEffect(() => {
-    if (availableStages.length > 0 && !stageId) {
-      setStageId(availableStages[0].id);
-    }
-  }, [availableStages, stageId]);
-
-  useEffect(() => {
-    if (availableSectors.length > 0 && !sectorId) {
-      setSectorId(availableSectors[0].id);
-    }
-  }, [availableSectors, sectorId]);
-
-  // Coptic Date
   const copticDate = getCopticDate();
   const gregorianDate = new Intl.DateTimeFormat('ar-EG', {
     weekday: 'long',
@@ -187,752 +41,175 @@ export default function DashboardPage() {
     year: 'numeric',
   }).format(new Date());
 
-  const fetchDashboardData = async () => {
+  const load = useCallback(async () => {
     try {
-      setLoading(true);
-      const res = await api.get('/api/v1/dashboard/servant-summary');
-      if (res.data?.success) {
-        setDashboardData(res.data.data);
+      const [annRes, pollRes] = await Promise.allSettled([
+        api.get('/api/v1/announcements'),
+        api.get('/api/v1/polls'),
+      ]);
+      if (annRes.status === 'fulfilled' && annRes.value.data?.success) {
+        setAnnouncements(annRes.value.data.data || []);
       }
-    } catch (err) {
-      console.error('Failed to load servant dashboard summary:', err);
+      if (pollRes.status === 'fulfilled' && pollRes.value.data?.success) {
+        setPolls(pollRes.value.data.data || []);
+      }
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchDashboardData();
   }, []);
 
-  const handleLogout = async () => {
-    await logout();
-    router.replace('/login');
-  };
+  useEffect(() => {
+    if (user) load();
+  }, [user, load]);
 
-  const handleCreateAccount = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setCreateError(null);
-    setCreateSuccess(null);
-
-    const selectedRole = availableRoles.find((r) => r.code === roleCode);
-    const isSectorRole = roleCode === 'SECTOR_SECRETARY' || selectedRole?.level === 4;
-
-    const payload: any = {
-      fullName: fullName.trim(),
-      phoneNumber: phoneNumber.trim(),
-      email: email ? email.trim() : undefined,
-      roleCode,
-      roleId: selectedRole?.id || undefined,
-      temporaryPassword: tempPassword,
-    };
-
-    if (isSectorRole) {
-      if (!sectorName.trim()) {
-        setCreateError('يرجى كتابة اسم القطاع المسند إليه أمين القطاع');
-        return;
+  const toggleAnnouncement = async (a: AnnouncementItem) => {
+    setExpandedId((prev) => (prev === a.id ? null : a.id));
+    if (!a.isRead) {
+      try {
+        await api.patch(`/api/v1/announcements/${a.id}/read`);
+        setAnnouncements((prev) => prev.map((x) => (x.id === a.id ? { ...x, isRead: true } : x)));
+      } catch {
+        /* non-blocking */
       }
-      if (selectedStageIds.length === 0) {
-        setCreateError('يرجى تحديد مرحلة واحدة على الأقل تابعة لهذا القطاع');
-        return;
-      }
-      payload.sectorName = sectorName.trim();
-      payload.stageIds = selectedStageIds;
-    } else {
-      const resolvedStageId = stageId || availableStages[0]?.id || user?.scopes?.stages?.[0]?.id;
-      if (!resolvedStageId) {
-        setCreateError('يرجى تحديد مرحلة مسندة لإضافة الخادم إليها');
-        return;
-      }
-      payload.stageId = resolvedStageId;
-    }
-
-    try {
-      setCreateLoading(true);
-      const res = await api.post('/api/v1/accounts/create', payload);
-
-      if (res.data?.success) {
-        setCreateSuccess(
-          `تم إنشاء حساب الخادم (${fullName}) برتبة (${selectedRole?.name || roleCode}) بنجاح!`
-        );
-        setFullName('');
-        setPhoneNumber('');
-        setEmail('');
-        setSectorName('');
-        setSelectedStageIds([]);
-      }
-    } catch (err: any) {
-      setCreateError(
-        err.response?.data?.error?.message ||
-          'حدث خطأ أثناء إنشاء الحساب. تأكد من استيفاء الصلاحيات.'
-      );
-    } finally {
-      setCreateLoading(false);
     }
   };
 
-
-  const handleTabChange = (tab: string) => {
-    if (tab === 'members') router.push('/members');
-    else if (tab === 'attendance') router.push('/attendance');
-    else if (tab === 'plan') router.push('/plan');
-  };
-
+  const openPolls = polls.filter((p) => !p.isClosed && new Date(p.closesAt) > new Date());
+  const sortedAnnouncements = [...announcements].sort(
+    (a, b) => Number(b.isPinned) - Number(a.isPinned) || +new Date(b.createdAt) - +new Date(a.createdAt)
+  );
+  const unreadCount = announcements.filter((a) => !a.isRead).length;
 
   return (
     <ProtectedRoute>
-      <div dir="rtl" className="min-h-screen bg-bg-app flex flex-col items-center p-4 sm:p-6 pb-28">
-        <div className="w-full max-w-[480px] flex flex-col gap-4">
-          
-          {/* Top Bar */}
-          <header className="flex items-center justify-between bg-bg-surface border border-border-default rounded-card p-4 shadow-card">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-full bg-brand-primary-soft border border-[#D5E1F0] flex items-center justify-center text-brand-primary font-bold">
-                <User className="w-5 h-5 text-brand-primary" />
-              </div>
-              <div className="text-right">
-                <h1 className="text-body-default font-bold text-text-primary leading-tight">
-                  {user?.fullName}
-                </h1>
-                <p className="text-caption text-text-secondary mt-0.5">
-                  المستوى {user?.role.level}: {user?.role.name}
-                </p>
-              </div>
+      <div dir="rtl" className="min-h-screen bg-bg-app flex flex-col items-center pb-24">
+        <div className="w-full max-w-[480px] flex flex-col">
+          {/* Header: logo | church name + dates | bell + avatar */}
+          <header className="sticky top-0 z-30 bg-bg-surface border-b border-border-default shadow-card px-4 py-3 flex items-center gap-3">
+            <ChurchLogo />
+            <div className="flex-1 min-w-0 text-right">
+              <h1 className="text-body-default font-bold text-brand-primary leading-tight truncate">
+                كنيسة الأنبا شنودة
+              </h1>
+              <p className="text-caption text-text-secondary truncate">
+                {copticDate.formatted} • {gregorianDate}
+              </p>
             </div>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleLogout}
-              className="text-status-danger hover:bg-status-danger-soft hover:border-[#F5C2BE] gap-1.5"
+            <button
+              id="home-notifications"
+              type="button"
+              onClick={() => setIsNotifOpen(true)}
+              aria-label="الإشعارات"
+              className="relative w-10 h-10 rounded-full flex items-center justify-center text-text-secondary hover:bg-bg-muted transition-colors"
             >
-              <LogOut className="w-4 h-4" />
-              <span>خروج</span>
-            </Button>
+              <Bell className="w-5 h-5" />
+              {unreadCount > 0 && (
+                <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-status-danger text-white text-[10px] font-bold flex items-center justify-center">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+            <button
+              id="home-avatar"
+              type="button"
+              onClick={() => router.push('/profile')}
+              aria-label="الملف الشخصي"
+              className="w-10 h-10 rounded-full bg-brand-primary-soft border border-[#D5E1F0] flex items-center justify-center text-brand-primary font-bold hover:bg-[#d8e3f0] transition-colors"
+            >
+              {user?.fullName ? user.fullName.trim().charAt(0) : <User className="w-5 h-5" />}
+            </button>
           </header>
 
-          {/* Coptic Greeting Card (TASK-05-8) */}
-          <section className="bg-gradient-to-br from-brand-primary via-[#264875] to-[#162B47] text-white rounded-card p-5 shadow-elevated relative overflow-hidden text-right">
-            <div className="absolute top-0 left-0 w-36 h-36 bg-brand-accent/15 rounded-full blur-2xl pointer-events-none" />
-            <div className="relative z-10 flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-brand-accent animate-pulse" />
-                  <span className="text-caption text-brand-accent font-semibold tracking-wide">
-                    خدمة كنيستنا الأرثوذكسية
-                  </span>
-                </div>
-                <Badge variant="accent" className="bg-brand-accent/20 text-brand-accent border-brand-accent/30">
-                  {copticDate.formatted}
-                </Badge>
-              </div>
-
-              <div>
-                <h2 className="text-h1 font-bold text-white leading-snug">
-                  أهلاً بك يا خادم المسيح / {user?.fullName.split(' ')[0]}
-                </h2>
-                <p className="text-body-small text-white/80 mt-1">
-                  اليوم {gregorianDate}
-                </p>
-              </div>
-
-              {/* Private Spiritual Journal Trigger */}
-              <div className="pt-2 border-t border-white/10 flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => setIsSpiritualJournalOpen(true)}
-                  className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg bg-white/10 hover:bg-white/15 border border-white/15 text-white transition-all text-body-small font-medium group"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-full bg-brand-accent text-brand-primary flex items-center justify-center font-bold">
-                      <Lock className="w-4 h-4" />
-                    </div>
-                    <div className="text-right">
-                      <p className="text-body-small font-bold text-brand-accent">
-                        المفكرة الروحية الخاصة
-                      </p>
-                      <p className="text-[11px] text-white/70">
-                        سجل التناول والاعتراف (مشفر وسري بالكامل)
-                      </p>
-                    </div>
-                  </div>
-                  <ChevronLeft className="w-4 h-4 text-brand-accent group-hover:-translate-x-1 transition-transform" />
-                </button>
-              </div>
-            </div>
-          </section>
-
-          {/* Personal Metrics Row (StatCards) */}
-          <section className="grid grid-cols-3 gap-2.5">
-            {/* StatCard 1: Attendance Rate */}
-            <div className="bg-bg-surface border border-border-default rounded-card p-3.5 shadow-card flex flex-col items-center text-center">
-              <div className="w-8 h-8 rounded-full bg-status-success-soft text-status-success flex items-center justify-center mb-1.5">
-                <CalendarCheck className="w-4 h-4" />
-              </div>
-              <span className="text-h2 font-bold text-text-primary">
-                {dashboardData?.metrics.attendanceRatePercentage ?? 100}%
-              </span>
-              <span className="text-[11px] text-text-secondary mt-0.5">
-                حضور الخدمة (8 أسابيع)
-              </span>
-            </div>
-
-            {/* StatCard 2: Preparations Count */}
-            <div
-              onClick={() => router.push('/preparations')}
-              className="bg-bg-surface border border-border-default rounded-card p-3.5 shadow-card flex flex-col items-center text-center cursor-pointer hover:border-brand-primary/50 transition-colors"
-            >
-              <div className="w-8 h-8 rounded-full bg-brand-primary-soft text-brand-primary flex items-center justify-center mb-1.5">
-                <BookOpen className="w-4 h-4" />
-              </div>
-              <span className="text-h2 font-bold text-text-primary">
-                {dashboardData?.metrics.preparationsCount ?? 0}
-              </span>
-              <span className="text-[11px] text-text-secondary mt-0.5">
-                دروس محضرة
-              </span>
-            </div>
-
-            {/* StatCard 3: Assigned Members */}
-            <div
-              onClick={() => router.push('/members')}
-              className="bg-bg-surface border border-border-default rounded-card p-3.5 shadow-card flex flex-col items-center text-center cursor-pointer hover:border-brand-primary/50 transition-colors"
-            >
-              <div className="w-8 h-8 rounded-full bg-brand-accent-soft text-brand-accent flex items-center justify-center mb-1.5">
-                <HeartHandshake className="w-4 h-4" />
-              </div>
-              <span className="text-h2 font-bold text-text-primary">
-                {dashboardData?.metrics.assignedMembersCount ?? 0}
-              </span>
-              <span className="text-[11px] text-text-secondary mt-0.5">
-                مخدومين برعايتي
-              </span>
-            </div>
-          </section>
-
-          {/* Action Required: Urgent Absence Alerts */}
-          {dashboardData && dashboardData.urgentAbsenceAlerts.length > 0 && (
-            <section className="bg-bg-surface border border-status-danger/30 rounded-card p-4 shadow-card flex flex-col gap-3 text-right">
-              <div className="flex items-center justify-between pb-2 border-b border-border-default">
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="w-5 h-5 text-status-danger" />
-                  <h3 className="text-h2 font-bold text-text-primary">
-                    تنبيهات الافتقاد العاجلة ({dashboardData.urgentAbsenceAlerts.length})
-                  </h3>
-                </div>
-                <Badge variant="danger">متابعة فورية</Badge>
-              </div>
-
-              <div className="flex flex-col gap-2.5">
-                {dashboardData.urgentAbsenceAlerts.slice(0, 3).map((alert) => (
-                  <div
-                    key={alert.id}
-                    className="p-3 bg-status-danger-soft/40 border border-[#F5C2BE] rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
-                  >
-                    <div>
-                      <h4 className="text-body-default font-bold text-text-primary">
-                        {alert.member?.fullName || 'مخدوم'}
-                      </h4>
-                      <p className="text-caption text-status-danger font-medium mt-0.5">
-                        غائب لـ {alert.consecutiveCount} أسابيع متتالية ({alert.member?.educationalGrade})
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {alert.member?.phoneNumber && (
-                        <a
-                          href={`tel:${alert.member.phoneNumber}`}
-                          className="px-3 py-1.5 bg-bg-surface border border-border-default rounded-pill text-caption font-semibold text-brand-primary flex items-center gap-1.5 hover:bg-bg-muted"
-                        >
-                          <Phone className="w-3.5 h-3.5 text-brand-primary" />
-                          <span>اتصال</span>
-                        </a>
-                      )}
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={() => router.push('/attendance')}
-                        className="text-caption font-semibold py-1 px-3 h-8"
-                      >
-                        تسجيل افتقاد
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Upcoming Lesson Obligation */}
-          <section className="bg-bg-surface border border-border-default rounded-card p-4 shadow-card flex flex-col gap-3 text-right">
-            <div className="flex items-center justify-between pb-2 border-b border-border-default">
-              <div className="flex items-center gap-2">
-                <BookOpen className="w-5 h-5 text-brand-primary" />
-                <h3 className="text-h2 font-bold text-text-primary">التحضير الأسبوعي القادم</h3>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => router.push('/preparations')}
-                className="text-caption font-semibold py-1 px-2.5 h-8 gap-1"
-              >
-                <span>كل الدروس</span>
-                <ChevronLeft className="w-3.5 h-3.5" />
-              </Button>
-            </div>
-
-            {dashboardData && dashboardData.upcomingLessons.length > 0 ? (
-              <div className="p-3.5 bg-bg-app rounded-lg border border-border-default flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-caption font-bold text-brand-primary">
-                    {new Date(dashboardData.upcomingLessons[0].lessonDate).toLocaleDateString('ar-EG', {
-                      weekday: 'long',
-                      day: 'numeric',
-                      month: 'short',
-                    })}
-                  </span>
-                  <Badge variant={dashboardData.upcomingLessons[0].status === 'REVIEWED' ? 'success' : dashboardData.upcomingLessons[0].status === 'DRAFT' && dashboardData.upcomingLessons[0].reviewerNotes ? 'danger' : 'accent'}>
-                    {dashboardData.upcomingLessons[0].status === 'REVIEWED' ? 'تمت المراجعة والاعتماد' : dashboardData.upcomingLessons[0].status === 'DRAFT' && dashboardData.upcomingLessons[0].reviewerNotes ? 'مطلوب تعديل' : 'مقدم'}
-                  </Badge>
-                </div>
-                <h4 className="text-body-default font-bold text-text-primary">
-                  {dashboardData.upcomingLessons[0].title}
-                </h4>
-                {dashboardData.upcomingLessons[0].scriptureRef && (
-                  <p className="text-caption text-text-secondary">
-                    الشاهد: {dashboardData.upcomingLessons[0].scriptureRef}
-                  </p>
-                )}
-
-                {/* Reviewer Details Display (FR-5.2 & User Spec) */}
-                {dashboardData.upcomingLessons[0].status === 'REVIEWED' ? (
-                  <div className="mt-1 pt-2 border-t border-border-default flex flex-col gap-1.5 text-right">
-                    <div className="flex items-center justify-between text-[11px] text-status-success font-semibold">
-                      <span className="flex items-center gap-1">
-                        <Check className="w-3.5 h-3.5" />
-                        <span>تم الاعتماد بواسطة:</span>
-                      </span>
-                      <span className="font-bold">
-                        {dashboardData.upcomingLessons[0].reviewedByName
-                          ? `${dashboardData.upcomingLessons[0].reviewedByName} (${dashboardData.upcomingLessons[0].reviewedByRole || 'أمين'})`
-                          : 'أمين الخدمة'}
-                      </span>
-                    </div>
-                    {dashboardData.upcomingLessons[0].reviewerNotes && (
-                      <div className="bg-status-success-soft/70 border border-status-success/25 rounded p-2 text-caption text-text-primary">
-                        <span className="font-bold text-status-success block text-[11px] mb-0.5">
-                          ملاحظات الاعتماد والتوجيهات:
-                        </span>
-                        <p className="whitespace-pre-wrap leading-relaxed">{dashboardData.upcomingLessons[0].reviewerNotes}</p>
-                      </div>
-                    )}
-                  </div>
-                ) : dashboardData.upcomingLessons[0].status === 'DRAFT' && (dashboardData.upcomingLessons[0].reviewerNotes || dashboardData.upcomingLessons[0].reviewedByName) ? (
-                  <div className="mt-1 pt-2 border-t border-border-default flex flex-col gap-1.5 text-right">
-                    <div className="flex items-center justify-between text-[11px] text-status-danger font-semibold">
-                      <span className="flex items-center gap-1">
-                        <AlertCircle className="w-3.5 h-3.5" />
-                        <span>طلب تعديل بواسطة:</span>
-                      </span>
-                      <span className="font-bold">
-                        {dashboardData.upcomingLessons[0].reviewedByName
-                          ? `${dashboardData.upcomingLessons[0].reviewedByName} (${dashboardData.upcomingLessons[0].reviewedByRole || 'أمين'})`
-                          : 'أمين الخدمة'}
-                      </span>
-                    </div>
-                    {dashboardData.upcomingLessons[0].reviewerNotes && (
-                      <div className="bg-status-danger-soft/70 border border-status-danger/25 rounded p-2 text-caption text-text-primary">
-                        <span className="font-bold text-status-danger block text-[11px] mb-0.5">
-                          ملاحظات وسبب طلب التعديل:
-                        </span>
-                        <p className="whitespace-pre-wrap leading-relaxed">{dashboardData.upcomingLessons[0].reviewerNotes}</p>
-                      </div>
-                    )}
-                  </div>
-                ) : null}
+          <main className="px-4 py-4 flex flex-col gap-6">
+            {loading ? (
+              <div className="py-20 flex flex-col items-center gap-3 text-text-secondary">
+                <Loader2 className="w-7 h-7 animate-spin text-brand-primary" />
+                <span className="text-body-small">جاري التحميل...</span>
               </div>
             ) : (
-              <div className="p-4 bg-bg-app rounded-lg border border-dashed border-border-default text-center flex flex-col items-center gap-2">
-                <p className="text-body-small text-text-secondary">
-                  لا توجد تحضيرات قادمة مسجلة حالياً
-                </p>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => router.push('/plan')}
-                  className="font-semibold"
-                >
-                  تحضير الدرس بالخطة
-                </Button>
-              </div>
-            )}
-          </section>
-
-          {/* Quick Action Navigation Grid */}
-          <section className="grid grid-cols-2 gap-3 text-right">
-            <button
-              type="button"
-              onClick={() => router.push('/members')}
-              className="p-4 bg-bg-surface border border-border-default rounded-card shadow-card flex flex-col gap-2 hover:border-brand-primary transition-all text-right group"
-            >
-              <div className="w-10 h-10 rounded-lg bg-brand-primary-soft text-brand-primary flex items-center justify-center group-hover:scale-105 transition-transform">
-                <Users className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="text-body-default font-bold text-text-primary">سجل المخدومين</h4>
-                <p className="text-[11px] text-text-secondary mt-0.5">
-                  بيانات المخدومين والتسجيل الشامل
-                </p>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => router.push('/attendance')}
-              className="p-4 bg-bg-surface border border-border-default rounded-card shadow-card flex flex-col gap-2 hover:border-brand-primary transition-all text-right group"
-            >
-              <div className="w-10 h-10 rounded-lg bg-status-success-soft text-status-success flex items-center justify-center group-hover:scale-105 transition-transform">
-                <ClipboardList className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="text-body-default font-bold text-text-primary">حضور وافتقاد</h4>
-                <p className="text-[11px] text-text-secondary mt-0.5">
-                  رصد الغياب وبطاقات الافتقاد
-                </p>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => router.push('/announcements')}
-              className="p-4 bg-bg-surface border border-border-default rounded-card shadow-card flex items-center gap-3 hover:border-brand-accent transition-all text-right group"
-            >
-              <div className="w-10 h-10 rounded-lg bg-brand-accent-soft text-brand-accent flex items-center justify-center group-hover:scale-105 transition-transform shrink-0">
-                <Megaphone className="w-5 h-5" />
-              </div>
-              <div className="flex-1">
-                <h4 className="text-body-default font-bold text-text-primary">الإعلانات والاستطلاعات</h4>
-                <p className="text-[11px] text-text-secondary mt-0.5">
-                  البيانات الرسمية والتصويت
-                </p>
-              </div>
-              <ChevronLeft className="w-4 h-4 text-text-secondary group-hover:text-brand-accent transition-colors" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => router.push('/analytics')}
-              className="p-4 bg-bg-surface border border-border-default rounded-card shadow-card flex items-center gap-3 hover:border-brand-primary transition-all text-right group"
-            >
-              <div className="w-10 h-10 rounded-lg bg-brand-primary-soft text-brand-primary flex items-center justify-center group-hover:scale-105 transition-transform shrink-0">
-                <BarChart3 className="w-5 h-5" />
-              </div>
-              <div className="flex-1">
-                <h4 className="text-body-default font-bold text-text-primary">التحليلات والتقارير</h4>
-                <p className="text-[11px] text-text-secondary mt-0.5">
-                  مؤشرات الحضور وتصدير PDF/Excel
-                </p>
-              </div>
-              <ChevronLeft className="w-4 h-4 text-text-secondary group-hover:text-brand-primary transition-colors" />
-            </button>
-          </section>
-
-          {/* Administrative Secretarial Scopes (Level 3+) */}
-          {user && user.role.level >= 3 && (
-            <section className="bg-bg-surface border border-border-default rounded-card p-4 shadow-card flex flex-col gap-3 text-right">
-              <div className="flex items-center justify-between pb-2 border-b border-border-default">
-                <div className="flex items-center gap-2">
-                  <Shield className="w-5 h-5 text-brand-accent" />
-                  <h3 className="text-h2 font-bold text-text-primary">إدارة الخدمة والخدام</h3>
-                </div>
-                <Badge variant="accent">
-                  {user.role.level >= 5 ? 'الأمانة العامة' : 'أمين المرحلة'}
-                </Badge>
-              </div>
-
-              <p className="text-body-small text-text-secondary leading-relaxed">
-                {user.role.level >= 5
-                  ? `بصفتك (${user.role.name})، يمكنك إنشاء وتفعيل حسابات الخدام ونقلهم وإدارتهم شاملاً.`
-                  : `بصفتك (${user.role.name})، يمكنك تعديل بيانات خدام مرحلتك، ومتابعة حضورهم ومراجعة تحضيراتهم.`}
-              </p>
-
-              {user.role.level >= 5 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  <Button
-                    variant="primary"
-                    onClick={() => {
-                      setCreateError(null);
-                      setCreateSuccess(null);
-                      setIsCreateModalOpen(true);
-                    }}
-                    className="h-[40px] gap-1.5 font-semibold text-caption"
-                  >
-                    <UserPlus className="w-4 h-4" />
-                    <span>إضافة خادم</span>
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    onClick={() => setIsServantDirectoryOpen(true)}
-                    className="h-[40px] gap-1.5 font-semibold text-caption text-brand-primary border-brand-primary/30 hover:bg-brand-primary-soft"
-                    title="نقل وإيقاف الخدام وإدارتهم شاملاً"
-                  >
-                    <ArrowLeftRight className="w-4 h-4" />
-                    <span>نقل وإيقاف الخدام</span>
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    onClick={() => router.push('/attendance?view=servants')}
-                    className="h-[40px] gap-1.5 font-semibold text-caption"
-                  >
-                    <Users className="w-4 h-4" />
-                    <span>متابعة الخدام</span>
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    onClick={() => router.push('/preparations')}
-                    className="h-[40px] gap-1.5 font-semibold text-caption"
-                  >
-                    <BookOpen className="w-4 h-4" />
-                    <span>التحضيرات</span>
-                  </Button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <Button
-                    variant="primary"
-                    onClick={() => router.push('/attendance?view=servants')}
-                    className="h-[40px] gap-1.5 font-semibold text-caption"
-                  >
-                    <Users className="w-4 h-4" />
-                    <span>متابعة وتعديل بيانات الخدام</span>
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    onClick={() => router.push('/preparations')}
-                    className="h-[40px] gap-1.5 font-semibold text-caption"
-                  >
-                    <BookOpen className="w-4 h-4" />
-                    <span>مراجعة التحضيرات</span>
-                  </Button>
-                </div>
-              )}
-            </section>
-          )}
-
-          {/* Modal: Scoped Account Creation */}
-          {isCreateModalOpen && (
-            <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-              <div className="w-full max-w-[420px] bg-bg-surface border border-border-default rounded-card shadow-elevated p-6 text-right relative max-h-[90vh] overflow-y-auto">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateModalOpen(false)}
-                  className="absolute top-4 left-4 text-text-secondary hover:text-text-primary p-1"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-
-                <div className="mb-4">
-                  <h3 className="text-h2 font-bold text-brand-primary">إنشاء حساب خادم مصرح</h3>
-                  <p className="text-caption text-text-secondary mt-0.5">
-                    إسناد مباشر للخدمة وتفعيل الصلاحيات
-                  </p>
-                </div>
-
-                {createError && (
-                  <div className="mb-4 p-3 bg-status-danger-soft border border-[#F5C2BE] rounded-lg flex items-start gap-2 text-right">
-                    <AlertCircle className="w-4 h-4 text-status-danger shrink-0 mt-0.5" />
-                    <p className="text-caption text-status-danger font-medium">{createError}</p>
+              <>
+                {/* Polls */}
+                <section className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-h2 font-bold text-text-primary flex items-center gap-2">
+                      <Vote className="w-5 h-5 text-brand-accent" />
+                      استطلاعات الرأي
+                    </h2>
+                    {(user?.role?.level ?? 1) >= 3 && (
+                      <button
+                        type="button"
+                        onClick={() => router.push('/announcements')}
+                        className="text-caption font-semibold text-brand-primary flex items-center gap-0.5"
+                      >
+                        إدارة <ChevronLeft className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
-                )}
-
-                {createSuccess && (
-                  <div className="mb-4 p-3 bg-status-success-soft border border-[#BDE5D0] rounded-lg flex items-start gap-2 text-right">
-                    <CheckCircle2 className="w-4 h-4 text-status-success shrink-0 mt-0.5" />
-                    <p className="text-caption text-status-success font-medium">{createSuccess}</p>
-                  </div>
-                )}
-
-                <form onSubmit={handleCreateAccount} className="flex flex-col gap-3.5">
-                  <Input
-                    label="الاسم بالكامل"
-                    placeholder="مثال: يوسف عادل جورج"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    required
-                  />
-
-                  <Input
-                    label="رقم الهاتف المحمول"
-                    type="tel"
-                    placeholder="010XXXXXXXX"
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                    required
-                  />
-
-                  <Input
-                    label="البريد الإلكتروني (اختياري)"
-                    type="email"
-                    placeholder="servant@church.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
-
-                  <div className="flex flex-col gap-1.5 text-right">
-                    <label className="text-caption font-semibold text-text-primary">
-                      الرتبة / الدور في الخدمة *
-                    </label>
-                    <select
-                      value={roleCode}
-                      onChange={(e) => setRoleCode(e.target.value)}
-                      className="h-11 px-3 rounded-button border border-border-default bg-bg-surface text-body-default text-text-primary focus:outline-none focus:border-brand-primary"
-                    >
-                      {availableRoles.map((r) => (
-                        <option key={r.code} value={r.code}>
-                          {r.name} (المستوى {r.level})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {roleCode === 'SECTOR_SECRETARY' ? (
-                    <>
-                      <Input
-                        label="اسم القطاع *"
-                        placeholder="مثال: قطاع الطفولة، قطاع الشباب، قطاع إعدادي وثانوي..."
-                        value={sectorName}
-                        onChange={(e) => setSectorName(e.target.value)}
-                        required
-                      />
-
-                      <div className="flex flex-col gap-2 text-right">
-                        <div className="flex items-center justify-between">
-                          <label className="text-caption font-semibold text-text-primary">
-                            المراحل التابعة لهذا القطاع *
-                          </label>
-                          <span className="text-[11px] text-brand-primary font-medium">
-                            {selectedStageIds.length > 0
-                              ? `(تم اختيار ${selectedStageIds.length} مرحلة)`
-                              : '(حدد مرحلة واحدة على الأقل)'}
-                          </span>
-                        </div>
-
-                        <div className="border border-border-default rounded-card p-2.5 max-h-48 overflow-y-auto bg-bg-muted/20 flex flex-col gap-1.5">
-                          {availableStages.map((st) => {
-                            const isChecked = selectedStageIds.includes(st.id);
-                            return (
-                              <label
-                                key={st.id}
-                                className={`flex items-center justify-between px-3 py-2 rounded-lg border text-caption cursor-pointer transition-colors ${
-                                  isChecked
-                                    ? 'bg-brand-primary/10 border-brand-primary text-brand-primary font-bold shadow-xs'
-                                    : 'bg-bg-surface border-border-default hover:bg-bg-muted text-text-primary'
-                                }`}
-                              >
-                                <div className="flex items-center gap-2.5">
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onChange={() => handleToggleStage(st.id)}
-                                    className="w-4 h-4 rounded text-brand-primary accent-brand-primary focus:ring-brand-primary cursor-pointer"
-                                  />
-                                  <span>{st.name}</span>
-                                </div>
-                                {st.code && (
-                                  <span className="text-[10px] text-text-secondary bg-bg-muted px-1.5 py-0.5 rounded">
-                                    {st.code}
-                                  </span>
-                                )}
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </>
+                  {openPolls.length === 0 ? (
+                    <EmptyBox text="لا توجد استطلاعات مفتوحة حالياً" />
                   ) : (
-                    availableStages.length > 1 ? (
-                      <div className="flex flex-col gap-1.5 text-right">
-                        <label className="text-caption font-semibold text-text-primary">
-                          المرحلة المسند إليها الخادم *
-                        </label>
-                        <select
-                          value={stageId || availableStages[0]?.id}
-                          onChange={(e) => setStageId(e.target.value)}
-                          className="h-11 px-3 rounded-button border border-border-default bg-bg-surface text-body-default text-text-primary focus:outline-none focus:border-brand-primary"
-                        >
-                          {availableStages.map((st) => (
-                            <option key={st.id} value={st.id}>
-                              {st.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    ) : availableStages.length === 1 ? (
-                      <div className="flex flex-col gap-1 text-right">
-                        <label className="text-caption font-semibold text-text-secondary">
-                          المرحلة المسندة
-                        </label>
-                        <div className="h-11 px-3 rounded-button border border-border-default bg-bg-muted flex items-center text-body-default text-text-primary">
-                          {availableStages[0].name}
-                        </div>
-                      </div>
-                    ) : null
+                    openPolls.map((p) => <PollCard key={p.id} poll={p} onVoted={load} />)
                   )}
+                </section>
 
-                  <Input
-                    label="كلمة المرور المؤقتة"
-                    value={tempPassword}
-                    onChange={(e) => setTempPassword(e.target.value)}
-                    required
-                  />
-
-                  <div className="flex items-center gap-2 mt-2">
-                    <Button
-                      type="submit"
-                      variant="primary"
-                      isLoading={createLoading}
-                      className="flex-1 h-11 font-semibold"
-                    >
-                      تأكيد إنشاء الحساب
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setIsCreateModalOpen(false)}
-                      className="h-11 px-4"
-                    >
-                      إلغاء
-                    </Button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          )}
-
-          {/* Spiritual Journal Drawer (TASK-05-7) */}
-          <SpiritualJournal
-            isOpen={isSpiritualJournalOpen}
-            onClose={() => setIsSpiritualJournalOpen(false)}
-          />
-
-          {/* Servant Directory & Management Modal for General Secretary */}
-          {isServantDirectoryOpen && (
-            <ServantDirectoryModal
-              isOpen={isServantDirectoryOpen}
-              onClose={() => setIsServantDirectoryOpen(false)}
-              onServantUpdated={fetchDashboardData}
-            />
-          )}
-
+                {/* Announcements */}
+                <section className="flex flex-col gap-3">
+                  <h2 className="text-h2 font-bold text-text-primary flex items-center gap-2">
+                    <Megaphone className="w-5 h-5 text-brand-accent" />
+                    الإعلانات
+                  </h2>
+                  {sortedAnnouncements.length === 0 ? (
+                    <EmptyBox text="لا توجد إعلانات حالياً" />
+                  ) : (
+                    sortedAnnouncements.map((a) => {
+                      const open = expandedId === a.id;
+                      return (
+                        <article
+                          key={a.id}
+                          className={cn(
+                            'bg-bg-surface border rounded-card p-4 shadow-card text-right transition-colors',
+                            a.isRead ? 'border-border-default' : 'border-brand-primary/40'
+                          )}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => toggleAnnouncement(a)}
+                            className="w-full text-right flex flex-col gap-1.5"
+                          >
+                            <div className="flex items-center gap-2">
+                              {a.isPinned && <Pin className="w-3.5 h-3.5 text-brand-accent shrink-0" />}
+                              <h3 className="text-body-default font-bold text-text-primary flex-1">
+                                {a.title}
+                              </h3>
+                              {!a.isRead && <span className="w-2 h-2 rounded-full bg-brand-primary shrink-0" />}
+                            </div>
+                            <p className={cn('text-body-small text-text-secondary leading-relaxed whitespace-pre-wrap', !open && 'line-clamp-2')}>
+                              {a.content}
+                            </p>
+                            <span className="text-caption text-text-disabled">
+                              {a.author?.fullName} •{' '}
+                              {new Date(a.createdAt).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short' })}
+                            </span>
+                          </button>
+                        </article>
+                      );
+                    })
+                  )}
+                </section>
+              </>
+            )}
+          </main>
         </div>
 
-        {/* Bottom Tab Bar Navigation */}
+        <NotificationDrawer isOpen={isNotifOpen} onClose={() => setIsNotifOpen(false)} />
         <TabBar activeTab="dashboard" />
       </div>
     </ProtectedRoute>
   );
 }
+
+const EmptyBox: React.FC<{ text: string }> = ({ text }) => (
+  <div className="p-5 bg-bg-surface border border-dashed border-border-default rounded-card text-center text-body-small text-text-secondary">
+    {text}
+  </div>
+);

@@ -49,6 +49,8 @@ export const MemberEditDrawer: React.FC<MemberEditDrawerProps> = ({
   const [educationalGrade, setEducationalGrade] = useState('');
   const [fatherName, setFatherName] = useState('');
   const [motherName, setMotherName] = useState('');
+  const [facebookUrl, setFacebookUrl] = useState('');
+  const [instagramUrl, setInstagramUrl] = useState('');
 
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -68,6 +70,8 @@ export const MemberEditDrawer: React.FC<MemberEditDrawerProps> = ({
       setEducationalGrade(member.educationalGrade || '');
       setFatherName(member.fatherName || '');
       setMotherName(member.motherName || '');
+      setFacebookUrl(member.facebookUrl || '');
+      setInstagramUrl(member.instagramUrl || '');
       setErrorMsg(null);
     }
   }, [member]);
@@ -98,6 +102,8 @@ export const MemberEditDrawer: React.FC<MemberEditDrawerProps> = ({
         educationalGrade: educationalGrade || null,
         fatherName: fatherName || null,
         motherName: motherName || null,
+        facebookUrl: facebookUrl.trim() || null,
+        instagramUrl: instagramUrl.trim() || null,
         financialStatus: financialStatus || null,
         behaviorInService: behaviorInService || null,
         peerIntegration: peerIntegration || null,
@@ -261,6 +267,21 @@ export const MemberEditDrawer: React.FC<MemberEditDrawerProps> = ({
                 label="أب الاعتراف"
                 value={fatherConfessor}
                 onChange={(e) => setFatherConfessor(e.target.value)}
+              />
+
+              <Input
+                label="رابط فيسبوك"
+                dir="ltr"
+                placeholder="https://facebook.com/..."
+                value={facebookUrl}
+                onChange={(e) => setFacebookUrl(e.target.value)}
+              />
+              <Input
+                label="رابط إنستجرام"
+                dir="ltr"
+                placeholder="https://instagram.com/..."
+                value={instagramUrl}
+                onChange={(e) => setInstagramUrl(e.target.value)}
               />
             </div>
           )}
