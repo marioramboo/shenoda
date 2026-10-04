@@ -379,13 +379,13 @@ export class ServantAttendanceController {
           },
           evaluation: evalItem
             ? {
-                financialStatus: evalItem.financialStatus || null,
-                behaviorWithMembers: evalItem.behaviorWithMembers || null,
-                behaviorWithServants: evalItem.behaviorWithServants || null,
-                cooperation: evalItem.cooperation || null,
-                individualInitiative: evalItem.individualInitiative || null,
-                notes: evalItem.notes || null,
-              }
+              financialStatus: evalItem.financialStatus || null,
+              behaviorWithMembers: evalItem.behaviorWithMembers || null,
+              behaviorWithServants: evalItem.behaviorWithServants || null,
+              cooperation: evalItem.cooperation || null,
+              individualInitiative: evalItem.individualInitiative || null,
+              notes: evalItem.notes || null,
+            }
             : null,
           stats,
         };

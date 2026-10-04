@@ -92,7 +92,7 @@ export default function ProfilePage() {
           {/* Profile Identity Card */}
           <section className="bg-bg-surface border border-border-default rounded-card p-5 shadow-card flex flex-col items-center text-center relative overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-16 bg-gradient-to-r from-brand-primary to-brand-primary-light opacity-90" />
-            
+
             {/* Avatar or Picture */}
             <div className="relative w-20 h-20 rounded-full bg-bg-surface border-4 border-bg-surface shadow-md flex items-center justify-center overflow-hidden mb-3 mt-4">
               {user?.profilePicture ? (

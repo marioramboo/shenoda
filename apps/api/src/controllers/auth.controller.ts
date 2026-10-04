@@ -562,45 +562,45 @@ export class AuthController {
       });
     }
 
-        const { stages, sectors } = await getUserReachableScopes(user);
+    const { stages, sectors } = await getUserReachableScopes(user);
 
-        return res.status(200).json({
-          success: true,
-          user: {
-            id: user.id,
-            fullName: user.fullName,
-            phoneNumber: user.phoneNumber,
-            email: user.email,
-            status: user.status,
-            fatherConfessor: user.fatherConfessor,
-            dateOfBirth: user.dateOfBirth,
-            address: user.address,
-            maritalStatus: user.maritalStatus,
-            spouseName: user.spouseName,
-            educationOrCareer: user.educationOrCareer,
-            whatsappPhone: user.whatsappPhone || user.phoneNumber,
-            whatsappPhoneRaw: user.whatsappPhone || null,
-            facebookUrl: user.facebookUrl || null,
-            instagramUrl: user.instagramUrl || null,
-            talents: user.talents || [],
-            siblingsInfo: user.siblingsInfo || [],
-            activities: user.activities || [],
-            isDeacon: user.isDeacon || false,
-            deaconName: user.deaconName || null,
-            deaconRank: user.deaconRank || null,
-            profilePicture: user.profilePicture || null,
-            role: {
-              id: user.role.id,
-              code: user.role.code,
-              name: user.role.name,
-              level: user.role.level,
-            },
-            scopes: {
-              stages,
-              sectors,
-            },
-          },
-        });
+    return res.status(200).json({
+      success: true,
+      user: {
+        id: user.id,
+        fullName: user.fullName,
+        phoneNumber: user.phoneNumber,
+        email: user.email,
+        status: user.status,
+        fatherConfessor: user.fatherConfessor,
+        dateOfBirth: user.dateOfBirth,
+        address: user.address,
+        maritalStatus: user.maritalStatus,
+        spouseName: user.spouseName,
+        educationOrCareer: user.educationOrCareer,
+        whatsappPhone: user.whatsappPhone || user.phoneNumber,
+        whatsappPhoneRaw: user.whatsappPhone || null,
+        facebookUrl: user.facebookUrl || null,
+        instagramUrl: user.instagramUrl || null,
+        talents: user.talents || [],
+        siblingsInfo: user.siblingsInfo || [],
+        activities: user.activities || [],
+        isDeacon: user.isDeacon || false,
+        deaconName: user.deaconName || null,
+        deaconRank: user.deaconRank || null,
+        profilePicture: user.profilePicture || null,
+        role: {
+          id: user.role.id,
+          code: user.role.code,
+          name: user.role.name,
+          level: user.role.level,
+        },
+        scopes: {
+          stages,
+          sectors,
+        },
+      },
+    });
   }
 
   /**

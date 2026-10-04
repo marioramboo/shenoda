@@ -1034,11 +1034,11 @@ export function createMockPrisma() {
               ...a,
               member: mem
                 ? {
-                    id: mem.id,
-                    fullName: mem.fullName,
-                    phoneNumber: mem.phoneNumber,
-                    educationalGrade: mem.educationalGrade,
-                  }
+                  id: mem.id,
+                  fullName: mem.fullName,
+                  phoneNumber: mem.phoneNumber,
+                  educationalGrade: mem.educationalGrade,
+                }
                 : null,
             };
           });
@@ -1257,11 +1257,11 @@ export function createMockPrisma() {
               ...ma,
               member: mem
                 ? {
-                    id: mem.id,
-                    fullName: mem.fullName,
-                    educationalGrade: mem.educationalGrade,
-                    phoneNumber: mem.phoneNumber,
-                  }
+                  id: mem.id,
+                  fullName: mem.fullName,
+                  educationalGrade: mem.educationalGrade,
+                  phoneNumber: mem.phoneNumber,
+                }
                 : null,
             };
           });
@@ -1447,11 +1447,11 @@ export function createMockPrisma() {
               ...a,
               member: mem
                 ? {
-                    id: mem.id,
-                    fullName: mem.fullName,
-                    phoneNumber: mem.phoneNumber,
-                    educationalGrade: mem.educationalGrade,
-                  }
+                  id: mem.id,
+                  fullName: mem.fullName,
+                  phoneNumber: mem.phoneNumber,
+                  educationalGrade: mem.educationalGrade,
+                }
                 : null,
               servantUser: servant ? { id: servant.id, fullName: servant.fullName, phoneNumber: servant.phoneNumber } : null,
               assignedFollowUp: followUp ? { id: followUp.id, fullName: followUp.fullName } : null,
@@ -1609,17 +1609,17 @@ export function createMockPrisma() {
               stage: stage ? { id: stage.id, name: stage.name, sectorId: stage.sectorId } : null,
               author: author
                 ? {
-                    id: author.id,
-                    fullName: author.fullName,
-                    role: authorRole ? { id: authorRole.id, name: authorRole.name, level: authorRole.level, code: authorRole.code } : null,
-                  }
+                  id: author.id,
+                  fullName: author.fullName,
+                  role: authorRole ? { id: authorRole.id, name: authorRole.name, level: authorRole.level, code: authorRole.code } : null,
+                }
                 : null,
               reviewedBy: rev
                 ? {
-                    id: rev.id,
-                    fullName: rev.fullName,
-                    role: revRole ? { id: revRole.id, name: revRole.name, level: revRole.level, code: revRole.code } : null,
-                  }
+                  id: rev.id,
+                  fullName: rev.fullName,
+                  role: revRole ? { id: revRole.id, name: revRole.name, level: revRole.level, code: revRole.code } : null,
+                }
                 : null,
             };
           });
@@ -1642,17 +1642,17 @@ export function createMockPrisma() {
           stage: stage ? { id: stage.id, name: stage.name, sectorId: stage.sectorId } : null,
           author: author
             ? {
-                id: author.id,
-                fullName: author.fullName,
-                role: authorRole ? { id: authorRole.id, name: authorRole.name, level: authorRole.level, code: authorRole.code } : null,
-              }
+              id: author.id,
+              fullName: author.fullName,
+              role: authorRole ? { id: authorRole.id, name: authorRole.name, level: authorRole.level, code: authorRole.code } : null,
+            }
             : null,
           reviewedBy: rev
             ? {
-                id: rev.id,
-                fullName: rev.fullName,
-                role: revRole ? { id: revRole.id, name: revRole.name, level: revRole.level, code: revRole.code } : null,
-              }
+              id: rev.id,
+              fullName: rev.fullName,
+              role: revRole ? { id: revRole.id, name: revRole.name, level: revRole.level, code: revRole.code } : null,
+            }
             : null,
         };
       },
@@ -1693,17 +1693,17 @@ export function createMockPrisma() {
           stage: stage ? { id: stage.id, name: stage.name, sectorId: stage.sectorId } : null,
           author: author
             ? {
-                id: author.id,
-                fullName: author.fullName,
-                role: authorRole ? { id: authorRole.id, name: authorRole.name, level: authorRole.level, code: authorRole.code } : null,
-              }
+              id: author.id,
+              fullName: author.fullName,
+              role: authorRole ? { id: authorRole.id, name: authorRole.name, level: authorRole.level, code: authorRole.code } : null,
+            }
             : null,
           reviewedBy: rev
             ? {
-                id: rev.id,
-                fullName: rev.fullName,
-                role: revRole ? { id: revRole.id, name: revRole.name, level: revRole.level, code: revRole.code } : null,
-              }
+              id: rev.id,
+              fullName: rev.fullName,
+              role: revRole ? { id: revRole.id, name: revRole.name, level: revRole.level, code: revRole.code } : null,
+            }
             : null,
         };
       },
@@ -1869,11 +1869,11 @@ export function createMockPrisma() {
                   ...v,
                   user: u
                     ? {
-                        id: u.id,
-                        fullName: u.fullName,
-                        phoneNumber: u.phoneNumber,
-                        role: r ? { id: r.id, name: r.name, code: r.code } : null,
-                      }
+                      id: u.id,
+                      fullName: u.fullName,
+                      phoneNumber: u.phoneNumber,
+                      role: r ? { id: r.id, name: r.name, code: r.code } : null,
+                    }
                     : null,
                 };
               });
@@ -2006,11 +2006,11 @@ export function createMockPrisma() {
               ...v,
               user: u
                 ? {
-                    id: u.id,
-                    fullName: u.fullName,
-                    phoneNumber: u.phoneNumber,
-                    role: r ? { id: r.id, name: r.name, code: r.code } : null,
-                  }
+                  id: u.id,
+                  fullName: u.fullName,
+                  phoneNumber: u.phoneNumber,
+                  role: r ? { id: r.id, name: r.name, code: r.code } : null,
+                }
                 : null,
             };
           });
@@ -2290,12 +2290,12 @@ export function createMockPrisma() {
           ...newAnn,
           author: author
             ? {
-                id: author.id,
-                fullName: author.fullName,
-                role: roles.find((r) => r.id === author.roleId)
-                  ? { name: roles.find((r) => r.id === author.roleId)!.name, level: roles.find((r) => r.id === author.roleId)!.level }
-                  : { name: 'خادم', level: 1 },
-              }
+              id: author.id,
+              fullName: author.fullName,
+              role: roles.find((r) => r.id === author.roleId)
+                ? { name: roles.find((r) => r.id === author.roleId)!.name, level: roles.find((r) => r.id === author.roleId)!.level }
+                : { name: 'خادم', level: 1 },
+            }
             : null,
           targetStage: stage ? { id: stage.id, name: stage.name } : null,
           targetSector: sector ? { id: sector.id, name: sector.name } : null,
@@ -2343,12 +2343,12 @@ export function createMockPrisma() {
             ...a,
             author: author
               ? {
-                  id: author.id,
-                  fullName: author.fullName,
-                  role: roles.find((r) => r.id === author.roleId)
-                    ? { name: roles.find((r) => r.id === author.roleId)!.name, level: roles.find((r) => r.id === author.roleId)!.level }
-                    : { name: 'خادم', level: 1 },
-                }
+                id: author.id,
+                fullName: author.fullName,
+                role: roles.find((r) => r.id === author.roleId)
+                  ? { name: roles.find((r) => r.id === author.roleId)!.name, level: roles.find((r) => r.id === author.roleId)!.level }
+                  : { name: 'خادم', level: 1 },
+              }
               : null,
             targetStage: stage ? { id: stage.id, name: stage.name } : null,
             targetSector: sector ? { id: sector.id, name: sector.name } : null,
@@ -2421,8 +2421,8 @@ export function createMockPrisma() {
         const key = where.announcementId_userId;
         let existing = key
           ? announcementRecipients.find(
-              (r) => r.announcementId === key.announcementId && r.userId === key.userId
-            )
+            (r) => r.announcementId === key.announcementId && r.userId === key.userId
+          )
           : null;
         if (existing) {
           Object.assign(existing, update);

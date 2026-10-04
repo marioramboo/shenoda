@@ -164,19 +164,14 @@ describe('Extended Servant Profile Fields & Marital Status Authorization Test Su
     const token = getAuthToken('user-servant-1', 'SERVANT', 1);
 
     const res = await fetch(`${baseUrl}/api/v1/auth/profile`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        whatsappPhone: '01099999999',
+      method: '        whatsappPhone: '01099999999',
         facebookUrl: 'https://facebook.com/mina.ghali',
         instagramUrl: 'https://instagram.com/mina.ghali',
+        jobTitle: 'مهندس برمجيات',
         talents: ['ألحان وترتيل', 'تكنولوجيا وبرمجة وميديا'],
         activities: ['كورال', 'كشافة'],
         siblingsInfo: [
-          { name: 'فادي كمال', age: 24 },
+          { name: 'بيشوي كمال', age: 25 },
           { name: 'مارينا كمال', age: 20 },
         ],
         isDeacon: true,
@@ -192,6 +187,7 @@ describe('Extended Servant Profile Fields & Marital Status Authorization Test Su
     assert.strictEqual(body.user?.whatsappPhone, '01099999999');
     assert.strictEqual(body.user?.facebookUrl, 'https://facebook.com/mina.ghali');
     assert.strictEqual(body.user?.instagramUrl, 'https://instagram.com/mina.ghali');
+    assert.strictEqual(body.user?.jobTitle, 'مهندس برمجيات');
     assert.deepStrictEqual(body.user?.talents, ['ألحان وترتيل', 'تكنولوجيا وبرمجة وميديا']);
     assert.deepStrictEqual(body.user?.activities, ['كورال', 'كشافة']);
     assert.strictEqual(body.user?.isDeacon, true);
@@ -230,6 +226,7 @@ describe('Extended Servant Profile Fields & Marital Status Authorization Test Su
       body: JSON.stringify({
         maritalStatus: 'متزوج',
         spouseName: 'إيرين سامي',
+        jobTitle: 'طبيب بشري',
         whatsappPhone: '01123456789',
         isDeacon: true,
         deaconName: 'دياكون أنطونيوس',
@@ -244,6 +241,7 @@ describe('Extended Servant Profile Fields & Marital Status Authorization Test Su
     assert.strictEqual(body.success, true);
     assert.strictEqual(body.user?.maritalStatus, 'متزوج');
     assert.strictEqual(body.user?.spouseName, 'إيرين سامي');
+    assert.strictEqual(body.user?.jobTitle, 'طبيب بشري');
     assert.strictEqual(body.user?.whatsappPhone, '01123456789');
     assert.strictEqual(body.user?.isDeacon, true);
     assert.strictEqual(body.user?.deaconName, 'دياكون أنطونيوس');
@@ -257,6 +255,7 @@ describe('Extended Servant Profile Fields & Marital Status Authorization Test Su
     if (servant) {
       servant.maritalStatus = 'متزوج';
       servant.spouseName = 'إيرين سامي';
+      servant.jobTitle = 'مدرس لغة إنجليزية';
       servant.whatsappPhone = '01123456789';
       servant.isDeacon = true;
       servant.deaconName = 'دياكون أنطونيوس';
@@ -283,6 +282,16 @@ describe('Extended Servant Profile Fields & Marital Status Authorization Test Su
     assert.ok(servantItem);
     assert.strictEqual(servantItem.maritalStatus, 'متزوج');
     assert.strictEqual(servantItem.spouseName, 'إيرين سامي');
+    assert.strictEqual(servantItem.jobTitle, 'مدرس لغة إنجليزية');
+    assert.strictEqual(servantItem.whatsappPhone, '01123456789');
+    assert.strictEqual(servantItem.isDeacon, true);
+    assert.strictEqual(servantItem.deaconName, 'دياكون أنطونيوس');
+    assert.strictEqual(servantItem.deaconRank, 'إيبودياكون (مساعد شماس)');
+    assert.deepStrictEqual(servantItem.talents, ['شعر وكتابة', 'كرة قدم ورياضة']);
+    assert.deepStrictEqual(servantItem.activities, ['مسرح', 'كورة']);
+    assert.strictEqual(servantItem.profilePicture, 'https://cdn.church.org/avatars/mina.jpg');
+  });
+});�');
     assert.strictEqual(servantItem.whatsappPhone, '01123456789');
     assert.strictEqual(servantItem.isDeacon, true);
     assert.strictEqual(servantItem.deaconName, 'دياكون أنطونيوس');

@@ -1401,8 +1401,8 @@ export default function AttendancePage() {
                                 isSuspended
                                   ? 'bg-status-danger-soft text-status-danger'
                                   : isSelected
-                                  ? 'bg-brand-primary text-white'
-                                  : 'bg-bg-surface text-text-primary border border-border-default'
+                                    ? 'bg-brand-primary text-white'
+                                    : 'bg-bg-surface text-text-primary border border-border-default'
                               )}
                             >
                               {s.profilePicture ? (
@@ -1917,8 +1917,8 @@ export default function AttendancePage() {
                       {editingServant.role.level >= 4
                         ? 'تعديل ملف وبيانات أمين القطاع'
                         : editingServant.role.level === 3
-                        ? 'تعديل ملف وبيانات أمين الخدمة'
-                        : 'تعديل ملف وبيانات الخادم'}
+                          ? 'تعديل ملف وبيانات أمين الخدمة'
+                          : 'تعديل ملف وبيانات الخادم'}
                     </h3>
                     <p className="text-caption text-text-secondary">
                       {editingServant.fullName} ({editingServant.role.name})
@@ -2536,8 +2536,8 @@ export default function AttendancePage() {
                             {user?.role?.level && user.role.level >= 5
                               ? 'تقييم ومتابعة الأمانة العامة (5 بنود سرية)'
                               : user?.role?.level === 4
-                              ? 'تقييم ومتابعة أمين القطاع (5 بنود سرية)'
-                              : 'تقييم ومتابعة أمين الخدمة (5 بنود سرية)'}
+                                ? 'تقييم ومتابعة أمين القطاع (5 بنود سرية)'
+                                : 'تقييم ومتابعة أمين الخدمة (5 بنود سرية)'}
                           </h4>
                           <p className="text-caption text-text-secondary mt-0.5">
                             هذه الحقول التقييمية تضاف من المشرف المسؤول لمتابعة كفاءة وأداء الخادم، ولا تظهر للمخدومين.

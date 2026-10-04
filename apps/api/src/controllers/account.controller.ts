@@ -620,8 +620,8 @@ export class AccountController {
       action === 'SUSPEND'
         ? 'إيقاف حساب الخادم'
         : action === 'ACTIVATE'
-        ? 'إعادة تنشيط حساب الخادم'
-        : 'نقل الخادم للمرحلة الجديدة';
+          ? 'إعادة تنشيط حساب الخادم'
+          : 'نقل الخادم للمرحلة الجديدة';
 
     return res.status(200).json({
       success: true,
@@ -954,8 +954,8 @@ export class AccountController {
         fatherConfessor: updatedUser.fatherConfessor,
         dateOfBirth: updatedUser.dateOfBirth
           ? (typeof updatedUser.dateOfBirth === 'string'
-              ? updatedUser.dateOfBirth
-              : updatedUser.dateOfBirth.toISOString().split('T')[0])
+            ? updatedUser.dateOfBirth
+            : updatedUser.dateOfBirth.toISOString().split('T')[0])
           : null,
         address: updatedUser.address,
         maritalStatus: updatedUser.maritalStatus,
@@ -981,13 +981,13 @@ export class AccountController {
         },
         evaluation: updatedEvaluation
           ? {
-              financialStatus: updatedEvaluation.financialStatus,
-              behaviorWithMembers: updatedEvaluation.behaviorWithMembers,
-              behaviorWithServants: updatedEvaluation.behaviorWithServants,
-              cooperation: updatedEvaluation.cooperation,
-              individualInitiative: updatedEvaluation.individualInitiative,
-              notes: updatedEvaluation.notes,
-            }
+            financialStatus: updatedEvaluation.financialStatus,
+            behaviorWithMembers: updatedEvaluation.behaviorWithMembers,
+            behaviorWithServants: updatedEvaluation.behaviorWithServants,
+            cooperation: updatedEvaluation.cooperation,
+            individualInitiative: updatedEvaluation.individualInitiative,
+            notes: updatedEvaluation.notes,
+          }
           : null,
         scopes: (updatedUser.scopeAssignments || []).map((sa: any) => ({
           stageId: sa.stageId,
@@ -1110,15 +1110,15 @@ export class AccountController {
           },
           currentStage: s.scopeAssignments.find((sa: any) => sa.stage)?.stage
             ? {
-                id: s.scopeAssignments.find((sa: any) => sa.stage)!.stage!.id,
-                name: s.scopeAssignments.find((sa: any) => sa.stage)!.stage!.name,
-              }
+              id: s.scopeAssignments.find((sa: any) => sa.stage)!.stage!.id,
+              name: s.scopeAssignments.find((sa: any) => sa.stage)!.stage!.name,
+            }
             : null,
           currentSector: s.scopeAssignments.find((sa: any) => sa.sector)?.sector
             ? {
-                id: s.scopeAssignments.find((sa: any) => sa.sector)!.sector!.id,
-                name: s.scopeAssignments.find((sa: any) => sa.sector)!.sector!.name,
-              }
+              id: s.scopeAssignments.find((sa: any) => sa.sector)!.sector!.id,
+              name: s.scopeAssignments.find((sa: any) => sa.sector)!.sector!.name,
+            }
             : null,
         })),
       });

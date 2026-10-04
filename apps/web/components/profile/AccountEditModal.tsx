@@ -133,9 +133,9 @@ export const AccountEditModal: React.FC<AccountEditModalProps> = ({
 
       const initialSiblings = Array.isArray(user.siblingsInfo)
         ? user.siblingsInfo.map((s: any) => ({
-            name: s.name || '',
-            age: s.age !== undefined && s.age !== null ? String(s.age) : '',
-          }))
+          name: s.name || '',
+          age: s.age !== undefined && s.age !== null ? String(s.age) : '',
+        }))
         : [];
       setSiblings(initialSiblings);
 
@@ -311,11 +311,10 @@ export const AccountEditModal: React.FC<AccountEditModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('basic')}
-            className={`flex-1 py-1.5 px-2.5 rounded-md transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'basic'
+            className={`flex-1 py-1.5 px-2.5 rounded-md transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${activeTab === 'basic'
                 ? 'bg-bg-surface text-brand-primary shadow-xs font-bold'
                 : 'text-text-secondary hover:text-text-primary'
-            }`}
+              }`}
           >
             <User className="w-4 h-4" />
             <span>البيانات والتواصل</span>
@@ -324,11 +323,10 @@ export const AccountEditModal: React.FC<AccountEditModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('family')}
-            className={`flex-1 py-1.5 px-2.5 rounded-md transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'family'
+            className={`flex-1 py-1.5 px-2.5 rounded-md transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${activeTab === 'family'
                 ? 'bg-bg-surface text-brand-primary shadow-xs font-bold'
                 : 'text-text-secondary hover:text-text-primary'
-            }`}
+              }`}
           >
             <Heart className="w-4 h-4" />
             <span>الحالة والأسرة</span>
@@ -337,11 +335,10 @@ export const AccountEditModal: React.FC<AccountEditModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('talents')}
-            className={`flex-1 py-1.5 px-2.5 rounded-md transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'talents'
+            className={`flex-1 py-1.5 px-2.5 rounded-md transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${activeTab === 'talents'
                 ? 'bg-bg-surface text-brand-primary shadow-xs font-bold'
                 : 'text-text-secondary hover:text-text-primary'
-            }`}
+              }`}
           >
             <Sparkles className="w-4 h-4" />
             <span>الشموسية والمواهب</span>
@@ -350,11 +347,10 @@ export const AccountEditModal: React.FC<AccountEditModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('security')}
-            className={`flex-1 py-1.5 px-2.5 rounded-md transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'security'
+            className={`flex-1 py-1.5 px-2.5 rounded-md transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${activeTab === 'security'
                 ? 'bg-bg-surface text-brand-primary shadow-xs font-bold'
                 : 'text-text-secondary hover:text-text-primary'
-            }`}
+              }`}
           >
             <Lock className="w-4 h-4" />
             <span>الأمان</span>
@@ -547,9 +543,8 @@ export const AccountEditModal: React.FC<AccountEditModalProps> = ({
                       value={maritalStatus}
                       onChange={(e) => setMaritalStatus(e.target.value)}
                       disabled={!canEditMaritalStatus}
-                      className={`w-full h-[46px] bg-bg-surface text-text-primary font-cairo text-body-default rounded-input border border-border-default px-3 focus:outline-none focus:ring-2 focus:ring-brand-primary ${
-                        !canEditMaritalStatus ? 'opacity-70 cursor-not-allowed bg-bg-muted' : ''
-                      }`}
+                      className={`w-full h-[46px] bg-bg-surface text-text-primary font-cairo text-body-default rounded-input border border-border-default px-3 focus:outline-none focus:ring-2 focus:ring-brand-primary ${!canEditMaritalStatus ? 'opacity-70 cursor-not-allowed bg-bg-muted' : ''
+                        }`}
                     >
                       <option value="أعزب">أعزب</option>
                       <option value="خاطب">خاطب</option>
@@ -697,11 +692,10 @@ export const AccountEditModal: React.FC<AccountEditModalProps> = ({
                         key={act}
                         type="button"
                         onClick={() => handleToggleActivity(act)}
-                        className={`px-3 py-1.5 rounded-pill text-caption font-semibold transition-all border ${
-                          isSelected
+                        className={`px-3 py-1.5 rounded-pill text-caption font-semibold transition-all border ${isSelected
                             ? 'bg-brand-primary text-white border-brand-primary shadow-xs'
                             : 'bg-bg-surface text-text-secondary border-border-default hover:bg-bg-muted'
-                        }`}
+                          }`}
                       >
                         {act} {isSelected ? '✓' : '+'}
                       </button>
@@ -726,11 +720,10 @@ export const AccountEditModal: React.FC<AccountEditModalProps> = ({
                         key={talent}
                         type="button"
                         onClick={() => handleToggleTalent(talent)}
-                        className={`px-3 py-1.5 rounded-pill text-caption font-semibold transition-all border ${
-                          isSelected
+                        className={`px-3 py-1.5 rounded-pill text-caption font-semibold transition-all border ${isSelected
                             ? 'bg-brand-accent text-white border-brand-accent shadow-xs'
                             : 'bg-bg-surface text-text-secondary border-border-default hover:bg-bg-muted'
-                        }`}
+                          }`}
                       >
                         {talent} {isSelected ? '★' : '+'}
                       </button>
