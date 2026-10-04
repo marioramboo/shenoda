@@ -17,6 +17,8 @@ import {
   ChevronRight,
   Plus,
   Edit3,
+  Pencil,
+  Trash2,
   CheckCircle2,
   Clock,
   AlertCircle,
@@ -40,6 +42,7 @@ interface LessonEvent {
   stageId?: string;
   stage?: { id: string; name: string };
   description?: string | null;
+  planId?: string;
 }
 
 interface LessonParsedInfo {
@@ -75,6 +78,18 @@ export default function CurriculumPrepPage() {
   const [selectedStageId, setSelectedStageId] = useState<string>('');
   const [lessons, setLessons] = useState<LessonEvent[]>([]);
   const [selectedLessonIndex, setSelectedLessonIndex] = useState<number>(0);
+  const [currentPlanId, setCurrentPlanId] = useState<string | null>(null);
+
+  // Lesson Authoring Modal state (for Stage Secretary / Supervisor: level >= 3)
+  const [isLessonModalOpen, setIsLessonModalOpen] = useState(false);
+  const [editingLesson, setEditingLesson] = useState<LessonEvent | null>(null);
+  const [lessonModalTitle, setLessonModalTitle] = useState('');
+  const [lessonModalDate, setLessonModalDate] = useState('');
+  const [lessonModalBibleVerse, setLessonModalBibleVerse] = useState('');
+  const [lessonModalReferences, setLessonModalReferences] = useState('');
+  const [lessonModalOverview, setLessonModalOverview] = useState('');
+  const [lessonModalSubmitting, setLessonModalSubmitting] = useState(false);
+  const [lessonModalError, setLessonModalError] = useState<string | null>(null);
 
   // User's own preparations map: eventId -> prep
   const [myPrepsMap, setMyPrepsMap] = useState<Record<string, any>>({});
@@ -136,20 +151,26 @@ export default function CurriculumPrepPage() {
       setLoading(true);
       const res = await api.get(`/api/v1/year-plans?stageId=${selectedStageId}`);
       let allFoundLessons: LessonEvent[] = [];
+      let foundPlanId: string | null = null;
 
-      if (res.data?.success && Array.isArray(res.data.data)) {
+      if (res.data?.success && Array.isArray(res.data.data) && res.data.data.length > 0) {
+        foundPlanId = res.data.data[0].id;
         for (const plan of res.data.data) {
           // If events are not populated in list, fetch plan detail
           if (Array.isArray(plan.events) && plan.events.length > 0) {
             allFoundLessons.push(
-              ...plan.events.filter((e: any) => e.category === 'SPIRITUAL_LESSON')
+              ...plan.events
+                .filter((e: any) => e.category === 'SPIRITUAL_LESSON')
+                .map((e: any) => ({ ...e, planId: plan.id }))
             );
           } else {
             try {
               const detailRes = await api.get(`/api/v1/year-plans/${plan.id}`);
               if (detailRes.data?.success && Array.isArray(detailRes.data.data?.events)) {
                 allFoundLessons.push(
-                  ...detailRes.data.data.events.filter((e: any) => e.category === 'SPIRITUAL_LESSON')
+                  ...detailRes.data.data.events
+                    .filter((e: any) => e.category === 'SPIRITUAL_LESSON')
+                    .map((e: any) => ({ ...e, planId: plan.id }))
                 );
               }
             } catch {
@@ -158,6 +179,8 @@ export default function CurriculumPrepPage() {
           }
         }
       }
+
+      setCurrentPlanId(foundPlanId);
 
       // Sort by startDate
       allFoundLessons.sort((a, b) => +new Date(a.startDate) - +new Date(b.startDate));
@@ -355,7 +378,141 @@ export default function CurriculumPrepPage() {
     }
   };
 
-  // Formatted date string for navigator
+  // Open Create Lesson Modal
+  const handleOpenCreateLessonModal = () => {
+    setEditingLesson(null);
+    setLessonModalTitle('');
+    // Default date to upcoming Friday or today
+    const today = new Date();
+    const dayOfWeek = today.getDay(); // 0 is Sunday, 5 is Friday
+    const daysUntilFriday = (5 - dayOfWeek + 7) % 7;
+    const targetDate = new Date();
+    targetDate.setDate(today.getDate() + (daysUntilFriday === 0 ? 7 : daysUntilFriday));
+    setLessonModalDate(targetDate.toISOString().split('T')[0]);
+    setLessonModalBibleVerse('');
+    setLessonModalReferences('');
+    setLessonModalOverview('');
+    setLessonModalError(null);
+    setIsLessonModalOpen(true);
+  };
+
+  // Open Edit Lesson Modal
+  const handleOpenEditLessonModal = (lesson: LessonEvent) => {
+    setEditingLesson(lesson);
+    setLessonModalTitle(lesson.title || '');
+    setLessonModalDate(
+      lesson.startDate ? new Date(lesson.startDate).toISOString().split('T')[0] : ''
+    );
+    const parsed = parseLessonDescription(lesson.description);
+    setLessonModalBibleVerse(parsed.bibleVerse || '');
+    setLessonModalReferences(parsed.references || '');
+    setLessonModalOverview(parsed.overview || '');
+    setLessonModalError(null);
+    setIsLessonModalOpen(true);
+  };
+
+  // Delete Lesson
+  const handleDeleteLesson = async (lesson: LessonEvent) => {
+    if (!confirm(`هل أنت متأكد من حذف درس "${lesson.title}" من المنهج؟`)) return;
+    const targetPlanId = lesson.planId || currentPlanId;
+    if (!targetPlanId) return;
+    try {
+      setLoading(true);
+      await api.delete(`/api/v1/year-plans/${targetPlanId}/events/${lesson.id}`);
+      setToastMessage('تم حذف الدرس بنجاح');
+      setTimeout(() => setToastMessage(null), 3000);
+      await fetchLessons();
+    } catch (err: any) {
+      alert(err.response?.data?.error?.message || 'حدث خطأ أثناء حذف الدرس');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Submit Lesson (Create or Edit)
+  const handleSubmitLesson = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!lessonModalTitle.trim()) {
+      setLessonModalError('يرجى كتابة اسم وموضوع الدرس');
+      return;
+    }
+    if (!lessonModalDate) {
+      setLessonModalError('يرجى تحديد تاريخ إلقاء الدرس بالخدمة');
+      return;
+    }
+    if (!lessonModalReferences.trim()) {
+      setLessonModalError('المراجع الكنسية إجبارية عند تدبير درس جديد للمنهج');
+      return;
+    }
+
+    setLessonModalSubmitting(true);
+    setLessonModalError(null);
+
+    try {
+      let planIdToUse = currentPlanId;
+
+      // Auto-create YearPlan if one does not exist for this stage yet
+      if (!planIdToUse) {
+        const curYear = new Date().getFullYear();
+        const stageObj = availableStages.find((s) => s.id === selectedStageId);
+        const stageName = stageObj?.name || 'المرحلة';
+        const newPlanRes = await api.post('/api/v1/year-plans', {
+          title: `خطة منهج ${stageName} ${curYear}-${curYear + 1}`,
+          academicYear: `${curYear}/${curYear + 1}`,
+          scopeType: 'STAGE',
+          stageId: selectedStageId,
+          isPublished: true,
+        });
+
+        if (newPlanRes.data?.success && newPlanRes.data?.data?.id) {
+          planIdToUse = newPlanRes.data.data.id;
+          setCurrentPlanId(planIdToUse);
+        } else {
+          throw new Error('تعذر إنشاء خطة سنوية للمرحلة، يرجى المحاولة لاحقاً');
+        }
+      }
+
+      if (editingLesson) {
+        const targetPlanId = editingLesson.planId || planIdToUse;
+        await api.patch(`/api/v1/year-plans/${targetPlanId}/events/${editingLesson.id}`, {
+          title: lessonModalTitle.trim(),
+          startDate: lessonModalDate,
+          endDate: lessonModalDate,
+          category: 'SPIRITUAL_LESSON',
+          bibleVerse: lessonModalBibleVerse.trim(),
+          references: lessonModalReferences.trim(),
+          description: lessonModalOverview.trim(),
+          requiresAllServants: true,
+        });
+        setToastMessage('تم تعديل بيانات الدرس في المنهج بنجاح');
+      } else {
+        await api.post(`/api/v1/year-plans/${planIdToUse}/events`, {
+          title: lessonModalTitle.trim(),
+          startDate: lessonModalDate,
+          endDate: lessonModalDate,
+          category: 'SPIRITUAL_LESSON',
+          isLessonPlanCreation: true,
+          requiresAllServants: true,
+          bibleVerse: lessonModalBibleVerse.trim(),
+          references: lessonModalReferences.trim(),
+          description: lessonModalOverview.trim(),
+          stageId: selectedStageId,
+        });
+        setToastMessage('تمت إضافة الدرس إلى منهج المرحلة بنجاح');
+      }
+
+      setTimeout(() => setToastMessage(null), 3000);
+      setIsLessonModalOpen(false);
+      await fetchLessons();
+    } catch (err: any) {
+      console.error('Failed to save lesson:', err);
+      setLessonModalError(
+        err.response?.data?.error?.message || err.message || 'حدث خطأ أثناء حفظ الدرس'
+      );
+    } finally {
+      setLessonModalSubmitting(false);
+    }
+  };
   const lessonDateFormatted = useMemo(() => {
     if (!currentLesson?.startDate) return '—';
     return new Intl.DateTimeFormat('ar-EG', {
@@ -383,20 +540,33 @@ export default function CurriculumPrepPage() {
               <BookOpen className="w-5 h-5 text-brand-accent" />
               <h1 className="text-h2 font-bold">منهج الدروس</h1>
             </div>
-            {availableStages.length > 1 && (
-              <select
-                aria-label="اختيار المرحلة"
-                value={selectedStageId}
-                onChange={(e) => setSelectedStageId(e.target.value)}
-                className="h-9 px-2 text-caption bg-white/10 text-white rounded-button border border-white/20 focus:outline-none"
-              >
-                {availableStages.map((s) => (
-                  <option key={s.id} value={s.id} className="text-text-primary bg-bg-surface">
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            )}
+            <div className="flex items-center gap-2">
+              {isSupervisor && (
+                <button
+                  id="btn-add-lesson-header"
+                  type="button"
+                  onClick={handleOpenCreateLessonModal}
+                  className="h-8 px-2.5 bg-brand-accent hover:bg-brand-accent/90 text-white rounded-button text-caption font-bold flex items-center gap-1 shadow-sm transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>إضافة درس</span>
+                </button>
+              )}
+              {availableStages.length > 1 && (
+                <select
+                  aria-label="اختيار المرحلة"
+                  value={selectedStageId}
+                  onChange={(e) => setSelectedStageId(e.target.value)}
+                  className="h-9 px-2 text-caption bg-white/10 text-white rounded-button border border-white/20 focus:outline-none"
+                >
+                  {availableStages.map((s) => (
+                    <option key={s.id} value={s.id} className="text-text-primary bg-bg-surface">
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
           </header>
 
           <main className="px-4 py-4 flex flex-col gap-4">
@@ -412,16 +582,41 @@ export default function CurriculumPrepPage() {
                   لا توجد دروس مسجلة في خطة هذه المرحلة
                 </h3>
                 <p className="text-caption text-text-secondary mt-1">
-                  يمكن لأمين المرحلة إضافة الدروس من قسم تدبير الخدمة.
+                  {isSupervisor
+                    ? 'بصفتك أمين الخدمة، يمكنك البدء فوراً في إضافة دروس المنهج السنوي لهذه المرحلة.'
+                    : 'يمكن لأمين المرحلة إضافة الدروس من قسم تدبير الخدمة.'}
                 </p>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => router.push('/plan')}
-                  className="mt-4 gap-1.5"
-                >
-                  الانتقال لتدبير الخدمة
-                </Button>
+                {isSupervisor ? (
+                  <div className="flex flex-col sm:flex-row items-center gap-2 mt-4 w-full justify-center">
+                    <Button
+                      id="btn-add-first-lesson"
+                      variant="primary"
+                      size="sm"
+                      onClick={handleOpenCreateLessonModal}
+                      className="gap-1.5 w-full sm:w-auto font-bold bg-brand-primary hover:bg-brand-primary/90 text-white"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>إضافة أول درس للمنهج</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => router.push('/plan')}
+                      className="gap-1.5 w-full sm:w-auto text-text-secondary border-border-default hover:bg-bg-muted"
+                    >
+                      الانتقال لتدبير الخدمة
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => router.push('/plan')}
+                    className="mt-4 gap-1.5"
+                  >
+                    الانتقال لتدبير الخدمة
+                  </Button>
+                )}
               </div>
             ) : (
               <>
@@ -474,25 +669,49 @@ export default function CurriculumPrepPage() {
                           })}
                         </span>
                       </div>
-                      {userPrepForCurrent ? (
-                        <Badge
-                          variant={
-                            userPrepForCurrent.status === 'REVIEWED'
-                              ? 'success'
+                      <div className="flex items-center gap-1.5">
+                        {isSupervisor && (
+                          <div className="flex items-center gap-1">
+                            <button
+                              id="btn-edit-lesson"
+                              type="button"
+                              onClick={() => handleOpenEditLessonModal(currentLesson)}
+                              title="تعديل بيانات الدرس"
+                              className="p-1.5 text-text-secondary hover:text-brand-primary hover:bg-bg-muted rounded-full transition-colors"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            <button
+                              id="btn-delete-lesson"
+                              type="button"
+                              onClick={() => handleDeleteLesson(currentLesson)}
+                              title="حذف الدرس"
+                              className="p-1.5 text-text-secondary hover:text-status-danger hover:bg-status-danger-soft rounded-full transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
+                        {userPrepForCurrent ? (
+                          <Badge
+                            variant={
+                              userPrepForCurrent.status === 'REVIEWED'
+                                ? 'success'
+                                : userPrepForCurrent.status === 'DRAFT' && userPrepForCurrent.reviewerNotes
+                                ? 'danger'
+                                : 'warning'
+                            }
+                          >
+                            {userPrepForCurrent.status === 'REVIEWED'
+                              ? 'معتمد'
                               : userPrepForCurrent.status === 'DRAFT' && userPrepForCurrent.reviewerNotes
-                              ? 'danger'
-                              : 'warning'
-                          }
-                        >
-                          {userPrepForCurrent.status === 'REVIEWED'
-                            ? 'معتمد'
-                            : userPrepForCurrent.status === 'DRAFT' && userPrepForCurrent.reviewerNotes
-                            ? 'مطلوب تعديل'
-                            : 'تم التسليم'}
-                        </Badge>
-                      ) : (
-                        <Badge variant="neutral">لم تحضّر بعد</Badge>
-                      )}
+                              ? 'مطلوب تعديل'
+                              : 'تم التسليم'}
+                          </Badge>
+                        ) : (
+                          <Badge variant="neutral">لم تحضّر بعد</Badge>
+                        )}
+                      </div>
                     </div>
 
                     <div>
@@ -561,7 +780,10 @@ export default function CurriculumPrepPage() {
                         variant={userPrepForCurrent ? 'secondary' : 'primary'}
                         fullWidth
                         onClick={handleOpenPrepModal}
-                        className="h-11 font-bold text-body-default gap-2"
+                        className={cn(
+                          'h-11 font-bold text-body-default gap-2',
+                          !userPrepForCurrent && 'text-white bg-brand-primary hover:bg-brand-primary-dark'
+                        )}
                       >
                         {userPrepForCurrent ? (
                           <>
@@ -570,8 +792,8 @@ export default function CurriculumPrepPage() {
                           </>
                         ) : (
                           <>
-                            <Plus className="w-5 h-5" />
-                            <span>+ تحضير الدرس الآن</span>
+                            <Plus className="w-5 h-5 text-white" />
+                            <span className="text-white font-bold">تحضير الدرس الآن</span>
                           </>
                         )}
                       </Button>
@@ -1003,6 +1225,150 @@ export default function CurriculumPrepPage() {
                   </Button>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Lesson Authoring Modal (for Stage Secretary / Supervisor: level >= 3) */}
+        {isLessonModalOpen && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+            <div
+              dir="rtl"
+              className="bg-bg-surface border border-border-default rounded-card shadow-elevated w-full max-w-[480px] max-h-[92vh] overflow-y-auto flex flex-col text-right animate-in fade-in zoom-in-95 duration-200"
+            >
+              {/* Modal Header */}
+              <div className="bg-brand-primary text-white p-4 flex items-center justify-between sticky top-0 z-10">
+                <div className="flex items-center gap-2">
+                  <BookOpen className="w-5 h-5 text-brand-accent" />
+                  <div>
+                    <h3 className="text-body-default font-bold">
+                      {editingLesson ? 'تعديل بيانات الدرس' : 'إضافة درس جديد للمنهج'}
+                    </h3>
+                    <p className="text-caption text-white/70">
+                      {availableStages.find((s) => s.id === selectedStageId)?.name || 'المرحلة الحالية'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsLessonModalOpen(false)}
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-white/80 hover:bg-white/10 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Form Body */}
+              <form onSubmit={handleSubmitLesson} className="p-4 flex flex-col gap-3.5">
+                {lessonModalError && (
+                  <div className="p-3 rounded bg-status-danger-soft border border-status-danger/30 text-status-danger text-body-small flex items-start gap-2">
+                    <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                    <span>{lessonModalError}</span>
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-caption font-bold text-text-primary block mb-1">
+                    اسم وموضوع الدرس <span className="text-status-danger">*</span>:
+                  </label>
+                  <Input
+                    type="text"
+                    required
+                    value={lessonModalTitle}
+                    onChange={(e) => setLessonModalTitle(e.target.value)}
+                    placeholder="مثال: مثل الابن الضال وتوبة النفس"
+                    className="w-full text-body-small"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-caption font-bold text-text-primary block mb-1">
+                    تاريخ إلقاء الدرس بالخدمة <span className="text-status-danger">*</span>:
+                  </label>
+                  <div className="relative">
+                    <Input
+                      type="date"
+                      required
+                      value={lessonModalDate}
+                      onChange={(e) => setLessonModalDate(e.target.value)}
+                      className="w-full text-body-small"
+                    />
+                  </div>
+                  <span className="text-[11px] text-text-secondary mt-1 block">
+                    يُحدد الموعد الأسبوعي الذي سيُلقى فيه الدرس لجميع مخدومي المرحلة
+                  </span>
+                </div>
+
+                <div>
+                  <label className="text-caption font-bold text-text-primary block mb-1">
+                    الآية والشاهد المقترح <span className="text-status-danger">*</span>:
+                  </label>
+                  <Input
+                    type="text"
+                    required
+                    value={lessonModalBibleVerse}
+                    onChange={(e) => setLessonModalBibleVerse(e.target.value)}
+                    placeholder="مثال: «قُومُوا نَنْطَلِقْ مِنْ ههُنَا» (يو 14: 31)"
+                    className="w-full text-body-small"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-caption font-bold text-text-primary">
+                      المراجع الكنسية المقررة <span className="text-status-danger">*</span>:
+                    </label>
+                    <span className="text-[11px] font-bold text-brand-primary bg-brand-primary-soft px-2 py-0.5 rounded">
+                      إلزامي كنسياً
+                    </span>
+                  </div>
+                  <textarea
+                    rows={2}
+                    required
+                    value={lessonModalReferences}
+                    onChange={(e) => setLessonModalReferences(e.target.value)}
+                    placeholder="مثال: تفسير أبونا تادرس يعقوب ملطي - إنجيل لوقا أصحاح 15"
+                    className="w-full bg-bg-surface text-text-primary font-cairo text-body-small rounded-input border border-border-default p-2.5 focus:outline-none focus:ring-2 focus:ring-brand-primary resize-none"
+                  />
+                  <span className="text-[11px] text-text-secondary mt-1 block">
+                    المراجع الآبائية والأرثوذكسية التي يلتزم بها الخدام في تحضير الدرس
+                  </span>
+                </div>
+
+                <div>
+                  <label className="text-caption font-bold text-text-primary block mb-1">
+                    مقدمة وملاحظات توجيهية للخادم (اختياري):
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={lessonModalOverview}
+                    onChange={(e) => setLessonModalOverview(e.target.value)}
+                    placeholder="اكتب التوجيهات العامة والهدف التربوي والروحي المطلوب إيصاله للأولاد..."
+                    className="w-full bg-bg-surface text-text-primary font-cairo text-body-small rounded-input border border-border-default p-2.5 focus:outline-none focus:ring-2 focus:ring-brand-primary resize-none"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 pt-2 border-t border-border-default mt-1">
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    isLoading={lessonModalSubmitting}
+                    className="flex-1 h-10 text-body-small font-bold gap-1 bg-brand-primary hover:bg-brand-primary/90"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>{editingLesson ? 'حفظ التعديلات' : 'إضافة الدرس للمنهج'}</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={lessonModalSubmitting}
+                    onClick={() => setIsLessonModalOpen(false)}
+                    className="h-10 px-4 text-body-small font-semibold border-border-default hover:bg-bg-muted"
+                  >
+                    إلغاء
+                  </Button>
+                </div>
+              </form>
             </div>
           </div>
         )}

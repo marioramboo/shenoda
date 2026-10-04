@@ -32,15 +32,15 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
     const variantStyles = {
       primary:
-        'bg-brand-primary text-text-inverse hover:bg-brand-primary-dark active:bg-brand-primary-dark shadow-sm',
+        'bg-brand-primary text-white hover:bg-brand-primary-dark active:bg-brand-primary-dark shadow-sm',
       secondary:
         'bg-brand-primary-soft text-brand-primary hover:bg-[#d8e2f0] active:bg-[#cad8ec]',
       accent:
-        'bg-brand-accent text-text-inverse hover:bg-[#a67923] active:bg-[#976d1e] shadow-sm',
+        'bg-brand-accent text-white hover:bg-[#a67923] active:bg-[#976d1e] shadow-sm',
       outline:
         'border border-border-default bg-transparent text-text-primary hover:bg-bg-muted hover:border-text-secondary active:bg-border-default',
       danger:
-        'bg-status-danger text-text-inverse hover:bg-[#ab3024] active:bg-[#98291e] shadow-sm',
+        'bg-status-danger text-white hover:bg-[#ab3024] active:bg-[#98291e] shadow-sm',
     };
 
     const sizeStyles = {
