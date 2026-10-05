@@ -5,7 +5,7 @@ const DEFAULT_API_URL =
     ? 'https://shenoda-api.onrender.com'
     : 'http://localhost:5000';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || DEFAULT_API_URL;
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || DEFAULT_API_URL).replace(/\/+$/, '');
 
 export const api = axios.create({
   baseURL: API_BASE_URL,

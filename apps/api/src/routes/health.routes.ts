@@ -5,7 +5,7 @@ import { HealthResponse } from '@shenoda/shared';
 
 export const healthRouter = Router();
 
-healthRouter.get('/health', async (_req: Request, res: Response) => {
+healthRouter.get(['/health', '//health'], async (_req: Request, res: Response) => {
   let dbStatus: 'connected' | 'disconnected' = 'disconnected';
   let isOk = true;
 

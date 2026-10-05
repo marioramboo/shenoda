@@ -55,11 +55,12 @@ export default function DesignSystemCatalogPage() {
   const checkHealth = async () => {
     setHealthChecking(true);
     try {
-      const apiBase =
+      const rawApiBase =
         process.env.NEXT_PUBLIC_API_URL ||
         (process.env.NODE_ENV === 'production'
           ? 'https://shenoda-api.onrender.com'
           : 'http://localhost:5000');
+      const apiBase = rawApiBase.replace(/\/+$/, '');
       const res = await fetch(`${apiBase}/health`);
       if (res.ok) {
         const data = await res.json();
