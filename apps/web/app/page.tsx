@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { api } from '@/lib/api';
 import { MobileShell } from '@/components/layout/MobileShell';
 import { AppBar } from '@/components/layout/AppBar';
 import { TabBar, TabKey } from '@/components/layout/TabBar';
@@ -51,20 +52,13 @@ export default function DesignSystemCatalogPage() {
     }
   }, [authLoading, isAuthenticated, router]);
 
-  // Check backend health endpoint
+  // Check backend health endpoint via standard API route (avoids adblocker /health blocks)
   const checkHealth = async () => {
     setHealthChecking(true);
     try {
-      const rawApiBase =
-        process.env.NEXT_PUBLIC_API_URL ||
-        (process.env.NODE_ENV === 'production'
-          ? 'https://shenoda-api.onrender.com'
-          : 'http://localhost:5000');
-      const apiBase = rawApiBase.replace(/\/+$/, '');
-      const res = await fetch(`${apiBase}/health`);
-      if (res.ok) {
-        const data = await res.json();
-        setBackendHealth(data);
+      const res = await api.get('/api/v1/system-status');
+      if (res.data && (res.data.status === 'ok' || res.data.database === 'connected')) {
+        setBackendHealth(res.data);
       } else {
         setBackendHealth({
           status: 'error',
