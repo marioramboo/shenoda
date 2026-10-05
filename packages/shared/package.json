@@ -10,8 +10,10 @@
     "test": "tsx --test tests/*.test.ts",
     "clean": "rimraf dist"
   },
-  "devDependencies": {
-    "tsx": "^4.19.2",
+  "dependencies": {
     "typescript": "^5.6.3"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2"
   }
 }
