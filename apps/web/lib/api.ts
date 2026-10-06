@@ -18,6 +18,30 @@ export const api = axios.create({
 
 let inMemoryToken: string | null = null;
 
+export const REFRESH_TOKEN_KEY = 'auth_refresh_token';
+
+export const getStoredRefreshToken = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    return localStorage.getItem(REFRESH_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+};
+
+export const setStoredRefreshToken = (token: string | null) => {
+  if (typeof window === 'undefined') return;
+  try {
+    if (token) {
+      localStorage.setItem(REFRESH_TOKEN_KEY, token);
+    } else {
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
+    }
+  } catch {
+    // Ignore storage quota or access errors
+  }
+};
+
 export const setAuthToken = (token: string | null) => {
   inMemoryToken = token;
 };
@@ -79,13 +103,17 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
+        const storedRefreshToken = getStoredRefreshToken();
         const { data } = await axios.post(
           `${API_BASE_URL}/api/v1/auth/refresh`,
-          {},
+          { refreshToken: storedRefreshToken || undefined },
           { withCredentials: true, timeout: 10000 }
         );
 
         const newAccessToken = data.accessToken || null;
+        if (data.refreshToken) {
+          setStoredRefreshToken(data.refreshToken);
+        }
         setAuthToken(newAccessToken);
         processQueue(null, newAccessToken);
 
@@ -94,6 +122,7 @@ api.interceptors.response.use(
         }
         return api(originalRequest);
       } catch (refreshError) {
+        setStoredRefreshToken(null);
         processQueue(refreshError, null);
         setAuthToken(null);
         return Promise.reject(refreshError);

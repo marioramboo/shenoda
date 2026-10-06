@@ -244,6 +244,7 @@ export class AuthController {
     return res.status(200).json({
       success: true,
       accessToken,
+      refreshToken,
       user: {
         id: user.id,
         fullName: user.fullName,
@@ -294,7 +295,7 @@ export class AuthController {
       });
 
       if (!rotationResult) {
-        res.clearCookie(REFRESH_COOKIE_NAME, { path: '/' });
+        res.clearCookie(REFRESH_COOKIE_NAME, getRefreshCookieOptions());
         return res.status(401).json({
           success: false,
           error: {
@@ -316,7 +317,7 @@ export class AuthController {
       });
 
       if (!user || user.status === 'SUSPENDED') {
-        res.clearCookie(REFRESH_COOKIE_NAME, { path: '/' });
+        res.clearCookie(REFRESH_COOKIE_NAME, getRefreshCookieOptions());
         return res.status(403).json({
           success: false,
           error: {
@@ -347,6 +348,7 @@ export class AuthController {
       return res.status(200).json({
         success: true,
         accessToken,
+        refreshToken: rotationResult.newRefreshToken,
         user: {
           id: user.id,
           fullName: user.fullName,
@@ -394,7 +396,7 @@ export class AuthController {
       await TokenService.revokeRefreshToken(rawToken);
     }
 
-    res.clearCookie(REFRESH_COOKIE_NAME, { path: '/' });
+    res.clearCookie(REFRESH_COOKIE_NAME, getRefreshCookieOptions());
 
     return res.status(200).json({
       success: true,

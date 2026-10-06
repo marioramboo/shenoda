@@ -16,8 +16,8 @@ export const REFRESH_COOKIE_NAME = 'refreshToken';
 
 export const getRefreshCookieOptions = () => ({
   httpOnly: true,
-  secure: env.NODE_ENV === 'production',
-  sameSite: 'lax' as const,
+  secure: true,
+  sameSite: 'none' as const,
   maxAge: env.REFRESH_TOKEN_EXPIRES_IN_DAYS * 24 * 60 * 60 * 1000,
   path: '/',
 });

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { api, setAuthToken } from '@/lib/api';
+import { api, setAuthToken, getStoredRefreshToken, setStoredRefreshToken } from '@/lib/api';
 
 export interface RoleInfo {
   id: string;
@@ -65,24 +65,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [accessToken, setTokenState] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const applyAuthSuccess = (token: string, userData: AuthUser) => {
+  const applyAuthSuccess = (token: string, userData: AuthUser, refreshToken?: string) => {
     setAuthToken(token);
     setTokenState(token);
     setUser(userData);
+    if (refreshToken) {
+      setStoredRefreshToken(refreshToken);
+    }
   };
 
   const applyAuthCleared = () => {
     setAuthToken(null);
     setTokenState(null);
     setUser(null);
+    setStoredRefreshToken(null);
   };
 
   const checkAuth = useCallback(async () => {
     try {
       setIsLoading(true);
-      const res = await api.post('/api/v1/auth/refresh');
+      const storedRefreshToken = getStoredRefreshToken();
+      const res = await api.post('/api/v1/auth/refresh', {
+        refreshToken: storedRefreshToken || undefined,
+      });
       if (res.data?.success && res.data?.accessToken) {
-        applyAuthSuccess(res.data.accessToken, res.data.user);
+        applyAuthSuccess(res.data.accessToken, res.data.user, res.data.refreshToken);
       } else {
         applyAuthCleared();
       }
@@ -106,7 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (res.data?.success) {
-        applyAuthSuccess(res.data.accessToken, res.data.user);
+        applyAuthSuccess(res.data.accessToken, res.data.user, res.data.refreshToken);
       } else {
         throw new Error(res.data?.error?.message || 'فشل تسجيل الدخول');
       }
@@ -117,7 +124,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
-      await api.post('/api/v1/auth/logout');
+      const storedRefreshToken = getStoredRefreshToken();
+      await api.post('/api/v1/auth/logout', {
+        refreshToken: storedRefreshToken || undefined,
+      });
     } catch {
       // Ignore network errors during logout
     } finally {
