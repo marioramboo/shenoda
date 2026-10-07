@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { api, setAuthToken, getStoredRefreshToken, setStoredRefreshToken } from '@/lib/api';
+import { api, setAuthToken, getStoredRefreshToken, setStoredRefreshToken, refreshSession } from '@/lib/api';
 
 export interface RoleInfo {
   id: string;
@@ -84,12 +84,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const checkAuth = useCallback(async () => {
     try {
       setIsLoading(true);
-      const storedRefreshToken = getStoredRefreshToken();
-      const res = await api.post('/api/v1/auth/refresh', {
-        refreshToken: storedRefreshToken || undefined,
-      });
-      if (res.data?.success && res.data?.accessToken) {
-        applyAuthSuccess(res.data.accessToken, res.data.user, res.data.refreshToken);
+      const res = await refreshSession();
+      if (res?.accessToken && res?.user) {
+        applyAuthSuccess(res.accessToken, res.user, res.refreshToken);
       } else {
         applyAuthCleared();
       }

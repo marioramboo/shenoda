@@ -48,32 +48,85 @@ export const setAuthToken = (token: string | null) => {
 
 export const getAuthToken = (): string | null => inMemoryToken;
 
-// Attach Bearer token to all outgoing requests if available
-api.interceptors.request.use((config) => {
-  if (inMemoryToken && !config.headers.Authorization) {
-    config.headers.Authorization = `Bearer ${inMemoryToken}`;
+export interface RefreshSessionResult {
+  accessToken: string;
+  refreshToken?: string;
+  user?: any;
+}
+
+let activeRefreshPromise: Promise<RefreshSessionResult | null> | null = null;
+
+/**
+ * Thread-safe / Deduplicated session refresh function.
+ * Ensures that even if 10 requests trigger a refresh concurrently,
+ * exactly ONE network call to /api/v1/auth/refresh is made.
+ */
+export const refreshSession = async (): Promise<RefreshSessionResult | null> => {
+  if (activeRefreshPromise) {
+    return activeRefreshPromise;
+  }
+
+  activeRefreshPromise = (async () => {
+    try {
+      const storedRefreshToken = getStoredRefreshToken();
+      const { data } = await axios.post(
+        `${API_BASE_URL}/api/v1/auth/refresh`,
+        { refreshToken: storedRefreshToken || undefined },
+        { withCredentials: true, timeout: 12000 }
+      );
+
+      if (data?.success && data?.accessToken) {
+        const newAccessToken = data.accessToken;
+        setAuthToken(newAccessToken);
+        if (data.refreshToken) {
+          setStoredRefreshToken(data.refreshToken);
+        }
+        return {
+          accessToken: newAccessToken,
+          refreshToken: data.refreshToken,
+          user: data.user,
+        };
+      }
+      return null;
+    } catch (err: any) {
+      // Only clear credentials if the refresh genuinely returned an unauthorized response (401/403).
+      // Never wipe credentials on network drops, aborts, or server cold-starts!
+      const status = err.response?.status;
+      if (status === 401 || status === 403) {
+        setStoredRefreshToken(null);
+        setAuthToken(null);
+      }
+      throw err;
+    } finally {
+      activeRefreshPromise = null;
+    }
+  })();
+
+  return activeRefreshPromise;
+};
+
+// Request interceptor: wait for any active refresh before sending new requests
+api.interceptors.request.use(async (config) => {
+  if (
+    activeRefreshPromise &&
+    !config.url?.includes('/auth/login') &&
+    !config.url?.includes('/auth/refresh')
+  ) {
+    try {
+      await activeRefreshPromise;
+    } catch {
+      // If refresh fails, let the request proceed to fail with 401 naturally
+    }
+  }
+
+  const token = getAuthToken();
+  if (token && !config.headers.Authorization) {
+    config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
 
-// Automatic silent token refresh on 401 responses with deduped promise
-let isRefreshing = false;
-let failedQueue: Array<{
-  resolve: (token: string | null) => void;
-  reject: (reason?: unknown) => void;
-}> = [];
-
-const processQueue = (error: unknown, token: string | null = null) => {
-  failedQueue.forEach((prom) => {
-    if (error) {
-      prom.reject(error);
-    } else {
-      prom.resolve(token);
-    }
-  });
-  failedQueue = [];
-};
-
+// Response interceptor: silent single-flight token refresh on 401
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -87,47 +140,16 @@ api.interceptors.response.use(
     ) {
       originalRequest._retry = true;
 
-      if (isRefreshing) {
-        return new Promise<string | null>((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
-        })
-          .then((token) => {
-            if (originalRequest.headers && token) {
-              originalRequest.headers.Authorization = `Bearer ${token}`;
-            }
-            return api(originalRequest);
-          })
-          .catch((err) => Promise.reject(err));
-      }
-
-      isRefreshing = true;
-
       try {
-        const storedRefreshToken = getStoredRefreshToken();
-        const { data } = await axios.post(
-          `${API_BASE_URL}/api/v1/auth/refresh`,
-          { refreshToken: storedRefreshToken || undefined },
-          { withCredentials: true, timeout: 10000 }
-        );
-
-        const newAccessToken = data.accessToken || null;
-        if (data.refreshToken) {
-          setStoredRefreshToken(data.refreshToken);
+        const refreshResult = await refreshSession();
+        if (refreshResult?.accessToken) {
+          if (originalRequest.headers) {
+            originalRequest.headers.Authorization = `Bearer ${refreshResult.accessToken}`;
+          }
+          return api(originalRequest);
         }
-        setAuthToken(newAccessToken);
-        processQueue(null, newAccessToken);
-
-        if (originalRequest.headers && newAccessToken) {
-          originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
-        }
-        return api(originalRequest);
-      } catch (refreshError) {
-        setStoredRefreshToken(null);
-        processQueue(refreshError, null);
-        setAuthToken(null);
-        return Promise.reject(refreshError);
-      } finally {
-        isRefreshing = false;
+      } catch (refreshErr) {
+        return Promise.reject(refreshErr);
       }
     }
 

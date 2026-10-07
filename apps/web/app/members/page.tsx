@@ -149,7 +149,7 @@ export default function MembersListPage() {
 
   // Recorded attendance for the chosen stage / session / date
   useEffect(() => {
-    if (!selectedStageId) {
+    if (!user || !selectedStageId) {
       setStatusMap({});
       return;
     }
@@ -169,11 +169,11 @@ export default function MembersListPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedStageId, sessionType, sessionDate]);
+  }, [user, selectedStageId, sessionType, sessionDate]);
 
   // Active absence alerts => "يحتاج افتقاد" badge
   useEffect(() => {
-    if (!selectedStageId) {
+    if (!user || !selectedStageId) {
       setAlertMemberIds(new Set());
       return;
     }
@@ -196,7 +196,7 @@ export default function MembersListPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedStageId]);
+  }, [user, selectedStageId]);
 
   const markAttendance = async (memberId: string, status: AttStatus) => {
     if (!selectedStageId) return;
@@ -237,7 +237,7 @@ export default function MembersListPage() {
 
   // Servants list for the stage
   useEffect(() => {
-    if (viewTab !== 'servants' || !isSupervisor || !selectedStageId) return;
+    if (!user || viewTab !== 'servants' || !isSupervisor || !selectedStageId) return;
     let cancelled = false;
     (async () => {
       try {
@@ -255,11 +255,11 @@ export default function MembersListPage() {
     return () => {
       cancelled = true;
     };
-  }, [viewTab, isSupervisor, selectedStageId]);
+  }, [user, viewTab, isSupervisor, selectedStageId]);
 
   // Recorded attendance for servants for chosen stage / session / date
   useEffect(() => {
-    if (viewTab !== 'servants' || !selectedStageId) {
+    if (!user || viewTab !== 'servants' || !selectedStageId) {
       setServantStatusMap({});
       return;
     }
@@ -281,7 +281,7 @@ export default function MembersListPage() {
     return () => {
       cancelled = true;
     };
-  }, [viewTab, selectedStageId, servantSession, sessionDate]);
+  }, [user, viewTab, selectedStageId, servantSession, sessionDate]);
 
   const markServant = async (servantUserId: string, status: AttStatus) => {
     const previous = servantStatusMap[servantUserId];
@@ -327,6 +327,7 @@ export default function MembersListPage() {
 
   // Fetch members
   const fetchMembers = useCallback(async () => {
+    if (!user) return;
     try {
       setIsLoading(true);
       setErrorMsg(null);
@@ -347,14 +348,17 @@ export default function MembersListPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedStageId, searchQuery, assignedOnly]);
+  }, [user, selectedStageId, searchQuery, assignedOnly]);
 
   useEffect(() => {
-    fetchMembers();
-  }, [fetchMembers]);
+    if (user) {
+      fetchMembers();
+    }
+  }, [fetchMembers, user]);
 
   // Load reachable stages from API (fallback to user.scopes.stages)
   useEffect(() => {
+    if (!user) return;
     let isMounted = true;
     const fetchStages = async () => {
       try {
@@ -370,7 +374,7 @@ export default function MembersListPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [user]);
 
   const availableStages = stagesList.length > 0 ? stagesList : (user?.scopes?.stages || []);
 

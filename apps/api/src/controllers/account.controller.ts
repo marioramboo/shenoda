@@ -884,7 +884,8 @@ export class AccountController {
     if (address !== undefined) updateData.address = address ? address.trim() : null;
     if (maritalStatus !== undefined) updateData.maritalStatus = maritalStatus ? maritalStatus.trim() : null;
     if (spouseName !== undefined) updateData.spouseName = spouseName ? spouseName.trim() : null;
-    if (educationOrCareer !== undefined) updateData.educationOrCareer = educationOrCareer ? educationOrCareer.trim() : null;
+    const finalEdu = educationOrCareer !== undefined ? educationOrCareer : (req.body as any)?.jobTitle;
+    if (finalEdu !== undefined) updateData.educationOrCareer = finalEdu ? finalEdu.trim() : null;
     if (childrenInfo !== undefined) updateData.childrenInfo = childrenInfo;
     if (whatsappPhone !== undefined) updateData.whatsappPhone = whatsappPhone ? whatsappPhone.trim() : null;
     if (facebookUrl !== undefined) updateData.facebookUrl = facebookUrl ? facebookUrl.trim() : null;
@@ -961,6 +962,7 @@ export class AccountController {
         maritalStatus: updatedUser.maritalStatus,
         spouseName: updatedUser.spouseName,
         educationOrCareer: updatedUser.educationOrCareer,
+        jobTitle: updatedUser.educationOrCareer,
         childrenInfo: updatedUser.childrenInfo,
         whatsappPhone: updatedUser.whatsappPhone || updatedUser.phoneNumber,
         whatsappPhoneRaw: updatedUser.whatsappPhone || null,

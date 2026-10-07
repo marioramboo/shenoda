@@ -653,6 +653,8 @@ export class AuthController {
       newPassword,
     } = parseResult.data;
 
+    const finalEducationOrCareer = educationOrCareer || (req.body as any)?.jobTitle;
+
     // Fetch user
     const user = await prisma.user.findUnique({
       where: { id: req.user.userId },
@@ -772,7 +774,7 @@ export class AuthController {
         address: address !== undefined ? address : undefined,
         maritalStatus: maritalStatus !== undefined ? maritalStatus : undefined,
         spouseName: spouseName !== undefined ? spouseName : undefined,
-        educationOrCareer: educationOrCareer !== undefined ? educationOrCareer : undefined,
+        educationOrCareer: finalEducationOrCareer !== undefined ? finalEducationOrCareer : undefined,
         whatsappPhone: whatsappPhone !== undefined ? (whatsappPhone?.trim() || null) : undefined,
         facebookUrl: facebookUrl !== undefined ? (facebookUrl?.trim() || null) : undefined,
         instagramUrl: instagramUrl !== undefined ? (instagramUrl?.trim() || null) : undefined,
@@ -810,6 +812,7 @@ export class AuthController {
         maritalStatus: updatedUser.maritalStatus,
         spouseName: updatedUser.spouseName,
         educationOrCareer: updatedUser.educationOrCareer,
+        jobTitle: updatedUser.educationOrCareer,
         whatsappPhone: updatedUser.whatsappPhone || updatedUser.phoneNumber,
         whatsappPhoneRaw: updatedUser.whatsappPhone || null,
         facebookUrl: updatedUser.facebookUrl || null,

@@ -164,7 +164,13 @@ describe('Extended Servant Profile Fields & Marital Status Authorization Test Su
     const token = getAuthToken('user-servant-1', 'SERVANT', 1);
 
     const res = await fetch(`${baseUrl}/api/v1/auth/profile`, {
-      method: '        whatsappPhone: '01099999999',
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        whatsappPhone: '01099999999',
         facebookUrl: 'https://facebook.com/mina.ghali',
         instagramUrl: 'https://instagram.com/mina.ghali',
         jobTitle: 'مهندس برمجيات',
@@ -283,15 +289,6 @@ describe('Extended Servant Profile Fields & Marital Status Authorization Test Su
     assert.strictEqual(servantItem.maritalStatus, 'متزوج');
     assert.strictEqual(servantItem.spouseName, 'إيرين سامي');
     assert.strictEqual(servantItem.jobTitle, 'مدرس لغة إنجليزية');
-    assert.strictEqual(servantItem.whatsappPhone, '01123456789');
-    assert.strictEqual(servantItem.isDeacon, true);
-    assert.strictEqual(servantItem.deaconName, 'دياكون أنطونيوس');
-    assert.strictEqual(servantItem.deaconRank, 'إيبودياكون (مساعد شماس)');
-    assert.deepStrictEqual(servantItem.talents, ['شعر وكتابة', 'كرة قدم ورياضة']);
-    assert.deepStrictEqual(servantItem.activities, ['مسرح', 'كورة']);
-    assert.strictEqual(servantItem.profilePicture, 'https://cdn.church.org/avatars/mina.jpg');
-  });
-});�');
     assert.strictEqual(servantItem.whatsappPhone, '01123456789');
     assert.strictEqual(servantItem.isDeacon, true);
     assert.strictEqual(servantItem.deaconName, 'دياكون أنطونيوس');
