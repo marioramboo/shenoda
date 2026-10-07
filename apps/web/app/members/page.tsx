@@ -141,6 +141,19 @@ export default function MembersListPage() {
   const [servantStatusMap, setServantStatusMap] = useState<Record<string, AttStatus>>({});
 
   const isSupervisor = (user?.role?.level ?? 1) >= 3;
+  const isGeneralSecretary = (user?.role?.level ?? 1) >= 5 || user?.role?.code === 'GENERAL_SECRETARY';
+
+  // Add Servant Form (Exclusive to General Secretary / الأمين العام)
+  const [isAddServantModalOpen, setIsAddServantModalOpen] = useState(false);
+  const [servantFullName, setServantFullName] = useState('');
+  const [servantPhone, setServantPhone] = useState('');
+  const [servantEmail, setServantEmail] = useState('');
+  const [servantRoleCode, setServantRoleCode] = useState('SERVANT');
+  const [servantStageId, setServantStageId] = useState('');
+  const [servantTempPassword, setServantTempPassword] = useState('Demo@123');
+  const [isAddingServant, setIsAddingServant] = useState(false);
+  const [servantAddError, setServantAddError] = useState<string | null>(null);
+  const [rolesList, setRolesList] = useState<{ id?: string; code: string; name: string; level: number }[]>([]);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -236,26 +249,26 @@ export default function MembersListPage() {
   };
 
   // Servants list for the stage
+  const fetchServants = useCallback(async () => {
+    if (!user || !isSupervisor || !selectedStageId) return;
+    try {
+      setServantsLoading(true);
+      const res = await api.get('/api/v1/attendance/servants/list', {
+        params: { stageId: selectedStageId },
+      });
+      if (res.data?.success) setServants(res.data.data || []);
+    } catch {
+      setServants([]);
+    } finally {
+      setServantsLoading(false);
+    }
+  }, [user, isSupervisor, selectedStageId]);
+
   useEffect(() => {
-    if (!user || viewTab !== 'servants' || !isSupervisor || !selectedStageId) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        setServantsLoading(true);
-        const res = await api.get('/api/v1/attendance/servants/list', {
-          params: { stageId: selectedStageId },
-        });
-        if (!cancelled && res.data?.success) setServants(res.data.data || []);
-      } catch {
-        if (!cancelled) setServants([]);
-      } finally {
-        if (!cancelled) setServantsLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [user, viewTab, isSupervisor, selectedStageId]);
+    if (viewTab === 'servants') {
+      fetchServants();
+    }
+  }, [viewTab, fetchServants]);
 
   // Recorded attendance for servants for chosen stage / session / date
   useEffect(() => {
@@ -465,6 +478,75 @@ export default function MembersListPage() {
       );
     } finally {
       setIsImporting(false);
+    }
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchRoles = async () => {
+      try {
+        const res = await api.get('/api/v1/accounts/roles');
+        if (res.data?.success && Array.isArray(res.data.roles) && isMounted) {
+          setRolesList(res.data.roles);
+        }
+      } catch {
+        // Fallback silently
+      }
+    };
+    fetchRoles();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const availableServantRoles = useMemo(() => {
+    if (rolesList.length > 0) {
+      return rolesList.filter((r) => r.level < 5);
+    }
+    return [
+      { code: 'SERVANT', name: 'خادم مرحلة', level: 1 },
+      { code: 'ASSISTANT_SECRETARY', name: 'مساعد أمين الخدمة', level: 2 },
+      { code: 'STAGE_SECRETARY', name: 'أمين الخدمة', level: 3 },
+      { code: 'SECTOR_SECRETARY', name: 'أمين قطاع', level: 4 },
+    ];
+  }, [rolesList]);
+
+  const handleAddServant = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setServantAddError(null);
+
+    const targetStage = servantStageId || selectedStageId || availableStages[0]?.id;
+    if (!targetStage) {
+      setServantAddError('يرجى تحديد المرحلة المسند إليها الخادم');
+      return;
+    }
+
+    try {
+      setIsAddingServant(true);
+      const res = await api.post('/api/v1/accounts/create', {
+        fullName: servantFullName.trim(),
+        phoneNumber: servantPhone.trim(),
+        email: servantEmail.trim() || undefined,
+        roleCode: servantRoleCode,
+        stageId: targetStage,
+        temporaryPassword: servantTempPassword || 'Demo@123',
+      });
+
+      if (res.data?.success) {
+        setIsAddServantModalOpen(false);
+        setServantFullName('');
+        setServantPhone('');
+        setServantEmail('');
+        setServantTempPassword('Demo@123');
+        showToast('تمت إضافة الخادم بنجاح');
+        fetchServants();
+      }
+    } catch (err: any) {
+      setServantAddError(
+        err.response?.data?.error?.message || 'حدث خطأ أثناء إضافة الخادم'
+      );
+    } finally {
+      setIsAddingServant(false);
     }
   };
 
@@ -727,18 +809,39 @@ export default function MembersListPage() {
               {toast}
             </div>
           )}
-          {/* Floating Action Button (FAB) for Assistant Secretaries (Level >= 2) */}
-          {canManage && (
-            <div className="fixed bottom-20 left-4 z-30 sm:static sm:mt-2">
-              <Button
-                variant="accent"
-                onClick={() => setIsAddModalOpen(true)}
-                className="shadow-elevated rounded-pill px-5 h-[48px] gap-2 font-bold text-white bg-brand-accent hover:bg-[#a67923]"
-              >
-                <UserPlus className="w-5 h-5" />
-                <span>إضافة مخدوم</span>
-              </Button>
-            </div>
+          {/* Floating Action Button (FAB) */}
+          {viewTab === 'members' ? (
+            canManage && (
+              <div className="fixed bottom-20 left-4 z-30 sm:static sm:mt-2">
+                <Button
+                  id="btn-add-member"
+                  variant="accent"
+                  onClick={() => setIsAddModalOpen(true)}
+                  className="shadow-elevated rounded-pill px-5 h-[48px] gap-2 font-bold text-white bg-brand-accent hover:bg-[#a67923]"
+                >
+                  <UserPlus className="w-5 h-5" />
+                  <span>إضافة مخدوم</span>
+                </Button>
+              </div>
+            )
+          ) : (
+            isGeneralSecretary && (
+              <div className="fixed bottom-20 left-4 z-30 sm:static sm:mt-2">
+                <Button
+                  id="btn-add-servant"
+                  variant="accent"
+                  onClick={() => {
+                    setServantAddError(null);
+                    setServantStageId(selectedStageId || availableStages[0]?.id || '');
+                    setIsAddServantModalOpen(true);
+                  }}
+                  className="shadow-elevated rounded-pill px-5 h-[48px] gap-2 font-bold text-white bg-brand-accent hover:bg-[#a67923]"
+                >
+                  <UserPlus className="w-5 h-5" />
+                  <span>إضافة خدام</span>
+                </Button>
+              </div>
+            )
           )}
 
           {/* Modal 1: Add New Member (FR-3.2) */}
@@ -957,6 +1060,129 @@ export default function MembersListPage() {
                       type="button"
                       variant="outline"
                       onClick={() => setIsBulkModalOpen(false)}
+                      className="h-[46px]"
+                    >
+                      إلغاء
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Modal 3: Add New Servant (Exclusive to General Secretary / الأمين العام) */}
+          {isAddServantModalOpen && (
+            <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+              <div
+                dir="rtl"
+                className="w-full max-w-[440px] bg-bg-surface border border-border-default rounded-card shadow-elevated p-6 text-right relative max-h-[90vh] overflow-y-auto"
+              >
+                <button
+                  type="button"
+                  onClick={() => setIsAddServantModalOpen(false)}
+                  className="absolute top-4 left-4 text-text-secondary hover:text-text-primary p-1"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+
+                <div className="mb-4">
+                  <h2 className="text-h2 font-bold text-brand-primary">إضافة خادم جديد</h2>
+                  <p className="text-caption text-text-secondary mt-0.5">
+                    إنشاء حساب مصرح وإسناده لمرحلة الخدمة (صلاحية حصرية للأمين العام)
+                  </p>
+                </div>
+
+                {servantAddError && (
+                  <div className="mb-4 p-3 bg-status-danger-soft border border-[#F5C2BE] rounded-lg text-caption text-status-danger">
+                    {servantAddError}
+                  </div>
+                )}
+
+                <form onSubmit={handleAddServant} className="flex flex-col gap-3.5">
+                  <Input
+                    label="الاسم بالكامل *"
+                    placeholder="مثال: يوسف ماجد فخري"
+                    value={servantFullName}
+                    onChange={(e) => setServantFullName(e.target.value)}
+                    required
+                  />
+
+                  <Input
+                    label="رقم الهاتف المحمول *"
+                    type="tel"
+                    placeholder="01xxxxxxxxx"
+                    value={servantPhone}
+                    onChange={(e) => setServantPhone(e.target.value)}
+                    iconLeading={<Phone className="w-4 h-4" />}
+                    required
+                  />
+
+                  <Input
+                    label="البريد الإلكتروني (اختياري)"
+                    type="email"
+                    placeholder="servant@church.com"
+                    value={servantEmail}
+                    onChange={(e) => setServantEmail(e.target.value)}
+                  />
+
+                  {/* Stage Selection */}
+                  <div className="flex flex-col gap-1.5 text-right">
+                    <label className="text-body-small font-medium text-text-primary">
+                      المرحلة المسند إليها الخادم *
+                    </label>
+                    <select
+                      value={servantStageId || selectedStageId || availableStages[0]?.id || ''}
+                      onChange={(e) => setServantStageId(e.target.value)}
+                      className="w-full h-[46px] bg-bg-surface text-text-primary font-cairo text-body-default rounded-input border border-border-default px-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                    >
+                      {availableStages.map((stg: any) => (
+                        <option key={stg.id} value={stg.id}>
+                          {stg.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Role Selection */}
+                  <div className="flex flex-col gap-1.5 text-right">
+                    <label className="text-body-small font-medium text-text-primary">
+                      الدور / الرتبة في الخدمة *
+                    </label>
+                    <select
+                      value={servantRoleCode}
+                      onChange={(e) => setServantRoleCode(e.target.value)}
+                      className="w-full h-[46px] bg-bg-surface text-text-primary font-cairo text-body-default rounded-input border border-border-default px-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                    >
+                      {availableServantRoles.map((r: any) => (
+                        <option key={r.code} value={r.code}>
+                          {r.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <Input
+                    label="كلمة المرور المؤقتة *"
+                    type="text"
+                    value={servantTempPassword}
+                    onChange={(e) => setServantTempPassword(e.target.value)}
+                    required
+                  />
+
+                  <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border-default">
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      fullWidth
+                      isLoading={isAddingServant}
+                      className="h-[46px]"
+                    >
+                      إنشاء حساب الخادم
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setIsAddServantModalOpen(false)}
                       className="h-[46px]"
                     >
                       إلغاء
