@@ -10,7 +10,6 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@shenoda/shared": "*",
     "axios": "^1.20.0",
     "clsx": "^2.1.1",
     "lucide-react": "^0.460.0",
