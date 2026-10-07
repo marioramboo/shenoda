@@ -167,6 +167,17 @@ export class ServantAttendanceController {
         });
       }
 
+      if (!item.status || item.status === 'UNSET') {
+        await prisma.servantAttendance.deleteMany({
+          where: {
+            servantUserId: item.servantUserId,
+            sessionType: sessionType as ServantSessionType,
+            sessionDate: parsedDate,
+          },
+        });
+        continue;
+      }
+
       const upserted = await prisma.servantAttendance.upsert({
         where: {
           servantUserId_sessionType_sessionDate: {
@@ -202,6 +213,54 @@ export class ServantAttendanceController {
         recordedCount: savedRecords.length,
         records: savedRecords,
       },
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * GET /api/v1/attendance/servants
+   * Fetches servant attendance for a stage, sessionType, and sessionDate.
+   */
+  static async getAttendance(req: Request, res: Response) {
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'AUTH_REQUIRED', message: 'Authentication required' },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const stageId = req.query.stageId as string | undefined;
+    const sessionType = req.query.sessionType as ServantSessionType | undefined;
+    const sessionDate = req.query.sessionDate as string | undefined;
+
+    const whereClause: any = {};
+    if (stageId) whereClause.stageId = stageId;
+    if (sessionType) whereClause.sessionType = sessionType;
+
+    if (sessionDate) {
+      const d = new Date(sessionDate);
+      d.setUTCHours(0, 0, 0, 0);
+      whereClause.sessionDate = d;
+    }
+
+    const records = await prisma.servantAttendance.findMany({
+      where: whereClause,
+      include: {
+        servantUser: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
+      },
+      orderBy: { sessionDate: 'desc' },
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: records,
       timestamp: new Date().toISOString(),
     });
   }

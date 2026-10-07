@@ -62,7 +62,8 @@ const StatusButtons: React.FC<{
   disabled?: boolean;
   onPick: (s: AttStatus) => void;
   idPrefix: string;
-}> = ({ value, disabled, onPick, idPrefix }) => (
+  labels?: Partial<Record<AttStatus, string>>;
+}> = ({ value, disabled, onPick, idPrefix, labels }) => (
   <div className="grid grid-cols-3 gap-2">
     {STATUS_BUTTONS.map((b) => (
       <button
@@ -78,7 +79,7 @@ const StatusButtons: React.FC<{
             : 'bg-bg-surface border-border-default text-text-secondary hover:bg-bg-muted'
         )}
       >
-        {b.label}
+        {labels?.[b.key] || b.label}
       </button>
     ))}
   </div>
@@ -200,14 +201,26 @@ export default function MembersListPage() {
   const markAttendance = async (memberId: string, status: AttStatus) => {
     if (!selectedStageId) return;
     const previous = statusMap[memberId];
-    setStatusMap((m) => ({ ...m, [memberId]: status }));
+    const isDeselect = previous === status;
+    const nextStatus = isDeselect ? null : status;
+
+    setStatusMap((m) => {
+      const next = { ...m };
+      if (isDeselect) {
+        delete next[memberId];
+      } else {
+        next[memberId] = status;
+      }
+      return next;
+    });
+
     setSavingId(memberId);
     try {
       await api.post('/api/v1/attendance/members/batch', {
         stageId: selectedStageId,
         sessionType,
         sessionDate,
-        records: [{ memberId, status }],
+        records: [{ memberId, status: nextStatus }],
       });
     } catch (err: any) {
       setStatusMap((m) => {
@@ -216,7 +229,7 @@ export default function MembersListPage() {
         else delete next[memberId];
         return next;
       });
-      showToast(err.response?.data?.error?.message || 'تعذر حفظ الحضور، حاول مرة أخرى');
+      showToast(err.response?.data?.error?.message || 'تعذر تحديث الحضور، حاول مرة أخرى');
     } finally {
       setSavingId(null);
     }
@@ -244,20 +257,54 @@ export default function MembersListPage() {
     };
   }, [viewTab, isSupervisor, selectedStageId]);
 
+  // Recorded attendance for servants for chosen stage / session / date
   useEffect(() => {
-    setServantStatusMap({});
-  }, [servantSession, sessionDate, selectedStageId]);
+    if (viewTab !== 'servants' || !selectedStageId) {
+      setServantStatusMap({});
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get('/api/v1/attendance/servants', {
+          params: { stageId: selectedStageId, sessionType: servantSession, sessionDate },
+        });
+        const map: Record<string, AttStatus> = {};
+        for (const r of res.data?.data || []) {
+          map[r.servantUserId] = r.status;
+        }
+        if (!cancelled) setServantStatusMap(map);
+      } catch {
+        if (!cancelled) setServantStatusMap({});
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [viewTab, selectedStageId, servantSession, sessionDate]);
 
   const markServant = async (servantUserId: string, status: AttStatus) => {
     const previous = servantStatusMap[servantUserId];
-    setServantStatusMap((m) => ({ ...m, [servantUserId]: status }));
+    const isDeselect = previous === status;
+    const nextStatus = isDeselect ? null : status;
+
+    setServantStatusMap((m) => {
+      const next = { ...m };
+      if (isDeselect) {
+        delete next[servantUserId];
+      } else {
+        next[servantUserId] = status;
+      }
+      return next;
+    });
+
     setSavingId(servantUserId);
     try {
       await api.post('/api/v1/attendance/servants/batch', {
         stageId: selectedStageId,
         sessionType: servantSession,
         sessionDate,
-        records: [{ servantUserId, status }],
+        records: [{ servantUserId, status: nextStatus }],
       });
     } catch (err: any) {
       setServantStatusMap((m) => {
@@ -266,7 +313,7 @@ export default function MembersListPage() {
         else delete next[servantUserId];
         return next;
       });
-      showToast(err.response?.data?.error?.message || 'تعذر حفظ حضور الخادم');
+      showToast(err.response?.data?.error?.message || 'تعذر تحديث حضور الخادم');
     } finally {
       setSavingId(null);
     }
@@ -584,6 +631,11 @@ export default function MembersListPage() {
                         value={servantStatusMap[s.id]}
                         disabled={savingId === s.id || s.status === 'SUSPENDED'}
                         onPick={(st) => markServant(s.id, st)}
+                        labels={
+                          servantSession === ServantSessionType.LESSON_PREPARATION
+                            ? { PRESENT: 'حضر', ABSENT: 'لم يحضر', EXCUSED: 'معتذر' }
+                            : undefined
+                        }
                       />
                     </div>
                   ))

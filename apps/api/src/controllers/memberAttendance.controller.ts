@@ -108,7 +108,20 @@ export class MemberAttendanceController {
 
     await prisma.$transaction(async (tx) => {
       for (const item of records) {
-        if (!item.memberId || !item.status) continue;
+        if (!item.memberId) continue;
+
+        if (!item.status || item.status === 'UNSET') {
+          await tx.memberAttendance.deleteMany({
+            where: {
+              memberId: item.memberId,
+              sessionType: sessionType as MemberSessionType,
+              sessionDate: parsedDate,
+            },
+          });
+          memberIdsToScan.push(item.memberId);
+          continue;
+        }
+
         memberIdsToScan.push(item.memberId);
 
         const upserted = await tx.memberAttendance.upsert({
