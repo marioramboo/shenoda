@@ -95,7 +95,7 @@ export default function MembersListPage() {
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedStageId, setSelectedStageId] = useState<string>('');
+  const [selectedStageId, setSelectedStageId] = useState<string>(() => user?.scopes?.stages?.[0]?.id || '');
   const [assignedOnly, setAssignedOnly] = useState<boolean>(false);
 
   // Dynamic stages list (from API or user.scopes)
@@ -338,37 +338,6 @@ export default function MembersListPage() {
   );
 
 
-  // Fetch members
-  const fetchMembers = useCallback(async () => {
-    if (!user) return;
-    try {
-      setIsLoading(true);
-      setErrorMsg(null);
-
-      const params: any = {};
-      if (selectedStageId) params.stageId = selectedStageId;
-      if (searchQuery.trim()) params.search = searchQuery.trim();
-      if (assignedOnly) params.assignedOnly = 'true';
-
-      const res = await api.get('/api/v1/members', { params });
-      if (res.data?.success) {
-        setMembers(res.data.members || []);
-      }
-    } catch (err: any) {
-      setErrorMsg(
-        err.response?.data?.error?.message || 'تعذر تحميل قائمة المخدومين'
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, [user, selectedStageId, searchQuery, assignedOnly]);
-
-  useEffect(() => {
-    if (user) {
-      fetchMembers();
-    }
-  }, [fetchMembers, user]);
-
   // Load reachable stages from API (fallback to user.scopes.stages)
   useEffect(() => {
     if (!user) return;
@@ -389,7 +358,9 @@ export default function MembersListPage() {
     };
   }, [user]);
 
-  const availableStages = stagesList.length > 0 ? stagesList : (user?.scopes?.stages || []);
+  const availableStages = useMemo(() => {
+    return stagesList.length > 0 ? stagesList : (user?.scopes?.stages || []);
+  }, [stagesList, user]);
 
   // Set default stage when user or stages load
   useEffect(() => {
@@ -397,12 +368,86 @@ export default function MembersListPage() {
       if (!newStageId) setNewStageId(availableStages[0].id);
       if (!bulkStageId) setBulkStageId(availableStages[0].id);
 
-      // Single-stage users (Level <= 3) default to their assigned stage if not set
       if (!selectedStageId) {
         setSelectedStageId(availableStages[0].id);
       }
     }
-  }, [availableStages, user, selectedStageId, newStageId, bulkStageId]);
+  }, [availableStages, selectedStageId, newStageId, bulkStageId]);
+
+  // Fetch members
+  const fetchMembers = useCallback(async () => {
+    if (!user) return;
+    if (availableStages.length > 0 && !selectedStageId) return;
+
+    try {
+      setIsLoading(true);
+      setErrorMsg(null);
+
+      const params: any = {};
+      if (selectedStageId) params.stageId = selectedStageId;
+      if (searchQuery.trim()) params.search = searchQuery.trim();
+      if (assignedOnly) params.assignedOnly = 'true';
+
+      const res = await api.get('/api/v1/members', { params });
+      if (res.data?.success) {
+        setMembers(res.data.members || []);
+      }
+    } catch (err: any) {
+      setErrorMsg(
+        err.response?.data?.error?.message || 'تعذر تحميل قائمة المخدومين'
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user, selectedStageId, searchQuery, assignedOnly, availableStages.length]);
+
+  // Handle stage change with race-condition cancellation
+  useEffect(() => {
+    if (!user) return;
+    // Do not query without stageId if stages exist
+    if (availableStages.length > 0 && !selectedStageId) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        setIsLoading(true);
+        setErrorMsg(null);
+
+        const params: any = {};
+        if (selectedStageId) params.stageId = selectedStageId;
+        if (searchQuery.trim()) params.search = searchQuery.trim();
+        if (assignedOnly) params.assignedOnly = 'true';
+
+        const res = await api.get('/api/v1/members', { params });
+        if (!cancelled && res.data?.success) {
+          setMembers(res.data.members || []);
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setErrorMsg(
+            err.response?.data?.error?.message || 'تعذر تحميل قائمة المخدومين'
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, selectedStageId, searchQuery, assignedOnly, availableStages.length]);
+
+  // Client-side strict stage isolation guarantee
+  const displayMembers = useMemo(() => {
+    if (!selectedStageId) return members;
+    return members.filter((m) => {
+      const mStageId = m.stageId || m.stage?.id;
+      return !mStageId || mStageId === selectedStageId;
+    });
+  }, [members, selectedStageId]);
 
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -744,7 +789,7 @@ export default function MembersListPage() {
               <div className="p-4 bg-status-danger-soft border border-[#F5C2BE] rounded-card text-center text-status-danger text-body-small">
                 {errorMsg}
               </div>
-            ) : members.length === 0 ? (
+            ) : displayMembers.length === 0 ? (
               <div className="bg-bg-surface border border-border-default rounded-card p-8 text-center flex flex-col items-center shadow-card">
                 <Users className="w-12 h-12 text-text-secondary/40 mb-2" />
                 <h3 className="text-body-default font-bold text-text-primary">لا يوجد مخدومين مسجلين</h3>
@@ -755,7 +800,7 @@ export default function MembersListPage() {
                 </p>
               </div>
             ) : (
-              members.map((member) => {
+              displayMembers.map((member) => {
                 const needsFollowUp = alertMemberIds.has(member.id);
                 const canMark = Boolean(selectedStageId) && ((user?.role.level || 1) >= 2 || member.isAssigned);
                 return (

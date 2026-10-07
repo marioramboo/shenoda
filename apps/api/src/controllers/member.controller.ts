@@ -51,13 +51,15 @@ export class MemberController {
     // Determine target stages based on user hierarchy
     let permittedStageIds: string[] = [];
 
+    const requestedStageId = typeof stageId === 'string' && stageId.trim() ? stageId.trim() : null;
+
     if (user.roleLevel >= 5) {
       // General Secretary: all stages allowed
-      if (stageId) permittedStageIds = [stageId as string];
+      if (requestedStageId) permittedStageIds = [requestedStageId];
     } else if (user.roleLevel === 4) {
       // Sector Secretary: stages within sector
-      if (stageId) {
-        if (user.stageIds && user.stageIds.length > 0 && !user.stageIds.includes(stageId as string)) {
+      if (requestedStageId) {
+        if (user.stageIds && user.stageIds.length > 0 && !user.stageIds.includes(requestedStageId)) {
           return res.status(403).json({
             success: false,
             error: {
@@ -66,14 +68,14 @@ export class MemberController {
             },
           });
         }
-        permittedStageIds = [stageId as string];
+        permittedStageIds = [requestedStageId];
       } else {
         permittedStageIds = user.stageIds || [];
       }
     } else {
       // Level 1, 2, 3: user's assigned stages
       permittedStageIds = user.stageIds || [];
-      if (stageId && !permittedStageIds.includes(stageId as string)) {
+      if (requestedStageId && !permittedStageIds.includes(requestedStageId)) {
         return res.status(403).json({
           success: false,
           error: {
@@ -82,8 +84,8 @@ export class MemberController {
           },
         });
       }
-      if (stageId) {
-        permittedStageIds = [stageId as string];
+      if (requestedStageId) {
+        permittedStageIds = [requestedStageId];
       }
     }
 
