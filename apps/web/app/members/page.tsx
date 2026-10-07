@@ -823,6 +823,11 @@ export default function MembersListPage() {
                         <h3 className="text-body-default font-bold text-text-primary truncate">{member.fullName}</h3>
                         <p className="text-caption text-text-secondary truncate">
                           {member.educationalGrade || member.stage?.name}
+                          {member.servantAssignments?.[0]?.servant?.fullName ? (
+                            <span className="text-brand-primary font-medium"> • خادم: {member.servantAssignments[0].servant.fullName}</span>
+                          ) : (
+                            <span className="text-amber-600 font-medium"> • غير مسند لخادم</span>
+                          )}
                         </p>
                       </div>
                       {needsFollowUp ? (

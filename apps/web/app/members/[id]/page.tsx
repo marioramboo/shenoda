@@ -24,6 +24,7 @@ import {
   Shield,
   X,
   CheckCircle2,
+  UserCheck,
 } from 'lucide-react';
 
 const todayLocal = () => {
@@ -55,6 +56,14 @@ export default function MemberProfilePage() {
   const [needsFollowUp, setNeedsFollowUp] = useState(false);
 
   const [isEditDrawerOpen, setIsEditDrawerOpen] = useState(false);
+
+  // Servant assignment modal
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const [stageServants, setStageServants] = useState<any[]>([]);
+  const [selectedServantId, setSelectedServantId] = useState<string>('');
+  const [loadingServants, setLoadingServants] = useState(false);
+  const [assignSaving, setAssignSaving] = useState(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
 
   // Visitation modal
   const [isVisitOpen, setIsVisitOpen] = useState(false);
@@ -135,6 +144,83 @@ export default function MemberProfilePage() {
     }
   };
 
+  const openAssignModal = async () => {
+    setIsAssignModalOpen(true);
+    setAssignError(null);
+    const currentId =
+      member?.servantAssignments?.[0]?.servantUserId ||
+      member?.servantAssignments?.[0]?.servant?.id ||
+      '';
+    setSelectedServantId(currentId);
+    if (member?.stageId) {
+      try {
+        setLoadingServants(true);
+        const res = await api.get(`/api/v1/attendance/servants/list?stageId=${member.stageId}`);
+        if (res.data?.success && Array.isArray(res.data.servants)) {
+          setStageServants(res.data.servants);
+        }
+      } catch {
+        setAssignError('تعذر تحميل قائمة خدام المرحلة');
+      } finally {
+        setLoadingServants(false);
+      }
+    }
+  };
+
+  const saveAssignment = async () => {
+    setAssignError(null);
+    try {
+      setAssignSaving(true);
+      const res = await api.post(`/api/v1/members/${memberId}/assign-servant`, {
+        servantUserId: selectedServantId || null,
+      });
+      if (res.data?.success) {
+        if (res.data.member) {
+          setMember(res.data.member);
+          const userAssigned = res.data.member.servantAssignments?.some(
+            (a: any) => a.servantUserId === user?.id
+          );
+          setIsAssigned(Boolean(userAssigned));
+        } else {
+          await fetchMember();
+        }
+        setIsAssignModalOpen(false);
+        setToast(selectedServantId ? 'تم إسناد المخدوم للخادم بنجاح' : 'تم إلغاء إسناد المخدوم');
+        setTimeout(() => setToast(null), 3000);
+      }
+    } catch (err: any) {
+      setAssignError(err.response?.data?.error?.message || 'تعذر حفظ إسناد الخادم');
+    } finally {
+      setAssignSaving(false);
+    }
+  };
+
+  const selfAssign = async () => {
+    if (!user?.id) return;
+    setAssignError(null);
+    try {
+      setAssignSaving(true);
+      const res = await api.post(`/api/v1/members/${memberId}/assign-servant`, {
+        servantUserId: user.id,
+      });
+      if (res.data?.success) {
+        if (res.data.member) {
+          setMember(res.data.member);
+          setIsAssigned(true);
+        } else {
+          await fetchMember();
+        }
+        setIsAssignModalOpen(false);
+        setToast('تم استلام رعاية المخدوم بنجاح');
+        setTimeout(() => setToast(null), 3000);
+      }
+    } catch (err: any) {
+      setAssignError(err.response?.data?.error?.message || 'تعذر استلام رعاية المخدوم');
+    } finally {
+      setAssignSaving(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <ProtectedRoute>
@@ -173,6 +259,7 @@ export default function MemberProfilePage() {
   const level = user?.role.level || 1;
   const canEdit = level >= 2 || (level === 1 && isAssigned);
   const canVisit = level >= 2 || isAssigned;
+  const canAssign = level >= 2 || (level === 1 && !assignedServant);
 
   const socialButtons = [
     {
@@ -244,11 +331,33 @@ export default function MemberProfilePage() {
                 {ageYears} سنة • {member.stage?.name}
                 {member.educationalGrade ? ` • ${member.educationalGrade}` : ''}
               </p>
-              <div className="mt-3">
-                {assignedServant ? (
-                  <Badge variant="primary" withDot>الخادم المسئول: {assignedServant.fullName}</Badge>
-                ) : (
-                  <Badge variant="neutral">غير مسند لخادم بعد</Badge>
+              <div className="mt-3 flex flex-col items-center gap-2">
+                <div className="flex items-center justify-center gap-2 flex-wrap">
+                  {assignedServant ? (
+                    <Badge variant="primary" withDot>الخادم المسئول: {assignedServant.fullName}</Badge>
+                  ) : (
+                    <Badge variant="neutral">غير مسند لخادم بعد</Badge>
+                  )}
+                  {canAssign && (
+                    <button
+                      id="assign-servant-btn"
+                      type="button"
+                      onClick={openAssignModal}
+                      className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-caption font-bold bg-brand-primary-soft text-brand-primary hover:bg-brand-primary hover:text-white transition-all shadow-xs cursor-pointer"
+                    >
+                      <UserCheck className="w-3.5 h-3.5" />
+                      <span>{assignedServant ? 'تغيير الخادم' : 'إسناد لخادم'}</span>
+                    </button>
+                  )}
+                </div>
+                {level === 1 && !assignedServant && (
+                  <button
+                    type="button"
+                    onClick={selfAssign}
+                    className="text-caption text-brand-accent hover:underline font-semibold"
+                  >
+                    استلام رعاية المخدوم (إسناد لنفسي)
+                  </button>
                 )}
               </div>
 
@@ -407,6 +516,128 @@ export default function MemberProfilePage() {
               <Button variant="primary" fullWidth isLoading={visitSaving} onClick={saveVisit} className="mt-4 h-[46px]">
                 حفظ الافتقاد
               </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Servant Assignment Modal */}
+        {isAssignModalOpen && (
+          <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end sm:items-center justify-center p-4">
+            <div dir="rtl" className="w-full max-w-[440px] bg-bg-surface rounded-card shadow-elevated p-5 text-right relative">
+              <button
+                type="button"
+                onClick={() => setIsAssignModalOpen(false)}
+                aria-label="إغلاق"
+                className="absolute top-4 left-4 text-text-secondary hover:text-text-primary p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-8 h-8 rounded-full bg-brand-primary-soft text-brand-primary flex items-center justify-center">
+                  <UserCheck className="w-4 h-4" />
+                </div>
+                <h3 className="text-h2 font-bold text-brand-primary">إسناد الخادم المسئول</h3>
+              </div>
+              <p className="text-caption text-text-secondary mb-4">
+                المخدوم: <strong className="text-text-primary">{member.fullName}</strong> ({member.stage?.name})
+              </p>
+
+              {assignError && (
+                <div className="mb-3 p-3 bg-status-danger-soft border border-[#F5C2BE] rounded-lg text-caption text-status-danger">
+                  {assignError}
+                </div>
+              )}
+
+              {loadingServants ? (
+                <div className="py-8 flex flex-col items-center justify-center gap-2 text-text-secondary">
+                  <Loader2 className="w-6 h-6 animate-spin text-brand-primary" />
+                  <span className="text-caption">جاري تحميل خدام المرحلة...</span>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  <label className="text-body-small font-medium text-text-primary block">
+                    اختر الخادم من مرحلة ({member.stage?.name || 'الخدمة'}):
+                  </label>
+
+                  {stageServants.length === 0 ? (
+                    <div className="p-4 bg-bg-muted rounded-lg text-caption text-text-secondary text-center">
+                      لا يوجد خدام مسجلين في هذه المرحلة حالياً
+                    </div>
+                  ) : (
+                    <div className="max-h-60 overflow-y-auto flex flex-col gap-2 border border-border-default rounded-input p-2 bg-bg-muted/30">
+                      {stageServants.map((s) => {
+                        const isSelected = selectedServantId === s.id;
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => setSelectedServantId(s.id)}
+                            className={cn(
+                              'flex items-center justify-between p-3 rounded-button text-right transition-colors border',
+                              isSelected
+                                ? 'bg-brand-primary-soft border-brand-primary text-brand-primary font-bold shadow-xs'
+                                : 'bg-bg-surface border-border-default hover:bg-bg-muted text-text-primary'
+                            )}
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <div
+                                className={cn(
+                                  'w-8 h-8 rounded-full flex items-center justify-center text-caption font-bold shrink-0',
+                                  isSelected ? 'bg-brand-primary text-white' : 'bg-bg-muted text-text-secondary'
+                                )}
+                              >
+                                {s.fullName.trim().split(/\s+/).slice(0, 2).map((w: string) => w.charAt(0)).join('')}
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="text-body-small font-bold">{s.fullName}</span>
+                                <span className="text-caption text-text-secondary">
+                                  {s.role?.name || 'خادم'}{s.phoneNumber ? ` • ${s.phoneNumber}` : ''}
+                                </span>
+                              </div>
+                            </div>
+                            {isSelected && <CheckCircle2 className="w-5 h-5 text-brand-primary shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {assignedServant && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedServantId('')}
+                      className={cn(
+                        'text-caption py-2 rounded-button border text-center transition-colors',
+                        selectedServantId === ''
+                          ? 'border-status-danger bg-status-danger-soft text-status-danger font-bold'
+                          : 'border-border-default text-text-secondary hover:bg-bg-muted'
+                      )}
+                    >
+                      إلغاء الإسناد (جعله غير مسند لأي خادم)
+                    </button>
+                  )}
+
+                  <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border-default">
+                    <Button
+                      variant="primary"
+                      fullWidth
+                      isLoading={assignSaving}
+                      onClick={saveAssignment}
+                      disabled={stageServants.length === 0 && !assignedServant}
+                      className="h-[46px]"
+                    >
+                      حفظ الإسناد
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsAssignModalOpen(false)}
+                      className="h-[46px]"
+                    >
+                      إلغاء
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

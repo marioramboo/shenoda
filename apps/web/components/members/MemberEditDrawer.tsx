@@ -51,6 +51,8 @@ export const MemberEditDrawer: React.FC<MemberEditDrawerProps> = ({
   const [motherName, setMotherName] = useState('');
   const [facebookUrl, setFacebookUrl] = useState('');
   const [instagramUrl, setInstagramUrl] = useState('');
+  const [assignedServantUserId, setAssignedServantUserId] = useState('');
+  const [stageServants, setStageServants] = useState<any[]>([]);
 
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -72,9 +74,28 @@ export const MemberEditDrawer: React.FC<MemberEditDrawerProps> = ({
       setMotherName(member.motherName || '');
       setFacebookUrl(member.facebookUrl || '');
       setInstagramUrl(member.instagramUrl || '');
+
+      const currentServantId =
+        member.servantAssignments?.[0]?.servantUserId ||
+        member.servantAssignments?.[0]?.servant?.id ||
+        '';
+      setAssignedServantUserId(currentServantId);
       setErrorMsg(null);
     }
   }, [member]);
+
+  useEffect(() => {
+    if (isOpen && member?.stageId && !isServantOnly) {
+      api
+        .get(`/api/v1/attendance/servants/list?stageId=${member.stageId}`)
+        .then((res) => {
+          if (res.data?.success && Array.isArray(res.data.servants)) {
+            setStageServants(res.data.servants);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isOpen, member?.stageId, isServantOnly]);
 
   if (!isOpen || !member) return null;
 
@@ -107,6 +128,7 @@ export const MemberEditDrawer: React.FC<MemberEditDrawerProps> = ({
         financialStatus: financialStatus || null,
         behaviorInService: behaviorInService || null,
         peerIntegration: peerIntegration || null,
+        servantUserId: assignedServantUserId || null,
       };
     }
 
@@ -283,6 +305,24 @@ export const MemberEditDrawer: React.FC<MemberEditDrawerProps> = ({
                 value={instagramUrl}
                 onChange={(e) => setInstagramUrl(e.target.value)}
               />
+
+              <div className="flex flex-col gap-1.5 text-right">
+                <label className="text-body-small font-medium text-text-primary">
+                  الخادم المسئول عن المخدوم
+                </label>
+                <select
+                  value={assignedServantUserId}
+                  onChange={(e) => setAssignedServantUserId(e.target.value)}
+                  className="w-full h-[46px] bg-bg-surface text-text-primary font-cairo text-body-default rounded-input border border-border-default px-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                >
+                  <option value="">(غير مسند لخادم بعد)</option>
+                  {stageServants.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.fullName} {s.phoneNumber ? `(${s.phoneNumber})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           )}
 

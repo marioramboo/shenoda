@@ -47,13 +47,41 @@ export async function authenticateJwt(req: Request, _res: Response, next: NextFu
   const payload = TokenService.verifyAccessToken(token);
 
   if (payload) {
+    let roleLevel = payload.roleLevel;
+    let roleCode = payload.roleCode;
+    let stageIds = payload.stageIds || [];
+    let sectorIds = payload.sectorIds || [];
+
+    try {
+      const dbUser = await prisma.user.findUnique({
+        where: { id: payload.userId },
+        select: {
+          status: true,
+          role: { select: { level: true, code: true } },
+          scopeAssignments: { select: { stageId: true, sectorId: true } },
+        },
+      });
+      if (dbUser && dbUser.status === 'ACTIVE' && dbUser.role) {
+        roleLevel = dbUser.role.level;
+        roleCode = dbUser.role.code;
+        if (dbUser.scopeAssignments && dbUser.scopeAssignments.length > 0) {
+          const dbStageIds = dbUser.scopeAssignments.map((s) => s.stageId).filter(Boolean) as string[];
+          const dbSectorIds = dbUser.scopeAssignments.map((s) => s.sectorId).filter(Boolean) as string[];
+          if (dbStageIds.length > 0) stageIds = dbStageIds;
+          if (dbSectorIds.length > 0) sectorIds = dbSectorIds;
+        }
+      }
+    } catch {
+      // fallback to token payload
+    }
+
     req.user = {
       userId: payload.userId,
       organizationId: payload.orgId,
-      roleLevel: payload.roleLevel,
-      roleCode: payload.roleCode,
-      stageIds: payload.stageIds || [],
-      sectorIds: payload.sectorIds || [],
+      roleLevel,
+      roleCode,
+      stageIds,
+      sectorIds,
     };
 
     // Lazily load stageToSectorMap if not already populated

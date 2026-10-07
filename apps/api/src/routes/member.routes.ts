@@ -20,8 +20,11 @@ memberRouter.post('/', MemberController.createMember);
 // 4. Update member (FR-3.1, FR-3.2, Assumption A2: field-level restriction for assigned servant)
 memberRouter.patch('/:id', MemberController.updateMember);
 
-// 5. Assign servant to member (Level 2+)
+// 5. Assign servant to member (Level 2+ or self-assignment for stage servant)
 memberRouter.post('/:id/assign-servant', MemberController.assignServant);
+memberRouter.put('/:id/assign-servant', MemberController.assignServant);
+memberRouter.post('/:id/assign', MemberController.assignServant);
+memberRouter.put('/:id/assign', MemberController.assignServant);
 
 // 6. Bulk import members (FR-3.3: Level 2+)
 memberRouter.post('/bulk-import', MemberController.bulkImport);

@@ -339,7 +339,9 @@ export class MemberController {
       });
     }
 
-    const payload = req.body || {};
+    const rawPayload = req.body || {};
+    const { servantUserId, assignedServantId, ...payload } = rawPayload;
+    const targetServantId = servantUserId !== undefined ? servantUserId : assignedServantId;
     const fieldsToUpdate = Object.keys(payload);
 
     // Assumption A2 Enforcement: Servants can ONLY update the 3 evaluative fields
@@ -402,18 +404,34 @@ export class MemberController {
     }
 
     // Perform update and audit log inside transaction
-    const updatedMember = await prisma.$transaction(async (tx) => {
-      const updated = await tx.servedMember.update({
-        where: { id: member.id },
-        data: updateData,
-      });
+    await prisma.$transaction(async (tx) => {
+      if (Object.keys(updateData).length > 0) {
+        await tx.servedMember.update({
+          where: { id: member.id },
+          data: updateData,
+        });
+      }
 
       for (const log of auditLogs) {
         await tx.memberAuditLog.create({ data: log });
       }
-
-      return updated;
     });
+
+    // Handle servant assignment if provided and user has permission
+    if (targetServantId !== undefined && (user.roleLevel >= 2 || (user.roleLevel === 1 && targetServantId === user.userId))) {
+      await prisma.memberServantAssignment.deleteMany({
+        where: { memberId: member.id },
+      });
+      if (targetServantId) {
+        await prisma.memberServantAssignment.create({
+          data: {
+            memberId: member.id,
+            servantUserId: targetServantId,
+            assignedById: user.userId,
+          },
+        });
+      }
+    }
 
     // Log sensitive updates
     if (sensitiveFieldsToLog.length > 0) {
@@ -426,6 +444,18 @@ export class MemberController {
       });
     }
 
+    const updatedMember = await prisma.servedMember.findUnique({
+      where: { id: member.id },
+      include: {
+        stage: { select: { id: true, name: true, code: true } },
+        servantAssignments: {
+          include: {
+            servant: { select: { id: true, fullName: true, phoneNumber: true } },
+          },
+        },
+      },
+    });
+
     return res.status(200).json({
       success: true,
       message: 'تم تحديث بيانات المخدوم بنجاح',
@@ -436,14 +466,34 @@ export class MemberController {
 
   /**
    * POST /api/v1/members/:id/assign-servant
-   * Links a servant to a member. Restricted to Assistant Secretary (Level 2) and above.
+   * Links a servant to a member. Restricted to Assistant Secretary (Level 2) and above,
+   * or a stage servant assigning an unassigned member to themselves.
    */
   public static async assignServant(req: Request, res: Response) {
     const user = req.user!;
     const { id } = req.params;
     const { servantUserId } = req.body;
 
-    if (user.roleLevel < 2) {
+    const member = await prisma.servedMember.findUnique({
+      where: { id },
+      include: {
+        stage: true,
+        servantAssignments: true,
+      },
+    });
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'MEMBER_NOT_FOUND', message: 'المخدوم غير موجود' },
+      });
+    }
+
+    // Role check: level >= 2 or level 1 self-assignment
+    const isLevel2Plus = user.roleLevel >= 2;
+    const isSelfAssign = user.roleLevel === 1 && servantUserId === user.userId && user.stageIds.includes(member.stageId);
+
+    if (!isLevel2Plus && !isSelfAssign) {
       return res.status(403).json({
         success: false,
         error: {
@@ -453,18 +503,45 @@ export class MemberController {
       });
     }
 
-    if (!servantUserId) {
-      return res.status(400).json({
-        success: false,
-        error: { code: 'SERVANT_REQUIRED', message: 'معرف الخادم (servantUserId) مطلوب' },
-      });
+    // Scope check for non-General Secretary
+    if (user.roleLevel < 5 && !user.stageIds.includes(member.stageId)) {
+      if (user.roleLevel === 4) {
+        if (!user.sectorIds.includes(member.stage.sectorId)) {
+          return res.status(403).json({
+            success: false,
+            error: { code: 'ACCESS_DENIED_SCOPE', message: 'المخدوم خارج قطاعك الإشرافي' },
+          });
+        }
+      } else {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'ACCESS_DENIED_SCOPE', message: 'المخدوم خارج نطاق مرحلتك' },
+        });
+      }
     }
 
-    const member = await prisma.servedMember.findUnique({ where: { id } });
-    if (!member) {
-      return res.status(404).json({
-        success: false,
-        error: { code: 'MEMBER_NOT_FOUND', message: 'المخدوم غير موجود' },
+    // If servantUserId is empty/null/false -> unassign
+    if (!servantUserId) {
+      await prisma.memberServantAssignment.deleteMany({
+        where: { memberId: id },
+      });
+
+      const updatedMember = await prisma.servedMember.findUnique({
+        where: { id },
+        include: {
+          stage: { select: { id: true, name: true, code: true } },
+          servantAssignments: {
+            include: {
+              servant: { select: { id: true, fullName: true, phoneNumber: true } },
+            },
+          },
+        },
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: 'تم إلغاء إسناد المخدوم بنجاح',
+        member: updatedMember,
       });
     }
 
@@ -477,22 +554,32 @@ export class MemberController {
       });
     }
 
-    // Create or reassign
-    const assignment = await prisma.memberServantAssignment.upsert({
-      where: {
-        memberId_servantUserId: {
-          memberId: id,
-          servantUserId,
-        },
-      },
-      update: {
-        assignedById: user.userId,
-        assignedAt: new Date(),
-      },
-      create: {
+    // Clean up previous assignments for this member to prevent duplicate/conflicting assignments
+    await prisma.memberServantAssignment.deleteMany({
+      where: { memberId: id },
+    });
+
+    // Create new assignment
+    const assignment = await prisma.memberServantAssignment.create({
+      data: {
         memberId: id,
         servantUserId,
         assignedById: user.userId,
+      },
+      include: {
+        servant: { select: { id: true, fullName: true, phoneNumber: true } },
+      },
+    });
+
+    const updatedMember = await prisma.servedMember.findUnique({
+      where: { id },
+      include: {
+        stage: { select: { id: true, name: true, code: true } },
+        servantAssignments: {
+          include: {
+            servant: { select: { id: true, fullName: true, phoneNumber: true } },
+          },
+        },
       },
     });
 
@@ -500,6 +587,7 @@ export class MemberController {
       success: true,
       message: 'تم إسناد المخدوم للخادم بنجاح',
       assignment,
+      member: updatedMember,
     });
   }
 
