@@ -22,8 +22,8 @@ jobs:
 
       - name: Configure Git Author
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "George-STD"
+          git config user.email "2023170173@cis.asu.edu.eg"
 
       - name: Fetch and Merge from Upstream
         run: |
@@ -40,11 +40,7 @@ jobs:
           
           echo "Syncing changes from upstream ($UPSTREAM_HASH) to local ($LOCAL_HASH)..."
           
-          if git merge --ff-only upstream/main; then
-            echo "Fast-forward merge successful."
-          else
-            echo "Fast-forward not possible, doing standard merge..."
-            git merge upstream/main --no-edit -m "chore(sync): merge upstream changes from marioramboo/shenoda"
-          fi
+          git merge upstream/main --no-edit -m "chore(sync): sync upstream updates from marioramboo"
+          git commit --allow-empty -m "chore(deploy): trigger vercel build for synced changes" --author="George-STD <2023170173@cis.asu.edu.eg>"
           
           git push origin main
