@@ -251,12 +251,12 @@ export default function CurriculumPrepPage() {
   }, []);
 
   useEffect(() => {
-    if (currentLesson) {
+    if (currentLesson && isSupervisor) {
       fetchInspection(currentLesson.id);
     } else {
       setInspectionData(null);
     }
-  }, [currentLesson, fetchInspection]);
+  }, [currentLesson, isSupervisor, fetchInspection]);
 
   // Shift lesson
   const handleShiftLesson = (delta: number) => {
@@ -801,59 +801,61 @@ export default function CurriculumPrepPage() {
                   </section>
                 )}
 
-                {/* 3 Summary Counters (Photo 7) */}
-                <section className="grid grid-cols-3 gap-2 text-center select-none">
-                  {/* Card 1: معتمد / حضور كامل */}
-                  <div
-                    onClick={() => setInspectFilter('prepared')}
-                    className={cn(
-                      'bg-bg-surface border rounded-card p-3 shadow-card flex flex-col items-center justify-between cursor-pointer transition-all',
-                      inspectFilter === 'prepared' ? 'border-status-success ring-1 ring-status-success' : 'border-border-default hover:border-status-success/50'
-                    )}
-                  >
-                    <div className="w-8 h-8 rounded-full bg-status-success-soft text-status-success flex items-center justify-center mb-1">
-                      <CheckCircle2 className="w-4 h-4" />
+                {/* 3 Summary Counters (Visible only from امين الخدمة Level 3+ and above) */}
+                {isSupervisor && inspectionData && (
+                  <section className="grid grid-cols-3 gap-2 text-center select-none">
+                    {/* Card 1: معتمد / حضور كامل */}
+                    <div
+                      onClick={() => setInspectFilter('prepared')}
+                      className={cn(
+                        'bg-bg-surface border rounded-card p-3 shadow-card flex flex-col items-center justify-between cursor-pointer transition-all',
+                        inspectFilter === 'prepared' ? 'border-status-success ring-1 ring-status-success' : 'border-border-default hover:border-status-success/50'
+                      )}
+                    >
+                      <div className="w-8 h-8 rounded-full bg-status-success-soft text-status-success flex items-center justify-center mb-1">
+                        <CheckCircle2 className="w-4 h-4" />
+                      </div>
+                      <span className="text-xl font-bold text-status-success">{reviewedCount}</span>
+                      <span className="text-[11px] font-bold text-text-primary leading-tight mt-0.5">
+                        حضور كامل (معتمد)
+                      </span>
                     </div>
-                    <span className="text-xl font-bold text-status-success">{reviewedCount}</span>
-                    <span className="text-[11px] font-bold text-text-primary leading-tight mt-0.5">
-                      حضور كامل (معتمد)
-                    </span>
-                  </div>
 
-                  {/* Card 2: تم التسليم / قيد المراجعة */}
-                  <div
-                    onClick={() => setInspectFilter('prepared')}
-                    className={cn(
-                      'bg-bg-surface border rounded-card p-3 shadow-card flex flex-col items-center justify-between cursor-pointer transition-all',
-                      inspectFilter === 'prepared' ? 'border-status-warning ring-1 ring-status-warning' : 'border-border-default hover:border-status-warning/50'
-                    )}
-                  >
-                    <div className="w-8 h-8 rounded-full bg-status-warning-soft text-status-warning flex items-center justify-center mb-1">
-                      <Clock className="w-4 h-4" />
+                    {/* Card 2: تم التسليم / قيد المراجعة */}
+                    <div
+                      onClick={() => setInspectFilter('prepared')}
+                      className={cn(
+                        'bg-bg-surface border rounded-card p-3 shadow-card flex flex-col items-center justify-between cursor-pointer transition-all',
+                        inspectFilter === 'prepared' ? 'border-status-warning ring-1 ring-status-warning' : 'border-border-default hover:border-status-warning/50'
+                      )}
+                    >
+                      <div className="w-8 h-8 rounded-full bg-status-warning-soft text-status-warning flex items-center justify-center mb-1">
+                        <Clock className="w-4 h-4" />
+                      </div>
+                      <span className="text-xl font-bold text-status-warning">{pendingCount}</span>
+                      <span className="text-[11px] font-bold text-text-primary leading-tight mt-0.5">
+                        تم التسليم (قيد المراجعة)
+                      </span>
                     </div>
-                    <span className="text-xl font-bold text-status-warning">{pendingCount}</span>
-                    <span className="text-[11px] font-bold text-text-primary leading-tight mt-0.5">
-                      تم التسليم (قيد المراجعة)
-                    </span>
-                  </div>
 
-                  {/* Card 3: لم يحضر / لم يتم */}
-                  <div
-                    onClick={() => setInspectFilter('unprepared')}
-                    className={cn(
-                      'bg-bg-surface border rounded-card p-3 shadow-card flex flex-col items-center justify-between cursor-pointer transition-all',
-                      inspectFilter === 'unprepared' ? 'border-status-danger ring-1 ring-status-danger' : 'border-border-default hover:border-status-danger/50'
-                    )}
-                  >
-                    <div className="w-8 h-8 rounded-full bg-status-danger-soft text-status-danger flex items-center justify-center mb-1">
-                      <AlertCircle className="w-4 h-4" />
+                    {/* Card 3: لم يحضر / لم يتم */}
+                    <div
+                      onClick={() => setInspectFilter('unprepared')}
+                      className={cn(
+                        'bg-bg-surface border rounded-card p-3 shadow-card flex flex-col items-center justify-between cursor-pointer transition-all',
+                        inspectFilter === 'unprepared' ? 'border-status-danger ring-1 ring-status-danger' : 'border-border-default hover:border-status-danger/50'
+                      )}
+                    >
+                      <div className="w-8 h-8 rounded-full bg-status-danger-soft text-status-danger flex items-center justify-center mb-1">
+                        <AlertCircle className="w-4 h-4" />
+                      </div>
+                      <span className="text-xl font-bold text-status-danger">{unpreparedCount}</span>
+                      <span className="text-[11px] font-bold text-text-primary leading-tight mt-0.5">
+                        لم يحضّر
+                      </span>
                     </div>
-                    <span className="text-xl font-bold text-status-danger">{unpreparedCount}</span>
-                    <span className="text-[11px] font-bold text-text-primary leading-tight mt-0.5">
-                      لم يحضّر
-                    </span>
-                  </div>
-                </section>
+                  </section>
+                )}
 
                 {/* Supervisor Lesson Inspection Roster (Level 3+) */}
                 {isSupervisor && inspectionData && (

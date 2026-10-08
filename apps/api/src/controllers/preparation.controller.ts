@@ -490,6 +490,17 @@ export class PreparationController {
         });
       }
 
+      if (user.roleLevel < 3) {
+        return res.status(403).json({
+          success: false,
+          error: {
+            code: 'FORBIDDEN',
+            message: 'صلاحية متابعة تحضيرات الخدام محصورة في أمين الخدمة فما فوق',
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
       const { eventId } = req.params;
       const event = await prisma.calendarEvent.findUnique({
         where: { id: eventId },
