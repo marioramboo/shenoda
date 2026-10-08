@@ -1,16 +1,16 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { Phone, Lock, Eye, EyeOff, Info, AlertCircle, ShieldCheck } from 'lucide-react';
+import { Phone, Lock, Eye, EyeOff, Info, AlertCircle, ShieldCheck, Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, isAuthenticated, isLoading } = useAuth();
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -19,6 +19,12 @@ export default function LoginPage() {
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      router.replace('/dashboard');
+    }
+  }, [isLoading, isAuthenticated, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,6 +55,34 @@ export default function LoginPage() {
       setIsSubmitting(false);
     }
   };
+
+  if (isLoading || isAuthenticated) {
+    return (
+      <main
+        dir="rtl"
+        className="min-h-screen bg-bg-app flex flex-col items-center justify-center p-4 font-cairo"
+      >
+        <div className="w-16 h-16 rounded-2xl bg-brand-primary-soft flex items-center justify-center border border-[#D5E1F0] shadow-sm mb-3">
+          <svg
+            className="w-10 h-10 text-brand-accent animate-pulse"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M12 2v20M2 12h20M7 7l10 10M17 7L7 17" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        </div>
+        <div className="flex items-center gap-2 text-text-secondary mt-2">
+          <Loader2 className="w-5 h-5 text-brand-primary animate-spin" />
+          <span className="text-body-default font-medium">جاري التحقق من الجلسة...</span>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main
