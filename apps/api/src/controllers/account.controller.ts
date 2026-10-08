@@ -5,6 +5,7 @@ import { HashService } from '../services/hash.service';
 import { TokenService } from '../services/token.service';
 import { UserStatus } from '@prisma/client';
 import { getPhoneVariants } from '@shenoda/shared';
+import { calculateServantAttendanceRate } from '../services/attendanceAnalytics.service';
 
 const EGYPTIAN_PHONE_REGEX = /^(?:\+20|0)?1[0125][0-9]{8}$/;
 
@@ -1129,6 +1130,174 @@ export class AccountController {
       });
     } catch (err: any) {
       console.error('Failed to list servants:', err);
+      return res.status(500).json({
+        success: false,
+        error: { code: 'INTERNAL_SERVER_ERROR', message: err.message },
+      });
+    }
+  }
+
+  /**
+   * GET /api/v1/accounts/:userId
+   * Retrieves full profile and attendance stats of a servant account.
+   */
+  public static async getAccountById(req: Request, res: Response) {
+    try {
+      const operator = req.user;
+      if (!operator) {
+        return res.status(401).json({
+          success: false,
+          error: { code: 'AUTH_REQUIRED', message: 'Authentication required' },
+        });
+      }
+
+      const { userId } = req.params;
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        include: {
+          role: true,
+          scopeAssignments: {
+            include: { stage: true, sector: true },
+          },
+          evaluationsReceived: {
+            include: { evaluator: { select: { id: true, fullName: true } } },
+          },
+          memberAssignments: {
+            include: {
+              member: {
+                select: {
+                  id: true,
+                  fullName: true,
+                  stageId: true,
+                  educationalGrade: true,
+                  phoneNumber: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'USER_NOT_FOUND', message: 'الخادم غير موجود' },
+        });
+      }
+
+      // Check access permission based on operator scope
+      // General Secretary (Level 5): full access
+      // Sector Secretary (Level 4): user in sector or unassigned
+      // Stage Secretary (Level 3): user in stage
+      // Servant / Assistant (Level 1, 2): user in same stage or self
+      if (operator.roleLevel < 5 && operator.userId !== userId) {
+        const userStageIds = user.scopeAssignments
+          .map((sa: any) => sa.stageId)
+          .filter(Boolean) as string[];
+        const userSectorIds = user.scopeAssignments
+          .map((sa: any) => sa.sectorId)
+          .filter(Boolean) as string[];
+
+        if (operator.roleLevel === 4) {
+          const hasCommonSector = userSectorIds.some((sid) =>
+            operator.sectorIds?.includes(sid)
+          );
+          if (!hasCommonSector && userSectorIds.length > 0) {
+            return res.status(403).json({
+              success: false,
+              error: { code: 'ACCESS_DENIED_SCOPE', message: 'الخادم خارج نطاق إشراف قطاعك' },
+            });
+          }
+        } else if (operator.roleLevel <= 3) {
+          const hasCommonStage = userStageIds.some((sid) =>
+            operator.stageIds?.includes(sid)
+          );
+          if (!hasCommonStage && userStageIds.length > 0) {
+            return res.status(403).json({
+              success: false,
+              error: { code: 'ACCESS_DENIED_SCOPE', message: 'الخادم خارج نطاق إشراف مرحلتك' },
+            });
+          }
+        }
+      }
+
+      const stats = await calculateServantAttendanceRate(user.id, 8);
+      const evalItem = user.evaluationsReceived && user.evaluationsReceived.length > 0
+        ? user.evaluationsReceived[0]
+        : null;
+
+      const mappedServant = {
+        id: user.id,
+        fullName: user.fullName,
+        phoneNumber: user.phoneNumber,
+        email: user.email,
+        status: user.status,
+        fatherConfessor: user.fatherConfessor || null,
+        dateOfBirth: user.dateOfBirth
+          ? (typeof user.dateOfBirth === 'string'
+            ? user.dateOfBirth
+            : user.dateOfBirth.toISOString().split('T')[0])
+          : null,
+        address: user.address || null,
+        maritalStatus: user.maritalStatus || null,
+        spouseName: user.spouseName || null,
+        educationOrCareer: user.educationOrCareer || null,
+        jobTitle: user.educationOrCareer || null,
+        childrenInfo: user.childrenInfo || [],
+        whatsappPhone: user.whatsappPhone || user.phoneNumber,
+        whatsappPhoneRaw: user.whatsappPhone || null,
+        facebookUrl: user.facebookUrl || null,
+        instagramUrl: user.instagramUrl || null,
+        talents: user.talents || [],
+        siblingsInfo: user.siblingsInfo || [],
+        activities: user.activities || [],
+        isDeacon: user.isDeacon || false,
+        deaconName: user.deaconName || null,
+        deaconRank: user.deaconRank || null,
+        profilePicture: user.profilePicture || null,
+        role: {
+          id: user.role.id,
+          name: user.role.name,
+          code: user.role.code,
+          level: user.role.level,
+        },
+        currentStage: user.scopeAssignments.find((sa: any) => sa.stage)?.stage
+          ? {
+              id: user.scopeAssignments.find((sa: any) => sa.stage)!.stage!.id,
+              name: user.scopeAssignments.find((sa: any) => sa.stage)!.stage!.name,
+            }
+          : null,
+        currentSector: user.scopeAssignments.find((sa: any) => sa.sector)?.sector
+          ? {
+              id: user.scopeAssignments.find((sa: any) => sa.sector)!.sector!.id,
+              name: user.scopeAssignments.find((sa: any) => sa.sector)!.sector!.name,
+            }
+          : null,
+        evaluation: evalItem
+          ? {
+              financialStatus: evalItem.financialStatus || null,
+              behaviorWithMembers: evalItem.behaviorWithMembers || null,
+              behaviorWithServants: evalItem.behaviorWithServants || null,
+              cooperation: evalItem.cooperation || null,
+              individualInitiative: evalItem.individualInitiative || null,
+              notes: evalItem.notes || null,
+              evaluator: (evalItem as any).evaluator ? { id: (evalItem as any).evaluator.id, fullName: (evalItem as any).evaluator.fullName } : null,
+              updatedAt: evalItem.updatedAt,
+            }
+          : null,
+        stats,
+        assignedMembers: ((user as any).memberAssignments || []).map((ma: any) => ma.member).filter(Boolean),
+        assignedMembersCount: ((user as any).memberAssignments || []).length,
+      };
+
+      return res.status(200).json({
+        success: true,
+        servant: mappedServant,
+        data: mappedServant,
+      });
+    } catch (err: any) {
+      console.error('Failed to get account:', err);
       return res.status(500).json({
         success: false,
         error: { code: 'INTERNAL_SERVER_ERROR', message: err.message },

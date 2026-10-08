@@ -268,8 +268,6 @@ export default function DesignSystemCatalogPage() {
                   ? 'success'
                   : attendanceValue === 'ABSENT'
                   ? 'danger'
-                  : attendanceValue === 'EXCUSED'
-                  ? 'warning'
                   : 'neutral'
               }
             >
@@ -334,14 +332,7 @@ export default function DesignSystemCatalogPage() {
               badgeVariant="success"
               onClick={() => alert('تفاصيل المخدوم: يوحنا مينا فايز')}
             />
-            <MemberRow
-              id="2"
-              name="كيرلس هاني سمير"
-              subtitle="إعدادي بنين — فصل أولى أول • الخادم: بيتر عادل"
-              badgeText="معتذر"
-              badgeVariant="warning"
-              onClick={() => alert('تفاصيل المخدوم: كيرلس هاني سمير')}
-            />
+
             <MemberRow
               id="3"
               name="أبانوب سامي رزق"
@@ -362,7 +353,6 @@ export default function DesignSystemCatalogPage() {
           <div className="flex flex-wrap gap-2">
             <Badge variant="success" withDot>حاضر (Success)</Badge>
             <Badge variant="danger" withDot>غائب (Danger)</Badge>
-            <Badge variant="warning" withDot>معتذر (Warning)</Badge>
             <Badge variant="info" withDot>ملاحظة (Info)</Badge>
             <Badge variant="neutral" withDot>محايد (Neutral)</Badge>
             <Badge variant="primary" withDot>رئيسي (Primary)</Badge>

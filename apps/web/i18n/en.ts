@@ -49,7 +49,6 @@ export const en: TranslationDictionary = {
     title: 'Attendance & Pastoral Follow-up',
     present: 'Present',
     absent: 'Absent',
-    excused: 'Excused',
     late: 'Late',
     mass: 'Holy Mass',
     sundaySchool: 'Sunday School',

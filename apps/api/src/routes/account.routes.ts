@@ -35,3 +35,6 @@ accountRouter.post('/:userId/status', AccountController.updateStatus);
 
 // Audit history for account status changes
 accountRouter.get('/:userId/history', AccountController.getAccountHistory);
+
+// Servant profile and stats retrieval
+accountRouter.get('/:userId', AccountController.getAccountById);

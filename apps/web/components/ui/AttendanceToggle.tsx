@@ -37,12 +37,6 @@ export const AttendanceToggle: React.FC<AttendanceToggleProps> = ({
       activeClasses: 'bg-status-danger text-white border-status-danger shadow-sm',
     },
     {
-      status: 'EXCUSED',
-      label: 'معتذر',
-      icon: <Clock className="w-4 h-4" strokeWidth={2.5} />,
-      activeClasses: 'bg-status-warning text-white border-status-warning shadow-sm',
-    },
-    {
       status: 'UNSET',
       label: 'غير محدد',
       icon: <HelpCircle className="w-4 h-4" strokeWidth={2} />,
