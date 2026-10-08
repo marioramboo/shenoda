@@ -853,17 +853,15 @@ export default function AttendancePage() {
   const metrics = useMemo(() => {
     let present = 0;
     let absent = 0;
-    let excused = 0;
     let unset = 0;
 
     for (const m of members) {
       if (m.status === 'PRESENT') present++;
       else if (m.status === 'ABSENT') absent++;
-      else if (m.status === 'EXCUSED') excused++;
       else unset++;
     }
 
-    return { present, absent, excused, unset, total: members.length };
+    return { present, absent, unset, total: members.length };
   }, [members]);
 
   // Update member status locally with tactile feedback
@@ -1140,7 +1138,6 @@ export default function AttendancePage() {
                 <div className="flex items-center gap-2">
                   <Badge variant="success">حاضر: {metrics.present}</Badge>
                   <Badge variant="danger">غائب: {metrics.absent}</Badge>
-                  <Badge variant="warning">معتذر: {metrics.excused}</Badge>
                 </div>
 
                 <button
@@ -1664,7 +1661,7 @@ export default function AttendancePage() {
                 className="h-[46px] text-body font-bold shadow-md"
               >
                 <Save className="w-4 h-4 ml-1.5" />
-                <span>حفظ الحضور ({metrics.present + metrics.absent + metrics.excused} مخدوم)</span>
+                <span>حفظ الحضور ({metrics.present + metrics.absent} مخدوم)</span>
               </Button>
             </div>
           </div>
@@ -1823,7 +1820,7 @@ export default function AttendancePage() {
                   <label className="text-caption font-semibold text-text-secondary block mb-1.5">
                     حالة الحضور
                   </label>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
                       onClick={() => setRecordServantStatus('PRESENT')}
@@ -1835,18 +1832,6 @@ export default function AttendancePage() {
                       )}
                     >
                       حاضر
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setRecordServantStatus('EXCUSED')}
-                      className={cn(
-                        'py-2 px-3 rounded-card text-caption font-bold border transition-all text-center',
-                        recordServantStatus === 'EXCUSED'
-                          ? 'bg-status-warning text-white border-status-warning shadow-sm'
-                          : 'bg-bg-muted text-text-secondary border-border-default hover:bg-bg-muted/80'
-                      )}
-                    >
-                      معتذر
                     </button>
                     <button
                       type="button"

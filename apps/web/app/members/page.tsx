@@ -31,12 +31,11 @@ import {
   Settings2,
 } from 'lucide-react';
 
-type AttStatus = 'PRESENT' | 'ABSENT' | 'EXCUSED';
+type AttStatus = 'PRESENT' | 'ABSENT';
 
 const STATUS_BUTTONS: { key: AttStatus; label: string; active: string }[] = [
   { key: 'PRESENT', label: 'حاضر', active: 'bg-status-success text-white border-status-success' },
   { key: 'ABSENT', label: 'غائب', active: 'bg-status-danger text-white border-status-danger' },
-  { key: 'EXCUSED', label: 'معتذر', active: 'bg-status-warning text-white border-status-warning' },
 ];
 
 // Sketch chips: القداس / الخدمة / الأنشطة (+ الافتقاد)
@@ -64,7 +63,7 @@ const StatusButtons: React.FC<{
   idPrefix: string;
   labels?: Partial<Record<AttStatus, string>>;
 }> = ({ value, disabled, onPick, idPrefix, labels }) => (
-  <div className="grid grid-cols-3 gap-2">
+  <div className="grid grid-cols-2 gap-2">
     {STATUS_BUTTONS.map((b) => (
       <button
         key={b.key}
@@ -764,7 +763,7 @@ export default function MembersListPage() {
                         onPick={(st) => markServant(s.id, st)}
                         labels={
                           servantSession === ServantSessionType.LESSON_PREPARATION
-                            ? { PRESENT: 'حضر', ABSENT: 'لم يحضر', EXCUSED: 'معتذر' }
+                            ? { PRESENT: 'حضر', ABSENT: 'لم يحضر' }
                             : undefined
                         }
                       />

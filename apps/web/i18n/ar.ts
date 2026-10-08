@@ -51,7 +51,6 @@ export const ar = {
     title: 'جدول المتابعة والحضور',
     present: 'حاضر',
     absent: 'غائب',
-    excused: 'معتذر',
     late: 'متأخر',
     mass: 'القداس الإلهي',
     sundaySchool: 'مدارس الأحد',

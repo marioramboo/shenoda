@@ -73,12 +73,6 @@ export const FollowUpTable: React.FC<FollowUpTableProps> = ({
             <X className="w-4 h-4" strokeWidth={2.5} />
           </span>
         );
-      case 'EXCUSED':
-        return (
-          <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-status-warning-soft text-status-warning">
-            <Clock className="w-4 h-4" strokeWidth={2.5} />
-          </span>
-        );
       default:
         return (
           <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-bg-muted text-text-tertiary text-caption font-bold">
@@ -201,10 +195,6 @@ export const FollowUpTable: React.FC<FollowUpTableProps> = ({
           <span className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-status-danger" />
             غائب
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-status-warning" />
-            معتذر
           </span>
         </div>
         <div className="flex items-center gap-1 text-text-tertiary">

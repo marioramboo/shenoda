@@ -43,26 +43,24 @@ export async function calculateMemberAttendanceRate(
 
   let present = 0;
   let absent = 0;
-  let excused = 0;
   let late = 0;
 
   for (const r of records) {
     if (r.status === 'PRESENT') present++;
     else if (r.status === 'ABSENT') absent++;
-    else if (r.status === 'EXCUSED') excused++;
     else if (r.status === 'LATE') {
       late++;
       present++; // Late counts as attended in attendance rate
     }
   }
 
-  const total = present + absent + excused;
+  const total = present + absent;
   const rate = total > 0 ? Math.round((present / total) * 100) : 100;
 
   return {
     presentCount: present,
     absentCount: absent,
-    excusedCount: excused,
+    excusedCount: 0,
     lateCount: late,
     totalSessions: total,
     attendanceRatePercentage: rate,
@@ -108,26 +106,24 @@ export async function calculateServantAttendanceRate(
 
   let present = 0;
   let absent = 0;
-  let excused = 0;
   let late = 0;
 
   for (const r of records) {
     if (r.status === 'PRESENT') present++;
     else if (r.status === 'ABSENT') absent++;
-    else if (r.status === 'EXCUSED') excused++;
     else if (r.status === 'LATE') {
       late++;
       present++;
     }
   }
 
-  const total = present + absent + excused;
+  const total = present + absent;
   const rate = total > 0 ? Math.round((present / total) * 100) : 100;
 
   return {
     presentCount: present,
     absentCount: absent,
-    excusedCount: excused,
+    excusedCount: 0,
     lateCount: late,
     totalSessions: total,
     attendanceRatePercentage: rate,
@@ -160,26 +156,24 @@ export async function calculateStageAttendanceSummary(
 
   let present = 0;
   let absent = 0;
-  let excused = 0;
   let late = 0;
 
   for (const r of records) {
     if (r.status === 'PRESENT') present++;
     else if (r.status === 'ABSENT') absent++;
-    else if (r.status === 'EXCUSED') excused++;
     else if (r.status === 'LATE') {
       late++;
       present++;
     }
   }
 
-  const total = present + absent + excused;
+  const total = present + absent;
   const rate = total > 0 ? Math.round((present / total) * 100) : 100;
 
   return {
     presentCount: present,
     absentCount: absent,
-    excusedCount: excused,
+    excusedCount: 0,
     lateCount: late,
     totalMembers: total,
     attendanceRatePercentage: rate,

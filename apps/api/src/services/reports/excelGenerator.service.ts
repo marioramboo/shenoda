@@ -12,7 +12,7 @@ export interface ExcelMemberAttendanceExportOptions {
   attendanceRecords: Array<{
     memberId: string;
     sessionDate: string;
-    status: string; // 'PRESENT', 'ABSENT', 'EXCUSED'
+    status: string; // 'PRESENT', 'ABSENT'
   }>;
   generatedBy: string;
 }
@@ -104,8 +104,6 @@ export class ExcelGeneratorService {
         if (status === 'PRESENT') {
           rowValues.push('حاضر');
           presentCount++;
-        } else if (status === 'EXCUSED') {
-          rowValues.push('معتذر');
         } else {
           rowValues.push('غائب');
         }
