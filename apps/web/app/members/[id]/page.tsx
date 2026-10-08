@@ -469,6 +469,7 @@ export default function MemberProfilePage() {
                   ['اسم الأم', member.motherName],
                   ['المدرسة / الكلية', member.schoolOrUniversity],
                   ['أب الاعتراف', member.fatherConfessor],
+                  ['كنيسة أب الاعتراف', member.fatherConfessorChurch],
                   ['رقم الهاتف', member.phoneNumber],
                 ].map(([label, value]) => (
                   <div key={label as string}>

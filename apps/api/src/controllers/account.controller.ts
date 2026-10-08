@@ -44,6 +44,7 @@ const updateAccountSchema = z.object({
 
   // Non-evaluative servant profile fields
   fatherConfessor: z.string().optional().nullable(),
+  fatherConfessorChurch: z.string().optional().nullable(),
   dateOfBirth: z.string().optional().nullable(),
   address: z.string().optional().nullable(),
   maritalStatus: z.string().optional().nullable(),
@@ -706,6 +707,7 @@ export class AccountController {
       roleCode,
       temporaryPassword,
       fatherConfessor,
+      fatherConfessorChurch,
       dateOfBirth,
       address,
       maritalStatus,
@@ -879,6 +881,8 @@ export class AccountController {
       updateData.passwordHash = await HashService.hashPassword(temporaryPassword);
     }
     if (fatherConfessor !== undefined) updateData.fatherConfessor = fatherConfessor ? fatherConfessor.trim() : null;
+    if (fatherConfessorChurch !== undefined)
+      updateData.fatherConfessorChurch = fatherConfessorChurch ? fatherConfessorChurch.trim() : null;
     if (dateOfBirth !== undefined) {
       updateData.dateOfBirth = dateOfBirth ? new Date(dateOfBirth) : null;
     }
@@ -954,6 +958,7 @@ export class AccountController {
         phoneNumber: updatedUser.phoneNumber,
         email: updatedUser.email,
         fatherConfessor: updatedUser.fatherConfessor,
+        fatherConfessorChurch: updatedUser.fatherConfessorChurch,
         dateOfBirth: updatedUser.dateOfBirth
           ? (typeof updatedUser.dateOfBirth === 'string'
             ? updatedUser.dateOfBirth
@@ -1086,6 +1091,7 @@ export class AccountController {
         email: s.email,
         status: s.status,
         fatherConfessor: s.fatherConfessor || null,
+        fatherConfessorChurch: s.fatherConfessorChurch || null,
         dateOfBirth: s.dateOfBirth,
         address: s.address || null,
         maritalStatus: s.maritalStatus || null,
@@ -1234,6 +1240,7 @@ export class AccountController {
         email: user.email,
         status: user.status,
         fatherConfessor: user.fatherConfessor || null,
+        fatherConfessorChurch: user.fatherConfessorChurch || null,
         dateOfBirth: user.dateOfBirth
           ? (typeof user.dateOfBirth === 'string'
             ? user.dateOfBirth

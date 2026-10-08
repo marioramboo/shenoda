@@ -10,6 +10,7 @@ export interface MockUser {
   passwordHash: string;
   status: UserStatus;
   fatherConfessor?: string | null;
+  fatherConfessorChurch?: string | null;
   dateOfBirth?: Date | null;
   address?: string | null;
   maritalStatus?: string | null;
@@ -96,6 +97,7 @@ export interface MockServedMember {
   address: string;
   phoneNumber: string | null;
   fatherConfessor: string | null;
+  fatherConfessorChurch: string | null;
   fatherName: string | null;
   fatherAge: number | null;
   motherName: string | null;
@@ -585,6 +587,7 @@ export function createMockPrisma() {
           passwordHash: data.passwordHash,
           status: data.status || UserStatus.ACTIVE,
           fatherConfessor: data.fatherConfessor || null,
+          fatherConfessorChurch: data.fatherConfessorChurch || null,
           dateOfBirth: data.dateOfBirth || null,
           address: data.address || null,
           maritalStatus: data.maritalStatus || null,
@@ -871,6 +874,7 @@ export function createMockPrisma() {
           address: data.address,
           phoneNumber: data.phoneNumber || null,
           fatherConfessor: data.fatherConfessor || null,
+          fatherConfessorChurch: data.fatherConfessorChurch || null,
           fatherName: data.fatherName || null,
           fatherAge: data.fatherAge || null,
           motherName: data.motherName || null,

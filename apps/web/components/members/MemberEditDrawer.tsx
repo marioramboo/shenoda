@@ -5,6 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { FatherConfessorFields } from '@/components/common/FatherConfessorFields';
 import { X, Lock, ShieldAlert, CheckCircle2, AlertCircle } from 'lucide-react';
 
 interface MemberEditDrawerProps {
@@ -45,6 +46,7 @@ export const MemberEditDrawer: React.FC<MemberEditDrawerProps> = ({
   const [address, setAddress] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [fatherConfessor, setFatherConfessor] = useState('');
+  const [fatherConfessorChurch, setFatherConfessorChurch] = useState('');
   const [schoolOrUniversity, setSchoolOrUniversity] = useState('');
   const [educationalGrade, setEducationalGrade] = useState('');
   const [fatherName, setFatherName] = useState('');
@@ -68,6 +70,7 @@ export const MemberEditDrawer: React.FC<MemberEditDrawerProps> = ({
       setAddress(member.address || '');
       setPhoneNumber(member.phoneNumber || '');
       setFatherConfessor(member.fatherConfessor || '');
+      setFatherConfessorChurch(member.fatherConfessorChurch || '');
       setSchoolOrUniversity(member.schoolOrUniversity || '');
       setEducationalGrade(member.educationalGrade || '');
       setFatherName(member.fatherName || '');
@@ -125,6 +128,7 @@ export const MemberEditDrawer: React.FC<MemberEditDrawerProps> = ({
         address,
         phoneNumber: phoneNumber || null,
         fatherConfessor: fatherConfessor || null,
+        fatherConfessorChurch: fatherConfessorChurch || null,
         schoolOrUniversity: schoolOrUniversity || null,
         educationalGrade: educationalGrade || null,
         fatherName: fatherName || null,
@@ -291,10 +295,13 @@ export const MemberEditDrawer: React.FC<MemberEditDrawerProps> = ({
                 />
               </div>
 
-              <Input
-                label="أب الاعتراف"
-                value={fatherConfessor}
-                onChange={(e) => setFatherConfessor(e.target.value)}
+              <FatherConfessorFields
+                fatherConfessor={fatherConfessor}
+                fatherConfessorChurch={fatherConfessorChurch}
+                onChange={(fc, fcc) => {
+                  setFatherConfessor(fc);
+                  setFatherConfessorChurch(fcc);
+                }}
               />
 
               <Input

@@ -57,6 +57,7 @@ const updateProfileSchema = z.object({
     .optional(),
   email: z.string().email('بريد إلكتروني غير صالح').optional().nullable(),
   fatherConfessor: z.string().optional().nullable(),
+  fatherConfessorChurch: z.string().optional().nullable(),
   dateOfBirth: z
     .string()
     .optional()
@@ -252,6 +253,7 @@ export class AuthController {
         email: user.email,
         status: user.status,
         fatherConfessor: user.fatherConfessor,
+        fatherConfessorChurch: user.fatherConfessorChurch,
         dateOfBirth: user.dateOfBirth,
         address: user.address,
         maritalStatus: user.maritalStatus,
@@ -356,6 +358,7 @@ export class AuthController {
           email: user.email,
           status: user.status,
           fatherConfessor: user.fatherConfessor,
+          fatherConfessorChurch: user.fatherConfessorChurch,
           dateOfBirth: user.dateOfBirth,
           address: user.address,
           maritalStatus: user.maritalStatus,
@@ -575,6 +578,7 @@ export class AuthController {
         email: user.email,
         status: user.status,
         fatherConfessor: user.fatherConfessor,
+        fatherConfessorChurch: user.fatherConfessorChurch,
         dateOfBirth: user.dateOfBirth,
         address: user.address,
         maritalStatus: user.maritalStatus,
@@ -634,6 +638,7 @@ export class AuthController {
       phoneNumber,
       email,
       fatherConfessor,
+      fatherConfessorChurch,
       dateOfBirth,
       address,
       maritalStatus,
@@ -769,6 +774,8 @@ export class AuthController {
         phoneNumber: phoneNumber !== undefined ? phoneNumber : undefined,
         email: email !== undefined ? (email ? email.toLowerCase() : null) : undefined,
         fatherConfessor: fatherConfessor !== undefined ? fatherConfessor : undefined,
+        fatherConfessorChurch:
+          fatherConfessorChurch !== undefined ? fatherConfessorChurch : undefined,
         dateOfBirth:
           dateOfBirth !== undefined ? (dateOfBirth ? new Date(dateOfBirth) : null) : undefined,
         address: address !== undefined ? address : undefined,
@@ -807,6 +814,7 @@ export class AuthController {
         email: updatedUser.email,
         status: updatedUser.status,
         fatherConfessor: updatedUser.fatherConfessor,
+        fatherConfessorChurch: updatedUser.fatherConfessorChurch,
         dateOfBirth: updatedUser.dateOfBirth,
         address: updatedUser.address,
         maritalStatus: updatedUser.maritalStatus,

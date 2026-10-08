@@ -23,6 +23,7 @@ export interface AuthUser {
   email: string | null;
   status: string;
   fatherConfessor?: string | null;
+  fatherConfessorChurch?: string | null;
   dateOfBirth?: string | Date | null;
   address?: string | null;
   maritalStatus?: string | null;

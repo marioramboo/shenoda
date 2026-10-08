@@ -127,6 +127,7 @@ export interface StageServantItem {
   email?: string;
   status?: string;
   fatherConfessor?: string | null;
+  fatherConfessorChurch?: string | null;
   dateOfBirth?: string | null;
   address?: string | null;
   maritalStatus?: string | null;
