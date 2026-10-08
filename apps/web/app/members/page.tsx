@@ -139,6 +139,16 @@ export default function MembersListPage() {
   const [servantSession, setServantSession] = useState<ServantSessionType>(ServantSessionType.MASS);
   const [servantStatusMap, setServantStatusMap] = useState<Record<string, AttStatus>>({});
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam === 'servants' || tabParam === 'members') {
+        setViewTab(tabParam);
+      }
+    }
+  }, []);
+
   const isSupervisor = (user?.role?.level ?? 1) >= 3;
   const isGeneralSecretary = (user?.role?.level ?? 1) >= 5 || user?.role?.code === 'GENERAL_SECRETARY';
 
@@ -742,20 +752,32 @@ export default function MembersListPage() {
                       key={s.id}
                       className="bg-bg-surface border border-border-default rounded-card p-3.5 shadow-card flex flex-col gap-3"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="w-11 h-11 rounded-full bg-brand-primary-soft text-brand-primary font-bold flex items-center justify-center shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/servants/${s.id}`)}
+                        className="flex items-center gap-3 text-right w-full group cursor-pointer"
+                      >
+                        <div className="w-11 h-11 rounded-full bg-brand-primary-soft text-brand-primary font-bold flex items-center justify-center shrink-0 border border-[#D5E1F0]">
                           {initialsOf(s.fullName)}
                         </div>
-                        <div className="flex-1 min-w-0 text-right">
-                          <h3 className="text-body-default font-bold text-text-primary truncate">{s.fullName}</h3>
-                          <p className="text-caption text-text-secondary">{s.role?.name}</p>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-body-default font-bold text-text-primary truncate group-hover:text-brand-primary transition-colors">
+                            {s.fullName}
+                          </h3>
+                          <p className="text-caption text-text-secondary truncate">
+                            {s.role?.name || 'خادم'}
+                            {s.currentStage?.name ? ` • ${s.currentStage.name}` : ''}
+                          </p>
                         </div>
                         {s.status === 'SUSPENDED' ? (
-                          <Badge variant="neutral">موقوف</Badge>
+                          <Badge variant="neutral" className="shrink-0">موقوف</Badge>
                         ) : (
-                          <Badge variant="success">{s.stats?.attendanceRatePercentage ?? 100}%</Badge>
+                          <Badge variant="success" className="shrink-0">
+                            {s.stats?.attendanceRatePercentage ?? 100}%
+                          </Badge>
                         )}
-                      </div>
+                        <ChevronLeft className="w-4 h-4 text-text-secondary shrink-0 group-hover:text-brand-primary transition-colors" />
+                      </button>
                       <StatusButtons
                         idPrefix={`servant-${s.id}`}
                         value={servantStatusMap[s.id]}

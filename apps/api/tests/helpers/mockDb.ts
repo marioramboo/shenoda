@@ -420,12 +420,38 @@ export function createMockPrisma() {
         const sector = s.sectorId ? sectors.find((sec) => sec.id === s.sectorId) : null;
         return { ...s, stage, sector };
       });
-    const userEvals = servantEvaluations.filter((e) => e.subjectUserId === u.id);
+    const userEvals = servantEvaluations
+      .filter((e) => e.subjectUserId === u.id)
+      .map((e) => {
+        const evaluator = users.find((ev) => ev.id === e.evaluatorUserId);
+        return {
+          ...e,
+          evaluator: evaluator ? { id: evaluator.id, fullName: evaluator.fullName } : null,
+        };
+      });
+    const userMemberAssignments = memberServantAssignments
+      .filter((a) => a.servantUserId === u.id)
+      .map((a) => {
+        const member = members.find((m) => m.id === a.memberId);
+        return {
+          ...a,
+          member: member
+            ? {
+                id: member.id,
+                fullName: member.fullName,
+                stageId: member.stageId,
+                educationalGrade: member.educationalGrade,
+                phoneNumber: member.phoneNumber,
+              }
+            : null,
+        };
+      });
     return {
       ...u,
       role: role || { id: u.roleId, code: 'UNKNOWN', name: 'غير معروف', level: 1 },
       scopeAssignments: userScopes,
       evaluationsReceived: userEvals,
+      memberAssignments: userMemberAssignments,
     };
   };
 
