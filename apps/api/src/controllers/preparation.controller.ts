@@ -1,6 +1,9 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/prisma';
 import { PrepStatus as PrismaPrepStatus } from '@prisma/client';
+import { NotificationQueueService } from '../services/notificationQueue.service';
+import { NotificationType } from '@shenoda/shared';
+import { runLessonPreparationReminderCheck } from '../jobs/reminderCron';
 
 export function formatPreparation(prep: any) {
   if (!prep) return prep;
@@ -730,4 +733,130 @@ export class PreparationController {
       timestamp: new Date().toISOString(),
     });
   }
+
+  /**
+   * POST /api/v1/preparations/remind/:servantId
+   * Sends an in-app & push notification reminder to an unprepared servant
+   * and registers them for daily recurring reminder notifications until preparation is submitted.
+   */
+  static async remindServant(req: Request, res: Response) {
+    try {
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          error: { code: 'AUTH_REQUIRED', message: 'Authentication required' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      if (user.roleLevel < 2) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'Only supervisors can dispatch preparation reminders' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const servantId = req.params.servantId;
+      const { eventId, lessonTitle } = req.body;
+
+      if (!servantId) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'BAD_REQUEST', message: 'Servant ID is required' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const servant = await prisma.user.findUnique({
+        where: { id: servantId },
+        select: { id: true, fullName: true, phoneNumber: true },
+      });
+
+      if (!servant) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'Servant not found' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const lessonName = lessonTitle ? lessonTitle.trim() : 'درس الأسبوع';
+
+      // Send the preparation deadline reminder notification
+      const logs = await NotificationQueueService.sendNotification({
+        userId: servant.id,
+        type: NotificationType.PREP_DEADLINE,
+        title: 'تذكير يومي بتحضير الدرس',
+        body: `تذكير: لم تقم برفع تحضير (${lessonName}) حتى الآن. سيتم تذكيرك يومياً عبر الإشعارات حتى إتمام تسليم التحضير.`,
+        dataPayload: {
+          eventId: eventId || null,
+          lessonTitle: lessonName,
+          actionUrl: '/prep',
+          recurringDaily: true,
+        },
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: `تم إرسال إشعار التذكير وتفعيل التذكير اليومي للخادم ${servant.fullName} حتى يتم تسليم التحضير`,
+        data: {
+          servantId: servant.id,
+          servantName: servant.fullName,
+          logs,
+        },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      console.error('Error in remindServant:', err);
+      return res.status(500).json({
+        success: false,
+        error: { code: 'INTERNAL_SERVER_ERROR', message: err.message },
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
+  /**
+   * POST /api/v1/preparations/run-daily-reminders
+   * Triggers daily recurring preparation reminder check for all active unprepared servants.
+   */
+  static async runDailyReminders(req: Request, res: Response) {
+    try {
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          error: { code: 'AUTH_REQUIRED', message: 'Authentication required' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      if (user.roleLevel < 3) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'Only stage secretaries or above can trigger daily reminder run' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const result = await runLessonPreparationReminderCheck();
+
+      return res.status(200).json({
+        success: true,
+        message: `تم تشغيل فحص التذكيرات اليومية بنجاح (${result.remindersSentCount} تذكير تم إرساله)`,
+        data: result,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      console.error('Error in runDailyReminders:', err);
+      return res.status(500).json({
+        success: false,
+        error: { code: 'INTERNAL_SERVER_ERROR', message: err.message },
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
 }
+

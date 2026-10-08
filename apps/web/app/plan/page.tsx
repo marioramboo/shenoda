@@ -36,6 +36,8 @@ import {
   Send,
   HelpCircle,
   Phone,
+  Bell,
+  Loader2,
   Bookmark,
   CheckCircle,
   Clock3,
@@ -45,6 +47,7 @@ import {
   ShieldAlert,
   UserCheck,
 } from 'lucide-react';
+
 
 enum EventCategory {
   LITURGY_FEAST = 'LITURGY_FEAST',
@@ -227,6 +230,11 @@ export default function StagePlanPage() {
   const [inspectionData, setInspectionData] = useState<LessonInspectionData | null>(null);
   const [inspectionLoading, setInspectionLoading] = useState(false);
   const [activeInspectTab, setActiveInspectTab] = useState<'prepared' | 'unprepared'>('prepared');
+
+  // Daily notification reminder state
+  const [remindingServantId, setRemindingServantId] = useState<string | null>(null);
+  const [remindedServants, setRemindedServants] = useState<Set<string>>(new Set());
+
 
   // 3. Servant Preparation Submission Modal (For Servant)
   const [prepModalOpen, setPrepModalOpen] = useState(false);
@@ -868,7 +876,33 @@ export default function StagePlanPage() {
     }
   };
 
+  // Dispatch Daily Notification Reminder (replaces phone call)
+  const handleSendReminderNotification = async (servant: { id: string; fullName: string }) => {
+    setRemindingServantId(servant.id);
+    try {
+      await api.post(`/api/v1/preparations/remind/${servant.id}`, {
+        eventId: inspectingEvent?.id,
+        lessonTitle: inspectingEvent?.title,
+      });
+      setRemindedServants((prev) => new Set([...prev, servant.id]));
+      setActionMessage({
+        type: 'success',
+        text: `تم إرسال إشعار التذكير للخادم (${servant.fullName}) وتفعيل التذكير اليومي حتى يتم تسليم التحضير`,
+      });
+      setTimeout(() => setActionMessage(null), 4000);
+    } catch (err: any) {
+      setActionMessage({
+        type: 'error',
+        text: err.response?.data?.error?.message || 'تعذر إرسال إشعار التذكير للخادم',
+      });
+      setTimeout(() => setActionMessage(null), 4000);
+    } finally {
+      setRemindingServantId(null);
+    }
+  };
+
   // Open Servant Preparation Form for a Lesson (Create or Edit)
+
   const handleOpenPrepModal = (evt: CalendarEvent, existingPrep?: LessonPreparationData) => {
     const prepToEdit = existingPrep || getUserPrepForEvent(evt);
     setTargetLessonEvent(evt);
@@ -2194,17 +2228,28 @@ export default function StagePlanPage() {
                             </p>
                           </div>
 
-                          {s.phoneNumber && (
-                            <a
-                              href={`tel:${s.phoneNumber}`}
-                              className="inline-flex items-center gap-1 text-caption text-brand-primary bg-brand-primary-soft px-2.5 py-1 rounded-card hover:bg-brand-primary/20 transition-colors"
-                            >
-                              <Phone className="w-3 h-3" />
-                              <span>تذكير</span>
-                            </a>
-                          )}
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={remindedServants.has(s.id) ? 'secondary' : 'outline'}
+                            disabled={remindingServantId === s.id || remindedServants.has(s.id)}
+                            onClick={() => handleSendReminderNotification(s)}
+                            className="inline-flex items-center gap-1 text-caption h-7 px-2.5 rounded-card transition-colors shrink-0"
+                          >
+                            {remindingServantId === s.id ? (
+                              <Loader2 className="w-3 h-3 animate-spin text-brand-primary" />
+                            ) : remindedServants.has(s.id) ? (
+                              <Check className="w-3 h-3 text-status-success" />
+                            ) : (
+                              <Bell className="w-3 h-3 text-brand-primary" />
+                            )}
+                            <span>
+                              {remindedServants.has(s.id) ? 'تم التذكير اليومي' : 'تذكير'}
+                            </span>
+                          </Button>
                         </div>
                       ))}
+
                     </div>
                   )
                 )}

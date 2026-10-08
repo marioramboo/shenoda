@@ -12,6 +12,11 @@ const cairo = Cairo({
 export const metadata: Metadata = {
   title: 'نظام إدارة الخدمة الكنسية | Church Service Management',
   description: 'نظام متابعة الخدام والمخدومين وافتقاد الكنيسة القبطية الأرثوذكسية',
+  manifest: '/manifest.json',
+  icons: {
+    icon: '/logo.jpg',
+    apple: '/logo.jpg',
+  },
 };
 
 export const viewport: Viewport = {
@@ -19,7 +24,9 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  themeColor: '#0D3B66',
 };
+
 
 import { ClientProviders } from '@/components/providers/ClientProviders';
 

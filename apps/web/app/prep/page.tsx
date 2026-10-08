@@ -24,6 +24,7 @@ import {
   AlertCircle,
   X,
   Phone,
+  Bell,
   MessageSquare,
   ShieldCheck,
   Check,
@@ -32,6 +33,7 @@ import {
   Sparkles,
   Users,
 } from 'lucide-react';
+
 
 interface LessonEvent {
   id: string;
@@ -115,6 +117,11 @@ export default function CurriculumPrepPage() {
   const [reviewModalPrep, setReviewModalPrep] = useState<any | null>(null);
   const [reviewNotes, setReviewNotes] = useState('');
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
+
+  // Daily notification reminder state
+  const [remindingServantId, setRemindingServantId] = useState<string | null>(null);
+  const [remindedServants, setRemindedServants] = useState<Set<string>>(new Set());
+
 
   // Load stages
   useEffect(() => {
@@ -378,7 +385,28 @@ export default function CurriculumPrepPage() {
     }
   };
 
+  // Dispatch Daily Notification Reminder (replaces phone call)
+  const handleSendReminderNotification = async (servant: { id: string; fullName: string }) => {
+    setRemindingServantId(servant.id);
+    try {
+      await api.post(`/api/v1/preparations/remind/${servant.id}`, {
+        eventId: currentLesson?.id,
+        lessonTitle: currentLesson?.title,
+      });
+      setRemindedServants((prev) => new Set([...prev, servant.id]));
+      setToastMessage(
+        `تم إرسال إشعار التذكير للخادم (${servant.fullName}) وتفعيل التذكير اليومي حتى يتم تسليم التحضير`
+      );
+      setTimeout(() => setToastMessage(null), 4000);
+    } catch (err: any) {
+      alert(err.response?.data?.error?.message || 'تعذر إرسال إشعار التذكير للخادم');
+    } finally {
+      setRemindingServantId(null);
+    }
+  };
+
   // Open Create Lesson Modal
+
   const handleOpenCreateLessonModal = () => {
     setEditingLesson(null);
     setLessonModalTitle('');
@@ -946,17 +974,28 @@ export default function CurriculumPrepPage() {
                               </h4>
                               <p className="text-caption text-status-danger font-medium">لم يقدم التحضير</p>
                             </div>
-                            {item.phoneNumber && (
-                              <a
-                                href={`tel:${item.phoneNumber}`}
-                                className="px-2.5 py-1 rounded-pill bg-bg-surface border border-border-default text-caption font-bold text-brand-primary flex items-center gap-1 hover:bg-bg-muted"
-                              >
-                                <Phone className="w-3 h-3" />
-                                <span>تذكير</span>
-                              </a>
-                            )}
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={remindedServants.has(item.id) ? 'secondary' : 'outline'}
+                              disabled={remindingServantId === item.id || remindedServants.has(item.id)}
+                              onClick={() => handleSendReminderNotification(item)}
+                              className="px-2.5 py-1 text-caption font-bold h-8 flex items-center gap-1.5 shrink-0 bg-bg-surface border-border-default hover:bg-bg-muted"
+                            >
+                              {remindingServantId === item.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-primary" />
+                              ) : remindedServants.has(item.id) ? (
+                                <Check className="w-3.5 h-3.5 text-status-success" />
+                              ) : (
+                                <Bell className="w-3.5 h-3.5 text-brand-primary" />
+                              )}
+                              <span>
+                                {remindedServants.has(item.id) ? 'تم التذكير اليومي' : 'تذكير'}
+                              </span>
+                            </Button>
                           </div>
                         ))}
+
                     </div>
                   </section>
                 )}

@@ -1,5 +1,6 @@
 import { createApp } from './app';
 import { env } from './config/env';
+import { runLessonPreparationReminderCheck } from './jobs/reminderCron';
 
 const app = createApp();
 
@@ -9,9 +10,18 @@ const server = app.listen(env.PORT, () => {
   console.log(`🩺 Healthcheck: http://localhost:${env.PORT}/health`);
 });
 
+// Daily lesson preparation reminder routine (every 24 hours)
+const DAILY_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const dailyReminderInterval = setInterval(() => {
+  runLessonPreparationReminderCheck().catch((err) => {
+    console.error('Error running daily lesson preparation reminders:', err);
+  });
+}, DAILY_INTERVAL_MS);
+
 // Graceful shutdown
 const shutdown = () => {
   console.log('Stopping server gracefully...');
+  clearInterval(dailyReminderInterval);
   server.close(() => {
     console.log('HTTP server closed.');
     process.exit(0);
@@ -20,3 +30,4 @@ const shutdown = () => {
 
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
+

@@ -16,8 +16,10 @@ import {
   Mail,
   Send,
 } from 'lucide-react';
+import { requestPushPermission } from '@/components/notifications/PushNotificationPrompt';
 
 export interface NotificationLogItem {
+
   id: string;
   type: string;
   channel: string;
@@ -53,6 +55,7 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isSavingPref, setIsSavingPref] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [testPushSent, setTestPushSent] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -91,6 +94,10 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
   };
 
   const handleUpdatePreferences = async (updated: Partial<UserPreferences>) => {
+    if (updated.enablePush) {
+      await requestPushPermission();
+    }
+
     setIsSavingPref(true);
     setSaveSuccess(false);
     const newPrefs = { ...preferences, ...updated };
@@ -106,6 +113,27 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
       setIsSavingPref(false);
     }
   };
+
+  const handleSendTestPush = async () => {
+    const perm = await requestPushPermission();
+    if (perm === 'granted' && 'serviceWorker' in navigator) {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        reg.showNotification('إشعار تجريبي - نظام شنودة 🔔', {
+          body: 'هذا إشعار تجريبي يعمل على هاتفك بنجاح لتأكيد استقبال تنبيهات الخدمة والتحضيرات!',
+          icon: '/logo.jpg',
+          badge: '/logo.jpg',
+          vibrate: [200, 100, 200],
+        } as any);
+
+        setTestPushSent(true);
+        setTimeout(() => setTestPushSent(false), 3000);
+      } catch (err) {
+        console.warn('Error showing local test push:', err);
+      }
+    }
+  };
+
 
   if (!isOpen) return null;
 
@@ -265,29 +293,47 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
 
               <div className="space-y-3">
                 {/* Web Push */}
-                <div className="p-4 rounded-card border border-border-default bg-bg-surface flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-input bg-brand-primary-soft text-brand-primary">
-                      <Send className="w-5 h-5" />
+                <div className="p-4 rounded-card border border-border-default bg-bg-surface flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-input bg-brand-primary-soft text-brand-primary">
+                        <Send className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="text-body-default font-bold text-text-primary">
+                          إشعارات المتصفح والموبايل (Push)
+                        </p>
+                        <p className="text-caption text-text-secondary">
+                          تنبيهات فورية على الهاتف وشاشة القفل
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-body-default font-bold text-text-primary">
-                        إشعارات المتصفح والموبايل (Push)
-                      </p>
-                      <p className="text-caption text-text-secondary">
-                        تنبيهات فورية على الهاتف وشاشة القفل
-                      </p>
-                    </div>
+                    <input
+                      type="checkbox"
+                      checked={preferences.enablePush}
+                      onChange={(e) =>
+                        handleUpdatePreferences({ enablePush: e.target.checked })
+                      }
+                      className="w-5 h-5 rounded text-brand-primary focus:ring-brand-primary cursor-pointer"
+                    />
                   </div>
-                  <input
-                    type="checkbox"
-                    checked={preferences.enablePush}
-                    onChange={(e) =>
-                      handleUpdatePreferences({ enablePush: e.target.checked })
-                    }
-                    className="w-5 h-5 rounded text-brand-primary focus:ring-brand-primary cursor-pointer"
-                  />
+                  {preferences.enablePush && (
+                    <div className="pt-2 border-t border-border-default flex items-center justify-between">
+                      <span className="text-[11px] text-text-secondary">
+                        فحص وصول الإشعارات إلى هاتفك:
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleSendTestPush}
+                        className="text-caption font-bold text-brand-primary hover:text-brand-primary/80 flex items-center gap-1.5 px-2.5 py-1 rounded bg-brand-primary-soft hover:bg-brand-primary/20 transition-colors"
+                      >
+                        <Bell className="w-3.5 h-3.5" />
+                        <span>{testPushSent ? 'تم إرسال الإشعار بنجاح!' : 'إرسال إشعار تجريبي'}</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
+
 
                 {/* SMS */}
                 <div className="p-4 rounded-card border border-border-default bg-bg-surface flex items-center justify-between gap-4">
