@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { api } from '@/lib/api';
-import { CheckCircle2, Clock, BarChart3, AlertCircle } from 'lucide-react';
+import { CheckCircle2, Clock, BarChart3, AlertCircle, Trash2 } from 'lucide-react';
 
 export interface PollOptionItem {
   id: string;
@@ -20,6 +20,8 @@ export interface PollItem {
   isClosed: boolean;
   createdAt: string;
   createdBy?: { id: string; fullName: string };
+  stage?: { id: string; name: string } | null;
+  sector?: { id: string; name: string } | null;
   userVotedOptionIds?: string[];
   totalVotes: number;
   options: PollOptionItem[];
@@ -28,9 +30,11 @@ export interface PollItem {
 interface PollCardProps {
   poll: PollItem;
   onVoted?: () => void;
+  canDelete?: boolean;
+  onDelete?: (poll: PollItem) => void;
 }
 
-export const PollCard: React.FC<PollCardProps> = ({ poll, onVoted }) => {
+export const PollCard: React.FC<PollCardProps> = ({ poll, onVoted, canDelete, onDelete }) => {
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -97,23 +101,50 @@ export const PollCard: React.FC<PollCardProps> = ({ poll, onVoted }) => {
         <h3 className="text-h2 font-bold text-text-primary leading-snug">
           {pollData.question}
         </h3>
-        <span
-          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-pill text-caption font-semibold shrink-0 ${
-            isClosed
-              ? 'bg-status-danger-soft text-status-danger border border-status-danger/20'
-              : 'bg-brand-accent-soft text-brand-accent border border-brand-accent/20'
-          }`}
-        >
-          <Clock className="w-3.5 h-3.5" />
-          {isClosed ? 'استطلاع منتهي' : `ينتهي: ${formatDeadline(pollData.closesAt)}`}
-        </span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span
+            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-pill text-caption font-semibold ${
+              isClosed
+                ? 'bg-status-danger-soft text-status-danger border border-status-danger/20'
+                : 'bg-brand-accent-soft text-brand-accent border border-brand-accent/20'
+            }`}
+          >
+            <Clock className="w-3.5 h-3.5" />
+            {isClosed ? 'استطلاع منتهي' : `ينتهي: ${formatDeadline(pollData.closesAt)}`}
+          </span>
+
+          {canDelete && onDelete && (
+            <button
+              type="button"
+              onClick={() => onDelete(pollData)}
+              className="p-1 rounded-button text-text-secondary hover:text-status-danger hover:bg-status-danger-soft transition-colors"
+              title="حذف استطلاع الرأي"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
 
-      {pollData.createdBy && (
-        <p className="text-caption text-text-secondary mb-3">
-          الناشر: <span className="font-medium text-text-primary">{pollData.createdBy.fullName}</span>
-        </p>
-      )}
+      <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+        {pollData.createdBy && (
+          <p className="text-caption text-text-secondary">
+            الناشر: <span className="font-medium text-text-primary">{pollData.createdBy.fullName}</span>
+          </p>
+        )}
+        <div className="flex items-center gap-1.5">
+          {pollData.stage && (
+            <span className="px-2 py-0.5 rounded-pill text-[11px] bg-bg-app text-text-secondary border border-border-default font-medium">
+              {pollData.stage.name}
+            </span>
+          )}
+          {!pollData.stage && pollData.sector && (
+            <span className="px-2 py-0.5 rounded-pill text-[11px] bg-brand-primary-soft text-brand-primary font-medium">
+              {pollData.sector.name} (كامل القطاع)
+            </span>
+          )}
+        </div>
+      </div>
 
       {errorMsg && (
         <div className="mb-3 p-2.5 rounded-input bg-status-danger-soft border border-status-danger/30 text-status-danger text-body-small flex items-center gap-2">

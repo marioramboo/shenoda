@@ -33,8 +33,10 @@ export class PollController {
         options,
         allowMultiple = false,
         closesAt,
-        stageId = user.stageIds[0] || null,
-        sectorId = user.sectorIds[0] || null,
+        stageId,
+        stageIds,
+        sectorId = (user.sectorIds && user.sectorIds[0]) || null,
+        isAllSector = false,
       } = req.body;
 
       if (!question || !Array.isArray(options) || options.length < 2 || !closesAt) {
@@ -48,14 +50,115 @@ export class PollController {
         });
       }
 
+      // If Sector Secretary or higher (Level 4+)
+      if (user.roleLevel >= 4) {
+        if (isAllSector || (!stageId && (!stageIds || stageIds.length === 0))) {
+          const poll = await prisma.poll.create({
+            data: {
+              createdById: user.userId,
+              question,
+              allowMultiple: Boolean(allowMultiple),
+              closesAt: new Date(closesAt),
+              stageId: null,
+              sectorId: sectorId || (user.sectorIds && user.sectorIds[0]) || null,
+              options: {
+                create: options.map((optText: string, idx: number) => ({
+                  text: optText,
+                  order: idx,
+                })),
+              },
+            },
+            include: {
+              options: { orderBy: { order: 'asc' } },
+              createdBy: { select: { id: true, fullName: true } },
+              stage: { select: { id: true, name: true } },
+            },
+          });
+          return res.status(201).json({
+            success: true,
+            data: poll,
+            timestamp: new Date().toISOString(),
+          });
+        }
+
+        const targetStageIds = Array.isArray(stageIds) && stageIds.length > 0
+          ? stageIds
+          : stageId ? [stageId] : [];
+
+        if (targetStageIds.length === 1) {
+          const poll = await prisma.poll.create({
+            data: {
+              createdById: user.userId,
+              question,
+              allowMultiple: Boolean(allowMultiple),
+              closesAt: new Date(closesAt),
+              stageId: targetStageIds[0],
+              sectorId: sectorId || (user.sectorIds && user.sectorIds[0]) || null,
+              options: {
+                create: options.map((optText: string, idx: number) => ({
+                  text: optText,
+                  order: idx,
+                })),
+              },
+            },
+            include: {
+              options: { orderBy: { order: 'asc' } },
+              createdBy: { select: { id: true, fullName: true } },
+              stage: { select: { id: true, name: true } },
+            },
+          });
+          return res.status(201).json({
+            success: true,
+            data: poll,
+            timestamp: new Date().toISOString(),
+          });
+        }
+
+        if (targetStageIds.length > 1) {
+          const createdPolls = await Promise.all(
+            targetStageIds.map((sId: string) =>
+              prisma.poll.create({
+                data: {
+                  createdById: user.userId,
+                  question,
+                  allowMultiple: Boolean(allowMultiple),
+                  closesAt: new Date(closesAt),
+                  stageId: sId,
+                  sectorId: sectorId || (user.sectorIds && user.sectorIds[0]) || null,
+                  options: {
+                    create: options.map((optText: string, idx: number) => ({
+                      text: optText,
+                      order: idx,
+                    })),
+                  },
+                },
+                include: {
+                  options: { orderBy: { order: 'asc' } },
+                  createdBy: { select: { id: true, fullName: true } },
+                  stage: { select: { id: true, name: true } },
+                },
+              })
+            )
+          );
+          return res.status(201).json({
+            success: true,
+            data: createdPolls[0],
+            polls: createdPolls,
+            timestamp: new Date().toISOString(),
+          });
+        }
+      }
+
+      // Default for Stage Secretary (Level 3)
+      const targetStageId = stageId || (user.stageIds && user.stageIds[0]) || null;
       const poll = await prisma.poll.create({
         data: {
           createdById: user.userId,
           question,
           allowMultiple: Boolean(allowMultiple),
           closesAt: new Date(closesAt),
-          stageId,
-          sectorId,
+          stageId: targetStageId,
+          sectorId: sectorId || (user.sectorIds && user.sectorIds[0]) || null,
           options: {
             create: options.map((optText: string, idx: number) => ({
               text: optText,
@@ -102,14 +205,24 @@ export class PollController {
 
       const whereClause: any = {};
       if (user.roleLevel < 5) {
+        let effectiveSectorIds = [...(user.sectorIds || [])];
+        if (user.stageIds && user.stageIds.length > 0) {
+          const userStages = await prisma.stage.findMany({
+            where: { id: { in: user.stageIds } },
+            select: { sectorId: true },
+          });
+          const stageSectorIds = userStages.map((st: any) => st.sectorId).filter(Boolean) as string[];
+          effectiveSectorIds = Array.from(new Set([...effectiveSectorIds, ...stageSectorIds]));
+        }
+
         const orConditions: any[] = [
           { stageId: null, sectorId: null }, // Church-wide
         ];
         if (user.stageIds.length > 0) {
           orConditions.push({ stageId: { in: user.stageIds } });
         }
-        if (user.sectorIds.length > 0) {
-          orConditions.push({ sectorId: { in: user.sectorIds } });
+        if (effectiveSectorIds.length > 0) {
+          orConditions.push({ sectorId: { in: effectiveSectorIds } });
         }
         whereClause.OR = orConditions;
       }
@@ -332,6 +445,82 @@ export class PollController {
       });
     } catch (err: any) {
       console.error('Error fetching poll results:', err);
+      return res.status(500).json({
+        success: false,
+        error: { code: 'INTERNAL_SERVER_ERROR', message: err.message },
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
+  /**
+   * DELETE /api/v1/polls/:id
+   * Deletes a poll (creator, Sector Secretary in scope, or General Secretary).
+   */
+  static async deletePoll(req: Request, res: Response) {
+    try {
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          error: { code: 'AUTH_REQUIRED', message: 'Authentication required' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const { id } = req.params;
+      const poll = await prisma.poll.findUnique({
+        where: { id },
+      });
+
+      if (!poll) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'استطلاع الرأي غير موجود' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const isCreator = poll.createdById === user.userId;
+      const isGeneralSecretary = user.roleLevel >= 5;
+      const isSectorSecInScope =
+        user.roleLevel === 4 &&
+        Boolean(
+          (poll.sectorId && user.sectorIds?.includes(poll.sectorId)) ||
+          isCreator
+        );
+      const isStageSecInScope =
+        user.roleLevel === 3 &&
+        Boolean(
+          (poll.stageId && user.stageIds?.includes(poll.stageId)) ||
+          isCreator
+        );
+
+      if (!isCreator && !isGeneralSecretary && !isSectorSecInScope && !isStageSecInScope) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'لا تملك صلاحية حذف هذا الاستطلاع' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      await prisma.pollVote.deleteMany({
+        where: { pollId: id },
+      });
+      await prisma.pollOption.deleteMany({
+        where: { pollId: id },
+      });
+      await prisma.poll.delete({
+        where: { id },
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: 'تم حذف استطلاع الرأي بنجاح',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      console.error('Error deleting poll:', err);
       return res.status(500).json({
         success: false,
         error: { code: 'INTERNAL_SERVER_ERROR', message: err.message },

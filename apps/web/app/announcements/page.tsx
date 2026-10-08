@@ -30,6 +30,7 @@ import {
   Send,
   Layers,
   ChevronLeft,
+  Trash2,
 } from 'lucide-react';
 
 interface AnnouncementItem {
@@ -48,6 +49,135 @@ interface AnnouncementItem {
     role?: { name: string; level: number };
   };
   targetStage?: { id: string; name: string } | null;
+  targetSector?: { id: string; name: string } | null;
+}
+
+interface StageSelectorProps {
+  title: string;
+  subtitle: string;
+  stages: Array<{ id: string; name: string }>;
+  selectedStageIds: string[];
+  isAllStages: boolean;
+  onToggleAll: () => void;
+  onToggleStage: (id: string) => void;
+}
+
+function StageSelectorList({
+  title,
+  subtitle,
+  stages,
+  selectedStageIds,
+  isAllStages,
+  onToggleAll,
+  onToggleStage,
+}: StageSelectorProps) {
+  return (
+    <div className="p-3.5 rounded-card bg-bg-app border border-border-default space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Layers className="w-4 h-4 text-brand-primary" />
+          <label className="text-body-small font-bold text-text-primary">
+            {title}
+          </label>
+        </div>
+        {isAllStages ? (
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-pill bg-brand-accent text-brand-primary shadow-sm">
+            كامل القطاع ({stages.length})
+          </span>
+        ) : (
+          <span className="text-[11px] font-medium px-2 py-0.5 rounded-pill bg-bg-surface text-text-secondary border border-border-default">
+            {selectedStageIds.length} من {stages.length} مراحل
+          </span>
+        )}
+      </div>
+
+      <p className="text-caption text-text-secondary">
+        {subtitle}
+      </p>
+
+      <div className="rounded-input border border-border-default overflow-hidden bg-bg-surface divide-y divide-border-default">
+        {/* Toggle All Stages */}
+        <div
+          onClick={onToggleAll}
+          className={`p-2.5 flex items-center justify-between cursor-pointer select-none transition-colors ${
+            isAllStages ? 'bg-brand-primary/10 font-bold' : 'hover:bg-bg-app'
+          }`}
+        >
+          <div className="flex items-center gap-2.5">
+            <input
+              type="checkbox"
+              checked={isAllStages}
+              onChange={onToggleAll}
+              className="w-4 h-4 rounded text-brand-primary focus:ring-brand-primary cursor-pointer"
+              onClick={(e) => e.stopPropagation()}
+            />
+            <span className="text-body-small font-bold text-text-primary">
+              الكل (جميع مراحل القطاع)
+            </span>
+          </div>
+          <span className="text-[11px] text-text-secondary font-medium">
+            {stages.length} مراحل
+          </span>
+        </div>
+
+        {/* Individual Stages List */}
+        <div className="max-h-48 overflow-y-auto divide-y divide-border-default/50">
+          {stages.map((stage) => {
+            const isChecked = selectedStageIds.includes(stage.id);
+            return (
+              <div
+                key={stage.id}
+                onClick={() => onToggleStage(stage.id)}
+                className={`p-2.5 pr-8 flex items-center justify-between cursor-pointer select-none transition-colors ${
+                  isChecked ? 'bg-brand-primary/5' : 'hover:bg-bg-app'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={() => onToggleStage(stage.id)}
+                    className="w-4 h-4 rounded text-brand-primary focus:ring-brand-primary cursor-pointer"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <span
+                    className={`text-body-small ${
+                      isChecked ? 'font-semibold text-brand-primary' : 'text-text-primary'
+                    }`}
+                  >
+                    {stage.name}
+                  </span>
+                </div>
+                {isChecked && (
+                  <span className="text-[11px] text-brand-primary font-bold">
+                    محدد ✓
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Helper feedback message */}
+      {selectedStageIds.length === 0 ? (
+        <p className="text-[11px] text-status-danger font-medium flex items-center gap-1">
+          <AlertCircle className="w-3.5 h-3.5" />
+          يرجى تحديد مرحلة واحدة على الأقل أو اختيار النشر للكل
+        </p>
+      ) : isAllStages ? (
+        <p className="text-[11px] text-brand-primary font-medium flex items-center gap-1">
+          <CheckCircle2 className="w-3.5 h-3.5 text-brand-primary" />
+          سيصل لجميع خدام المراحل التابعة لقطاعك ({stages.length} مراحل)
+        </p>
+      ) : (
+        <p className="text-[11px] text-text-secondary font-medium flex items-center gap-1">
+          <CheckCircle2 className="w-3.5 h-3.5 text-brand-primary" />
+          سيصل لخدام المراحل المحددة فقط ({selectedStageIds.length} مراحل)
+        </p>
+      )}
+    </div>
+  );
 }
 
 export default function AnnouncementsPage() {
@@ -80,6 +210,10 @@ export default function AnnouncementsPage() {
   const [isSubmittingAnn, setIsSubmittingAnn] = useState(false);
   const [composerError, setComposerError] = useState<string | null>(null);
 
+  // Sector Secretary Multi-Stage Targeting State (Announcements)
+  const [annSelectedStageIds, setAnnSelectedStageIds] = useState<string[]>([]);
+  const [annIsAllStages, setAnnIsAllStages] = useState(true);
+
   // Poll Composer Form State
   const [pollQuestion, setPollQuestion] = useState('');
   const [pollOptions, setPollOptions] = useState<string[]>(['', '']);
@@ -88,8 +222,60 @@ export default function AnnouncementsPage() {
   const [isSubmittingPoll, setIsSubmittingPoll] = useState(false);
   const [pollComposerError, setPollComposerError] = useState<string | null>(null);
 
+  // Sector Secretary Multi-Stage Targeting State (Polls)
+  const [pollSelectedStageIds, setPollSelectedStageIds] = useState<string[]>([]);
+  const [pollIsAllStages, setPollIsAllStages] = useState(true);
+
+  // Delete Confirmation Modal State
+  const [deleteTarget, setDeleteTarget] = useState<{
+    type: 'announcement' | 'poll';
+    id: string;
+    title: string;
+  } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   const canAuthor = (user?.role?.level ?? 1) >= 3;
   const userLevel = user?.role?.level ?? 1;
+
+  const canDeleteAnnouncement = (ann: AnnouncementItem) => {
+    if (!user) return false;
+    if (user.id === ann.author.id) return true;
+    if (userLevel >= 4) return true;
+    return false;
+  };
+
+  const canDeletePoll = (poll: PollItem) => {
+    if (!user) return false;
+    if (poll.createdBy && user.id === poll.createdBy.id) return true;
+    if (userLevel >= 4) return true;
+    return false;
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    setDeleteError(null);
+
+    try {
+      if (deleteTarget.type === 'announcement') {
+        await api.delete(`/api/v1/announcements/${deleteTarget.id}`);
+        setAnnouncements((prev) => prev.filter((a) => a.id !== deleteTarget.id));
+      } else {
+        await api.delete(`/api/v1/polls/${deleteTarget.id}`);
+        setPolls((prev) => prev.filter((p) => p.id !== deleteTarget.id));
+      }
+      setDeleteTarget(null);
+    } catch (err: any) {
+      console.error('Error deleting item:', err);
+      const msg =
+        err.response?.data?.error?.message ||
+        'حدث خطأ أثناء محاولة الحذف، يرجى المحاولة لاحقاً';
+      setDeleteError(msg);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -124,10 +310,83 @@ export default function AnnouncementsPage() {
   }, [stagesList, user]);
 
   useEffect(() => {
-    if (availableStages.length > 0 && !annStageId) {
-      setAnnStageId(availableStages[0].id);
+    if (availableStages.length > 0) {
+      if (annSelectedStageIds.length === 0) {
+        setAnnSelectedStageIds(availableStages.map((s: any) => s.id));
+      }
+      if (pollSelectedStageIds.length === 0) {
+        setPollSelectedStageIds(availableStages.map((s: any) => s.id));
+      }
+      if (!annStageId) {
+        setAnnStageId(availableStages[0].id);
+      }
     }
-  }, [availableStages, annStageId]);
+  }, [availableStages]);
+
+  const toggleAnnAll = () => {
+    if (annIsAllStages || annSelectedStageIds.length === availableStages.length) {
+      setAnnIsAllStages(false);
+      setAnnSelectedStageIds([]);
+    } else {
+      setAnnIsAllStages(true);
+      setAnnSelectedStageIds(availableStages.map((s: any) => s.id));
+    }
+  };
+
+  const toggleAnnStage = (stageId: string) => {
+    let next: string[];
+    if (annSelectedStageIds.includes(stageId)) {
+      next = annSelectedStageIds.filter((id) => id !== stageId);
+    } else {
+      next = [...annSelectedStageIds, stageId];
+    }
+    setAnnSelectedStageIds(next);
+    setAnnIsAllStages(next.length === availableStages.length && availableStages.length > 0);
+  };
+
+  const togglePollAll = () => {
+    if (pollIsAllStages || pollSelectedStageIds.length === availableStages.length) {
+      setPollIsAllStages(false);
+      setPollSelectedStageIds([]);
+    } else {
+      setPollIsAllStages(true);
+      setPollSelectedStageIds(availableStages.map((s: any) => s.id));
+    }
+  };
+
+  const togglePollStage = (stageId: string) => {
+    let next: string[];
+    if (pollSelectedStageIds.includes(stageId)) {
+      next = pollSelectedStageIds.filter((id) => id !== stageId);
+    } else {
+      next = [...pollSelectedStageIds, stageId];
+    }
+    setPollSelectedStageIds(next);
+    setPollIsAllStages(next.length === availableStages.length && availableStages.length > 0);
+  };
+
+  const openAnnouncementComposer = () => {
+    setAnnTitle('');
+    setAnnContent('');
+    setAnnIsPinned(false);
+    setAnnExpiresAt('');
+    setComposerError(null);
+    setAnnScope(TargetScopeLevel.STAGE_ALL);
+    setAnnIsAllStages(true);
+    setAnnSelectedStageIds(availableStages.map((s: any) => s.id));
+    setIsComposerOpen(true);
+  };
+
+  const openPollComposer = () => {
+    setPollQuestion('');
+    setPollOptions(['', '']);
+    setPollClosesAt('');
+    setPollAllowMultiple(false);
+    setPollComposerError(null);
+    setPollIsAllStages(true);
+    setPollSelectedStageIds(availableStages.map((s: any) => s.id));
+    setIsPollComposerOpen(true);
+  };
 
   const fetchAnnouncements = async () => {
     setIsLoadingAnnouncements(true);
@@ -177,18 +436,46 @@ export default function AnnouncementsPage() {
       return;
     }
 
+    if (
+      userLevel >= 4 &&
+      annScope !== TargetScopeLevel.ORG_ALL &&
+      !annIsAllStages &&
+      annSelectedStageIds.length === 0
+    ) {
+      setComposerError('يرجى تحديد مرحلة واحدة على الأقل أو اختيار النشر لكافة مراحل القطاع');
+      return;
+    }
+
     setIsSubmittingAnn(true);
     setComposerError(null);
 
     try {
-      await api.post('/api/v1/announcements', {
+      const payload: any = {
         title: annTitle.trim(),
         content: annContent.trim(),
-        targetScopeType: annScope,
-        targetStageId: annStageId || user?.scopes?.stages?.[0]?.id,
         isPinned: annIsPinned,
         expiresAt: annExpiresAt ? new Date(annExpiresAt).toISOString() : undefined,
-      });
+      };
+
+      if (userLevel >= 5 && annScope === TargetScopeLevel.ORG_ALL) {
+        payload.targetScopeType = TargetScopeLevel.ORG_ALL;
+      } else if (userLevel >= 4) {
+        if (annIsAllStages || annSelectedStageIds.length === availableStages.length) {
+          payload.targetScopeType = TargetScopeLevel.SECTOR_ALL;
+          payload.targetSectorId = user?.scopes?.sectors?.[0]?.id || null;
+          payload.targetStageIds = availableStages.map((s: any) => s.id);
+        } else {
+          payload.targetScopeType = TargetScopeLevel.STAGE_ALL;
+          payload.targetStageIds = annSelectedStageIds;
+          payload.targetStageId = annSelectedStageIds[0] || null;
+          payload.targetSectorId = user?.scopes?.sectors?.[0]?.id || null;
+        }
+      } else {
+        payload.targetScopeType = TargetScopeLevel.STAGE_ALL;
+        payload.targetStageId = annStageId || user?.scopes?.stages?.[0]?.id || availableStages[0]?.id;
+      }
+
+      await api.post('/api/v1/announcements', payload);
 
       setIsComposerOpen(false);
       setAnnTitle('');
@@ -215,17 +502,39 @@ export default function AnnouncementsPage() {
       return;
     }
 
+    if (userLevel >= 4 && !pollIsAllStages && pollSelectedStageIds.length === 0) {
+      setPollComposerError('يرجى تحديد مرحلة واحدة على الأقل أو اختيار النشر لكافة مراحل القطاع');
+      return;
+    }
+
     setIsSubmittingPoll(true);
     setPollComposerError(null);
 
     try {
-      await api.post('/api/v1/polls', {
+      const payload: any = {
         question: pollQuestion.trim(),
         options: validOptions,
         closesAt: new Date(pollClosesAt).toISOString(),
         allowMultiple: pollAllowMultiple,
-        stageId: user?.scopes?.stages?.[0]?.id,
-      });
+      };
+
+      if (userLevel >= 4) {
+        if (pollIsAllStages || pollSelectedStageIds.length === availableStages.length) {
+          payload.isAllSector = true;
+          payload.sectorId = user?.scopes?.sectors?.[0]?.id || null;
+          payload.stageIds = availableStages.map((s: any) => s.id);
+          payload.stageId = null;
+        } else {
+          payload.isAllSector = false;
+          payload.stageIds = pollSelectedStageIds;
+          payload.stageId = pollSelectedStageIds[0] || null;
+          payload.sectorId = user?.scopes?.sectors?.[0]?.id || null;
+        }
+      } else {
+        payload.stageId = user?.scopes?.stages?.[0]?.id || availableStages[0]?.id;
+      }
+
+      await api.post('/api/v1/polls', payload);
 
       setIsPollComposerOpen(false);
       setPollQuestion('');
@@ -308,8 +617,8 @@ export default function AnnouncementsPage() {
                   type="button"
                   onClick={() =>
                     activeTab === 'announcements'
-                      ? setIsComposerOpen(true)
-                      : setIsPollComposerOpen(true)
+                      ? openAnnouncementComposer()
+                      : openPollComposer()
                   }
                   className="px-3.5 py-1.5 rounded-button bg-brand-accent text-brand-primary font-bold text-caption hover:bg-brand-accent-soft transition-colors flex items-center gap-1.5 shadow-sm"
                 >
@@ -441,20 +750,51 @@ export default function AnnouncementsPage() {
                             </span>
                           )}
 
-                          {ann.targetStage && (
-                            <span className="px-2 py-0.5 rounded-pill text-caption bg-bg-app text-text-secondary">
+                          {ann.targetStage ? (
+                            <span className="px-2 py-0.5 rounded-pill text-caption bg-bg-app text-text-secondary border border-border-default font-medium">
                               {ann.targetStage.name}
                             </span>
-                          )}
+                          ) : ann.targetSector ? (
+                            <span className="px-2 py-0.5 rounded-pill text-caption bg-brand-primary-soft text-brand-primary font-medium">
+                              {ann.targetSector.name} (كامل القطاع)
+                            </span>
+                          ) : ann.targetScopeType === 'SECTOR_ALL' ? (
+                            <span className="px-2 py-0.5 rounded-pill text-caption bg-brand-primary-soft text-brand-primary font-medium">
+                              كامل القطاع
+                            </span>
+                          ) : ann.targetScopeType === 'ORG_ALL' ? (
+                            <span className="px-2 py-0.5 rounded-pill text-caption bg-brand-accent-soft text-brand-primary font-medium">
+                              الكنيسة بالكامل
+                            </span>
+                          ) : null}
                         </div>
 
-                        <span className="text-caption text-text-secondary flex items-center gap-1">
-                          <Clock className="w-3.5 h-3.5" />
-                          {new Date(ann.createdAt).toLocaleDateString('ar-EG', {
-                            month: 'short',
-                            day: 'numeric',
-                          })}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-caption text-text-secondary flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5" />
+                            {new Date(ann.createdAt).toLocaleDateString('ar-EG', {
+                              month: 'short',
+                              day: 'numeric',
+                            })}
+                          </span>
+
+                          {canDeleteAnnouncement(ann) && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDeleteTarget({
+                                  type: 'announcement',
+                                  id: ann.id,
+                                  title: ann.title,
+                                })
+                              }
+                              className="p-1 rounded-button text-text-secondary hover:text-status-danger hover:bg-status-danger-soft transition-colors"
+                              title="حذف الإعلان"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       {/* Title */}
@@ -524,7 +864,19 @@ export default function AnnouncementsPage() {
               ) : (
                 <div className="space-y-4">
                   {polls.map((poll) => (
-                    <PollCard key={poll.id} poll={poll} onVoted={fetchPolls} />
+                    <PollCard
+                      key={poll.id}
+                      poll={poll}
+                      onVoted={fetchPolls}
+                      canDelete={canDeletePoll(poll)}
+                      onDelete={(p) =>
+                        setDeleteTarget({
+                          type: 'poll',
+                          id: p.id,
+                          title: p.question,
+                        })
+                      }
+                    />
                   ))}
                 </div>
               )}
@@ -590,91 +942,60 @@ export default function AnnouncementsPage() {
                   />
                 </div>
 
-                {/* Audience Scoping with Upward-Addressing Ban Enforcement */}
-                <div className="p-3.5 rounded-card bg-bg-app border border-border-default space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Shield className="w-4 h-4 text-brand-primary" />
-                    <label className="text-body-small font-bold text-text-primary">
-                      نطاق توجيه الإعلان (قاعدة التسلسل الرئاسي FR-10.2)
-                    </label>
-                  </div>
-                  <p className="text-caption text-text-secondary">
-                    وفقاً لقواعد الكنيسة، لا يمكن توجيه إعلانات للمشرفين أو الرتب الأعلى منك.
-                  </p>
+                {/* Audience Scoping with Multi-Stage Selection for Sector Secretary */}
+                {userLevel >= 4 ? (
+                  <div className="space-y-3">
+                    <StageSelectorList
+                      title="توجيه الإعلان إلى مراحل القطاع"
+                      subtitle="يمكنك اختيار نشر الإعلان لكافة مراحل القطاع دفعة واحدة، أو تحديد مرحلة أو أكثر"
+                      stages={availableStages}
+                      selectedStageIds={annSelectedStageIds}
+                      isAllStages={annIsAllStages}
+                      onToggleAll={toggleAnnAll}
+                      onToggleStage={toggleAnnStage}
+                    />
 
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2.5 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="annScope"
-                        checked={annScope === TargetScopeLevel.STAGE_ALL}
-                        onChange={() => setAnnScope(TargetScopeLevel.STAGE_ALL)}
-                        className="text-brand-primary focus:ring-brand-primary"
-                      />
-                      <span className="text-body-small font-medium text-text-primary">
-                        خدام مرحلة محددة {availableStages.length === 1 && `(${availableStages[0].name})`}
-                      </span>
-                    </label>
-
-                    {annScope === TargetScopeLevel.STAGE_ALL && availableStages.length > 1 && (
-                      <div className="mr-6 my-1">
-                        <select
-                          value={annStageId || availableStages[0]?.id}
-                          onChange={(e) => setAnnStageId(e.target.value)}
-                          className="w-full px-2.5 py-1.5 text-body-small rounded-input border border-border-default bg-bg-surface text-text-primary focus:border-brand-primary focus:outline-none"
-                        >
-                          {availableStages.map((st) => (
-                            <option key={st.id} value={st.id}>
-                              {st.name}
-                            </option>
-                          ))}
-                        </select>
+                    {userLevel >= 5 && (
+                      <div className="p-3 rounded-card bg-bg-app border border-border-default">
+                        <label className="flex items-center gap-2.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={annScope === TargetScopeLevel.ORG_ALL}
+                            onChange={(e) =>
+                              setAnnScope(
+                                e.target.checked
+                                  ? TargetScopeLevel.ORG_ALL
+                                  : TargetScopeLevel.STAGE_ALL
+                              )
+                            }
+                            className="w-4 h-4 rounded text-brand-primary focus:ring-brand-primary cursor-pointer"
+                          />
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-body-small font-bold text-text-primary">
+                              نشر الإعلان للكنيسة بالكامل (مقتصر على الأمين العام Level 5)
+                            </span>
+                            <Lock className="w-3.5 h-3.5 text-brand-accent" />
+                          </div>
+                        </label>
                       </div>
                     )}
-
-                    <label
-                      className={`flex items-center gap-2.5 ${
-                        userLevel < 4 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="annScope"
-                        disabled={userLevel < 4}
-                        checked={annScope === TargetScopeLevel.SECTOR_ALL}
-                        onChange={() => setAnnScope(TargetScopeLevel.SECTOR_ALL)}
-                        className="text-brand-primary focus:ring-brand-primary"
-                      />
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-body-small font-medium text-text-primary">
-                          كل خدام القطاع (مقتصر على أمين القطاع Level 4+)
-                        </span>
-                        {userLevel < 4 && <Lock className="w-3.5 h-3.5 text-text-disabled" />}
-                      </div>
-                    </label>
-
-                    <label
-                      className={`flex items-center gap-2.5 ${
-                        userLevel < 5 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="annScope"
-                        disabled={userLevel < 5}
-                        checked={annScope === TargetScopeLevel.ORG_ALL}
-                        onChange={() => setAnnScope(TargetScopeLevel.ORG_ALL)}
-                        className="text-brand-primary focus:ring-brand-primary"
-                      />
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-body-small font-medium text-text-primary">
-                          الكنيسة بالكامل (مقتصر على الأمين العام Level 5)
-                        </span>
-                        {userLevel < 5 && <Lock className="w-3.5 h-3.5 text-text-disabled" />}
-                      </div>
-                    </label>
                   </div>
-                </div>
+                ) : (
+                  <div className="p-3.5 rounded-card bg-bg-app border border-border-default space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Shield className="w-4 h-4 text-brand-primary" />
+                      <label className="text-body-small font-bold text-text-primary">
+                        نطاق توجيه الإعلان
+                      </label>
+                    </div>
+                    <div className="p-2.5 rounded-input bg-bg-surface border border-border-default flex items-center justify-between">
+                      <span className="text-body-small text-text-secondary">المرحلة المستهدفة:</span>
+                      <span className="text-body-small font-bold text-brand-primary">
+                        {availableStages[0]?.name || user?.scopes?.stages?.[0]?.name || 'المرحلة المسندة'}
+                      </span>
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex items-center justify-between p-3 rounded-input border border-border-default">
                   <div className="flex items-center gap-2">
@@ -723,8 +1044,8 @@ export default function AnnouncementsPage() {
               className="fixed inset-0 bg-black/40 backdrop-blur-sm"
               onClick={() => setIsPollComposerOpen(false)}
             />
-            <div className="relative w-full max-w-md bg-bg-surface rounded-card shadow-2xl overflow-hidden z-10 animate-in zoom-in-95 duration-200">
-              <div className="p-4 bg-brand-primary text-text-inverse flex items-center justify-between">
+            <div className="relative w-full max-w-md bg-bg-surface rounded-card shadow-2xl overflow-hidden z-10 animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+              <div className="p-4 bg-brand-primary text-text-inverse flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2">
                   <Vote className="w-5 h-5 text-brand-accent" />
                   <h2 className="text-h2 font-bold">إنشاء استطلاع رأي جديد</h2>
@@ -738,7 +1059,7 @@ export default function AnnouncementsPage() {
                 </button>
               </div>
 
-              <form onSubmit={handleCreatePoll} className="p-4 space-y-4">
+              <form onSubmit={handleCreatePoll} className="p-4 space-y-4 overflow-y-auto flex-1">
                 {pollComposerError && (
                   <div className="p-3 rounded-input bg-status-danger-soft text-status-danger text-body-small flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 shrink-0" />
@@ -826,6 +1147,34 @@ export default function AnnouncementsPage() {
                   />
                 </div>
 
+                {/* Target Audience / Stage Selection for Poll */}
+                {userLevel >= 4 ? (
+                  <StageSelectorList
+                    title="توجيه الاستطلاع إلى مراحل القطاع"
+                    subtitle="يمكنك إنشاء الاستطلاع لكافة مراحل القطاع دفعة واحدة، أو تحديد مرحلة أو أكثر"
+                    stages={availableStages}
+                    selectedStageIds={pollSelectedStageIds}
+                    isAllStages={pollIsAllStages}
+                    onToggleAll={togglePollAll}
+                    onToggleStage={togglePollStage}
+                  />
+                ) : (
+                  <div className="p-3 rounded-card bg-bg-app border border-border-default space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <Vote className="w-4 h-4 text-brand-primary" />
+                      <span className="text-body-small font-bold text-text-primary">
+                        نطاق الاستطلاع
+                      </span>
+                    </div>
+                    <div className="p-2 rounded-input bg-bg-surface border border-border-default flex items-center justify-between">
+                      <span className="text-caption text-text-secondary">المرحلة المستهدفة:</span>
+                      <span className="text-body-small font-bold text-brand-primary">
+                        {availableStages[0]?.name || user?.scopes?.stages?.[0]?.name || 'المرحلة المسندة'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 <div className="pt-3 border-t border-border-default flex items-center justify-end gap-2">
                   <button
                     type="button"
@@ -843,6 +1192,63 @@ export default function AnnouncementsPage() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {deleteTarget && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" dir="rtl">
+            <div
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+              onClick={() => !isDeleting && setDeleteTarget(null)}
+            />
+            <div className="relative w-full max-w-sm bg-bg-surface rounded-card p-6 shadow-2xl border border-border-default text-center space-y-4 z-10 animate-in zoom-in-95 duration-150">
+              <div className="w-12 h-12 rounded-full bg-status-danger-soft text-status-danger flex items-center justify-center mx-auto">
+                <Trash2 className="w-6 h-6" />
+              </div>
+
+              <div>
+                <h3 className="text-h2 font-bold text-text-primary mb-1.5">
+                  {deleteTarget.type === 'announcement' ? 'تأكيد حذف الإعلان' : 'تأكيد حذف استطلاع الرأي'}
+                </h3>
+                <p className="text-body-small text-text-secondary">
+                  هل أنت متأكد من رغبتك في حذف{' '}
+                  <span className="font-bold text-text-primary">"{deleteTarget.title}"</span>؟
+                </p>
+                <p className="text-[12px] text-status-danger mt-1.5 font-medium">
+                  {deleteTarget.type === 'announcement'
+                    ? 'سيتم حذف الإعلان نهائياً ولا يمكن استرجاعه.'
+                    : 'سيتم حذف الاستطلاع وكافة الأصوات المسجلة نهائياً.'}
+                </p>
+              </div>
+
+              {deleteError && (
+                <div className="p-2.5 rounded-input bg-status-danger-soft text-status-danger text-caption flex items-center gap-1.5 text-right">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{deleteError}</span>
+                </div>
+              )}
+
+              <div className="pt-2 flex items-center justify-center gap-3">
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={() => setDeleteTarget(null)}
+                  className="flex-1 py-2 rounded-button bg-bg-app text-text-secondary font-semibold text-body-small hover:bg-border-default/50 transition-colors disabled:opacity-50"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={handleConfirmDelete}
+                  className="flex-1 py-2 rounded-button bg-status-danger text-white font-bold text-body-small hover:bg-status-danger/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  {isDeleting ? 'جارٍ الحذف...' : 'نعم، حذف'}
+                </button>
+              </div>
             </div>
           </div>
         )}

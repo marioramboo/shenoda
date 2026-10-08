@@ -400,6 +400,63 @@ describe('Phase 7 — Announcements, Polls & Notifications Comprehensive Test Su
       assert.ok(found);
       assert.strictEqual(found.isRead, true);
     });
+
+    test('1.6 Deleting an announcement: unauthorized user rejected (403), author can delete (200)', async () => {
+      // 1. Create announcement
+      const authorToken = makeToken({
+        userId: 'user-stagesec-boys',
+        roleLevel: 3,
+        roleCode: 'STAGE_SECRETARY',
+        stageIds: ['stage-prep-boys'],
+        sectorIds: ['sector-youth'],
+      });
+
+      const createRes = await fetch(`${baseUrl}/api/v1/announcements`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${authorToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: 'إعلان للحذف التجريبي',
+          content: 'سيتم حذف هذا الإعلان.',
+          targetScopeType: TargetScopeLevel.STAGE_ALL,
+          targetStageId: 'stage-prep-boys',
+        }),
+      });
+      const createBody = await createRes.json();
+      assert.strictEqual(createRes.status, 201);
+      const annId = createBody.data.id;
+
+      // 2. Unauthorized servant attempts deletion -> 403
+      const unauthorizedToken = makeToken({
+        userId: 'user-servant-b',
+        roleLevel: 1,
+        roleCode: 'SERVANT',
+        stageIds: ['stage-prep-boys'],
+      });
+      const unauthRes = await fetch(`${baseUrl}/api/v1/announcements/${annId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${unauthorizedToken}` },
+      });
+      assert.strictEqual(unauthRes.status, 403);
+
+      // 3. Author deletes announcement -> 200
+      const deleteRes = await fetch(`${baseUrl}/api/v1/announcements/${annId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${authorToken}` },
+      });
+      const deleteBody = await deleteRes.json();
+      assert.strictEqual(deleteRes.status, 200);
+      assert.strictEqual(deleteBody.success, true);
+
+      // 4. Verify no longer in list
+      const listRes = await fetch(`${baseUrl}/api/v1/announcements`, {
+        headers: { Authorization: `Bearer ${authorToken}` },
+      });
+      const listBody = await listRes.json();
+      assert.ok(!listBody.data.some((a: any) => a.id === annId));
+    });
   });
 
   // ------------------------------------------------------------------------
@@ -583,6 +640,62 @@ describe('Phase 7 — Announcements, Polls & Notifications Comprehensive Test Su
       assert.strictEqual(resOpt1.percentage, 67);
       assert.strictEqual(resOpt2.voteCount, 1);
       assert.strictEqual(resOpt2.percentage, 33);
+    });
+
+    test('2.5 Deleting a poll: unauthorized user rejected (403), creator can delete (200)', async () => {
+      // 1. Create a poll
+      const creatorToken = makeToken({
+        userId: 'user-stagesec-boys',
+        roleLevel: 3,
+        roleCode: 'STAGE_SECRETARY',
+        stageIds: ['stage-prep-boys'],
+        sectorIds: ['sector-youth'],
+      });
+
+      const createRes = await fetch(`${baseUrl}/api/v1/polls`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${creatorToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          question: 'استطلاع للحذف التجريبي؟',
+          options: ['خيار 1', 'خيار 2'],
+          closesAt: new Date(Date.now() + 86400000).toISOString(),
+          stageId: 'stage-prep-boys',
+        }),
+      });
+      const createBody = await createRes.json();
+      assert.strictEqual(createRes.status, 201);
+      const pollId = createBody.data.id;
+
+      // 2. Unauthorized user attempts deletion -> 403
+      const unauthorizedToken = makeToken({
+        userId: 'user-servant-b',
+        roleLevel: 1,
+        roleCode: 'SERVANT',
+        stageIds: ['stage-prep-boys'],
+      });
+      const unauthRes = await fetch(`${baseUrl}/api/v1/polls/${pollId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${unauthorizedToken}` },
+      });
+      assert.strictEqual(unauthRes.status, 403);
+
+      // 3. Creator deletes poll -> 200
+      const deleteRes = await fetch(`${baseUrl}/api/v1/polls/${pollId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${creatorToken}` },
+      });
+      const deleteBody = await deleteRes.json();
+      assert.strictEqual(deleteRes.status, 200);
+      assert.strictEqual(deleteBody.success, true);
+
+      // 4. Results returns 404
+      const resAfter = await fetch(`${baseUrl}/api/v1/polls/${pollId}/results`, {
+        headers: { Authorization: `Bearer ${creatorToken}` },
+      });
+      assert.strictEqual(resAfter.status, 404);
     });
   });
 
