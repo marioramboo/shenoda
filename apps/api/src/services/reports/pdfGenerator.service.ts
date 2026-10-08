@@ -11,6 +11,7 @@ export interface MemberDossierPdfOptions {
     fatherName?: string | null;
     motherName?: string | null;
     fatherConfessor?: string | null;
+    fatherConfessorChurch?: string | null;
     educationalGrade?: string | null;
     financialStatus?: string | null;
     behaviorInService?: string | null;
@@ -95,7 +96,10 @@ export class PdfGeneratorService {
       doc.fontSize(11).fillColor('#5F6A7A');
       doc.text(`المرحلة: ${options.member.stageName || '—'}`, { align: 'right' });
       doc.text(`الصف الدراسي: ${options.member.educationalGrade || '—'}`, { align: 'right' });
-      doc.text(`أب الاعتراف: ${options.member.fatherConfessor || '—'}`, { align: 'right' });
+      const confessorStr = options.member.fatherConfessor
+        ? `${options.member.fatherConfessor}${options.member.fatherConfessorChurch ? ` (${options.member.fatherConfessorChurch})` : ''}`
+        : '—';
+      doc.text(`أب الاعتراف: ${confessorStr}`, { align: 'right' });
       doc.text(`العنوان: ${options.member.address || '—'}`, { align: 'right' });
 
       if (options.includeSensitive && options.member.phoneNumber) {

@@ -28,6 +28,7 @@ import {
   Briefcase,
   Sparkles,
   Users,
+  Church,
   ExternalLink,
   MessageCircle,
 } from 'lucide-react';
@@ -238,6 +239,18 @@ export default function ProfilePage() {
                   </span>
                   <span className="font-semibold text-text-primary">
                     {user.fatherConfessor}
+                  </span>
+                </div>
+              )}
+
+              {user?.fatherConfessorChurch && (
+                <div className="flex items-center justify-between p-2.5 rounded-button bg-bg-muted">
+                  <span className="text-text-secondary text-caption flex items-center gap-1.5">
+                    <Church className="w-4 h-4 text-brand-accent" />
+                    كنيسة أب الاعتراف
+                  </span>
+                  <span className="font-semibold text-text-primary">
+                    {user.fatherConfessorChurch}
                   </span>
                 </div>
               )}

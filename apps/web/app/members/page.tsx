@@ -8,6 +8,7 @@ import { Chip } from '@/components/ui/Chip';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { FatherConfessorFields } from '@/components/common/FatherConfessorFields';
 import { api } from '@/lib/api';
 import { TabBar } from '@/components/layout/TabBar';
 import {
@@ -112,6 +113,8 @@ export default function MembersListPage() {
   const [newPhone, setNewPhone] = useState('');
   const [newFatherName, setNewFatherName] = useState('');
   const [newMotherName, setNewMotherName] = useState('');
+  const [newFatherConfessor, setNewFatherConfessor] = useState('');
+  const [newFatherConfessorChurch, setNewFatherConfessorChurch] = useState('');
   const [newSchool, setNewSchool] = useState('');
   const [newGrade, setNewGrade] = useState('');
   const [newStageId, setNewStageId] = useState('');
@@ -475,6 +478,8 @@ export default function MembersListPage() {
         dateOfBirth: newDob,
         address: newAddress,
         phoneNumber: newPhone || undefined,
+        fatherConfessor: newFatherConfessor || undefined,
+        fatherConfessorChurch: newFatherConfessorChurch || undefined,
         fatherName: newFatherName || undefined,
         motherName: newMotherName || undefined,
         schoolOrUniversity: newSchool || undefined,
@@ -487,6 +492,8 @@ export default function MembersListPage() {
         setNewFullName('');
         setNewAddress('');
         setNewPhone('');
+        setNewFatherConfessor('');
+        setNewFatherConfessorChurch('');
         fetchMembers();
       }
     } catch (err: any) {
@@ -1021,6 +1028,15 @@ export default function MembersListPage() {
                       onChange={(e) => setNewGrade(e.target.value)}
                     />
                   </div>
+
+                  <FatherConfessorFields
+                    fatherConfessor={newFatherConfessor}
+                    fatherConfessorChurch={newFatherConfessorChurch}
+                    onChange={(fc, fcc) => {
+                      setNewFatherConfessor(fc);
+                      setNewFatherConfessorChurch(fcc);
+                    }}
+                  />
 
                   <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border-default">
                     <Button

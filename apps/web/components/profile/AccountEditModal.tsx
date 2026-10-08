@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import { AuthUser } from '@/context/AuthContext';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { FatherConfessorFields } from '@/components/common/FatherConfessorFields';
 import {
   X,
   User,
@@ -87,6 +88,7 @@ export const AccountEditModal: React.FC<AccountEditModalProps> = ({
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [address, setAddress] = useState('');
   const [fatherConfessor, setFatherConfessor] = useState('');
+  const [fatherConfessorChurch, setFatherConfessorChurch] = useState('');
   const [educationOrCareer, setEducationOrCareer] = useState('');
   const [profilePicture, setProfilePicture] = useState('');
 
@@ -125,6 +127,7 @@ export const AccountEditModal: React.FC<AccountEditModalProps> = ({
       setDateOfBirth(formatDobForInput(user.dateOfBirth));
       setAddress(user.address || '');
       setFatherConfessor(user.fatherConfessor || '');
+      setFatherConfessorChurch(user.fatherConfessorChurch || '');
       setEducationOrCareer(user.educationOrCareer || '');
       setProfilePicture(user.profilePicture || '');
 
@@ -227,6 +230,7 @@ export const AccountEditModal: React.FC<AccountEditModalProps> = ({
       dateOfBirth: dateOfBirth || null,
       address: address.trim() || null,
       fatherConfessor: fatherConfessor.trim() || null,
+      fatherConfessorChurch: fatherConfessorChurch.trim() || null,
       educationOrCareer: educationOrCareer.trim() || null,
       profilePicture: profilePicture || null,
 
@@ -479,22 +483,22 @@ export const AccountEditModal: React.FC<AccountEditModalProps> = ({
                 />
               </div>
 
-              {/* Date of Birth & Father Confessor */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Input
-                  type="date"
-                  label="تاريخ الميلاد"
-                  value={dateOfBirth}
-                  onChange={(e) => setDateOfBirth(e.target.value)}
-                  iconLeading={<Calendar className="w-4 h-4" />}
-                />
-                <Input
-                  label="أب الاعتراف"
-                  value={fatherConfessor}
-                  onChange={(e) => setFatherConfessor(e.target.value)}
-                  placeholder="مثال: القمص متى المسكين"
-                />
-              </div>
+              <Input
+                type="date"
+                label="تاريخ الميلاد"
+                value={dateOfBirth}
+                onChange={(e) => setDateOfBirth(e.target.value)}
+                iconLeading={<Calendar className="w-4 h-4" />}
+              />
+
+              <FatherConfessorFields
+                fatherConfessor={fatherConfessor}
+                fatherConfessorChurch={fatherConfessorChurch}
+                onChange={(fc, fcc) => {
+                  setFatherConfessor(fc);
+                  setFatherConfessorChurch(fcc);
+                }}
+              />
 
               {/* Address */}
               <Input

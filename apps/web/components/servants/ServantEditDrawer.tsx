@@ -5,6 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { FatherConfessorFields } from '@/components/common/FatherConfessorFields';
 import { X, Shield, Lock, CheckCircle2, AlertCircle } from 'lucide-react';
 
 interface ServantEditDrawerProps {
@@ -45,6 +46,7 @@ export const ServantEditDrawer: React.FC<ServantEditDrawerProps> = ({
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [address, setAddress] = useState('');
   const [fatherConfessor, setFatherConfessor] = useState('');
+  const [fatherConfessorChurch, setFatherConfessorChurch] = useState('');
   const [maritalStatus, setMaritalStatus] = useState('أعزب');
   const [spouseName, setSpouseName] = useState('');
   const [educationOrCareer, setEducationOrCareer] = useState('');
@@ -74,6 +76,7 @@ export const ServantEditDrawer: React.FC<ServantEditDrawerProps> = ({
       setDateOfBirth(formatDobForInput(servant.dateOfBirth));
       setAddress(servant.address || '');
       setFatherConfessor(servant.fatherConfessor || '');
+      setFatherConfessorChurch(servant.fatherConfessorChurch || '');
       setMaritalStatus(servant.maritalStatus || 'أعزب');
       setSpouseName(servant.spouseName || '');
       setEducationOrCareer(servant.educationOrCareer || servant.jobTitle || '');
@@ -111,6 +114,7 @@ export const ServantEditDrawer: React.FC<ServantEditDrawerProps> = ({
       payload.dateOfBirth = dateOfBirth || null;
       payload.address = address.trim() || null;
       payload.fatherConfessor = fatherConfessor.trim() || null;
+      payload.fatherConfessorChurch = fatherConfessorChurch.trim() || null;
       payload.maritalStatus = maritalStatus || null;
       payload.spouseName = maritalStatus === 'متزوج' ? spouseName.trim() || null : null;
       payload.educationOrCareer = educationOrCareer.trim() || null;
@@ -134,6 +138,7 @@ export const ServantEditDrawer: React.FC<ServantEditDrawerProps> = ({
       payload.dateOfBirth = dateOfBirth || null;
       payload.address = address.trim() || null;
       payload.fatherConfessor = fatherConfessor.trim() || null;
+      payload.fatherConfessorChurch = fatherConfessorChurch.trim() || null;
       payload.educationOrCareer = educationOrCareer.trim() || null;
       payload.jobTitle = educationOrCareer.trim() || null;
       payload.maritalStatus = maritalStatus || null;
@@ -345,20 +350,21 @@ export const ServantEditDrawer: React.FC<ServantEditDrawerProps> = ({
               />
             )}
 
-            <div className="grid grid-cols-2 gap-3">
-              <Input
-                type="date"
-                label="تاريخ الميلاد"
-                value={dateOfBirth}
-                onChange={(e) => setDateOfBirth(e.target.value)}
-              />
-              <Input
-                label="أب الاعتراف"
-                placeholder="أبونا ..."
-                value={fatherConfessor}
-                onChange={(e) => setFatherConfessor(e.target.value)}
-              />
-            </div>
+            <Input
+              type="date"
+              label="تاريخ الميلاد"
+              value={dateOfBirth}
+              onChange={(e) => setDateOfBirth(e.target.value)}
+            />
+
+            <FatherConfessorFields
+              fatherConfessor={fatherConfessor}
+              fatherConfessorChurch={fatherConfessorChurch}
+              onChange={(fc, fcc) => {
+                setFatherConfessor(fc);
+                setFatherConfessorChurch(fcc);
+              }}
+            />
 
             <Input
               label="العنوان"

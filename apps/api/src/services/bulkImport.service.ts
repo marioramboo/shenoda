@@ -7,6 +7,7 @@ export interface RawMemberRow {
   address: string;
   phoneNumber?: string;
   fatherConfessor?: string;
+  fatherConfessorChurch?: string;
   fatherName?: string;
   fatherAge?: number | string;
   motherName?: string;
@@ -26,6 +27,7 @@ const memberRowSchema = z.object({
   address: z.string().min(3, 'العنوان مطلوب'),
   phoneNumber: z.string().optional().nullable(),
   fatherConfessor: z.string().optional().nullable(),
+  fatherConfessorChurch: z.string().optional().nullable(),
   fatherName: z.string().optional().nullable(),
   fatherAge: z.coerce.number().optional().nullable(),
   motherName: z.string().optional().nullable(),
@@ -70,7 +72,11 @@ export class BulkImportService {
       phone: 'phoneNumber',
       'الموبايل': 'phoneNumber',
       'اب الاعتراف': 'fatherConfessor',
+      'أب الاعتراف': 'fatherConfessor',
       fatherConfessor: 'fatherConfessor',
+      'كنيسة اب الاعتراف': 'fatherConfessorChurch',
+      'كنيسة أب الاعتراف': 'fatherConfessorChurch',
+      fatherConfessorChurch: 'fatherConfessorChurch',
       'اسم الأب': 'fatherName',
       fatherName: 'fatherName',
       'سن الأب': 'fatherAge',
@@ -146,6 +152,7 @@ export class BulkImportService {
           address: data.address,
           phoneNumber: data.phoneNumber || null,
           fatherConfessor: data.fatherConfessor || null,
+          fatherConfessorChurch: data.fatherConfessorChurch || null,
           fatherName: data.fatherName || null,
           fatherAge: data.fatherAge || null,
           motherName: data.motherName || null,

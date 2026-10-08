@@ -94,6 +94,7 @@ export class ReportController {
           fatherName: member.fatherName,
           motherName: member.motherName,
           fatherConfessor: member.fatherConfessor,
+          fatherConfessorChurch: member.fatherConfessorChurch,
           educationalGrade: member.educationalGrade,
           financialStatus: member.financialStatus,
           behaviorInService: member.behaviorInService,

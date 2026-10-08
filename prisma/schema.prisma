@@ -176,8 +176,9 @@ model User {
   status         UserStatus @default(ACTIVE)
 
   // Basic Non-Evaluative Profile Fields (Editable by Self per §4.1)
-  fatherConfessor   String?   // اب الاعتراف
-  dateOfBirth       DateTime?
+  fatherConfessor       String?   // اب الاعتراف
+  fatherConfessorChurch String?   // كنيسة اب الاعتراف
+  dateOfBirth           DateTime?
   address           String?
   maritalStatus     String?   // Single / Married (Editable only by Stage Secretary Level 3+)
   spouseName        String?
@@ -354,8 +355,9 @@ model ServedMember {
   dateOfBirth         DateTime
   address             String
   phoneNumber         String?      // Minor or primary guardian phone
-  fatherConfessor     String?      // Optional for younger stages
-  facebookUrl         String?
+  fatherConfessor       String?      // Optional for younger stages
+  fatherConfessorChurch String?      // كنيسة اب الاعتراف
+  facebookUrl           String?
   instagramUrl        String?
 
   // Family & Academic Background

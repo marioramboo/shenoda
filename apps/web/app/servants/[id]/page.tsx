@@ -334,6 +334,7 @@ export default function ServantProfilePage() {
                   ],
                   ['العنوان', servant.address],
                   ['أب الاعتراف', servant.fatherConfessor],
+                  ['كنيسة أب الاعتراف', servant.fatherConfessorChurch],
                   ['رقم الهاتف', servant.phoneNumber],
                   ['البريد الإلكتروني', servant.email],
                   ['الحالة الاجتماعية', servant.maritalStatus || 'أعزب'],
