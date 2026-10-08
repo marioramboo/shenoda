@@ -1,0 +1,46 @@
+name: Sync Upstream (marioramboo -> George-STD)
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    name: Sync Main Branch with Upstream
+    runs-on: ubuntu-latest
+    if: github.repository == 'George-STD/shenoda'
+    steps:
+      - name: Checkout Target Repo
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Configure Git Author
+        run: |
+          git config user.name "George-STD"
+          git config user.email "2023170173@cis.asu.edu.eg"
+
+      - name: Fetch and Merge from Upstream
+        run: |
+          git remote add upstream https://github.com/marioramboo/shenoda.git
+          git fetch upstream main
+          
+          LOCAL_HASH=$(git rev-parse HEAD)
+          UPSTREAM_HASH=$(git rev-parse upstream/main)
+          
+          if [ "$LOCAL_HASH" = "$UPSTREAM_HASH" ]; then
+            echo "Already up-to-date with upstream/main ($LOCAL_HASH)."
+            exit 0
+          fi
+          
+          echo "Syncing changes from upstream ($UPSTREAM_HASH) to local ($LOCAL_HASH)..."
+          
+          git merge upstream/main --no-edit -m "chore(sync): sync upstream updates from marioramboo"
+          git commit --allow-empty -m "chore(deploy): trigger vercel build for synced changes" --author="George-STD <2023170173@cis.asu.edu.eg>"
+          
+          git push origin main
