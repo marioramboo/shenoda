@@ -325,7 +325,46 @@ export class YearPlanController {
         orderBy: { createdAt: 'desc' },
       });
 
-      const formattedEvents = (plan.events || []).map(formatCalendarEvent);
+      // Servants' meetings (SERVICE_MEETING & SECRETARIES_COUNCIL) are church-wide and show across all stages
+      const meetingWhere: any = {
+        category: { in: ['SERVICE_MEETING', 'SECRETARIES_COUNCIL'] },
+      };
+      if (user.roleLevel < 3) {
+        // Regular servants (roleLevel < 3) can NEVER see SECRETARIES_COUNCIL
+        meetingWhere.category = 'SERVICE_MEETING';
+      }
+
+      const churchMeetings = await prisma.calendarEvent.findMany({
+        where: meetingWhere,
+        include: {
+          volunteers: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  fullName: true,
+                  phoneNumber: true,
+                  role: { select: { id: true, name: true, code: true } },
+                },
+              },
+            },
+          },
+        },
+        orderBy: { startDate: 'asc' },
+      });
+
+      const planEventIds = new Set((plan.events || []).map((e) => e.id));
+      const combinedEvents = [
+        ...(plan.events || []),
+        ...churchMeetings.filter((m) => !planEventIds.has(m.id)),
+      ];
+
+      // Strict visibility firewall: filter out SECRETARIES_COUNCIL for regular servants (roleLevel < 3)
+      const visibleEvents = user.roleLevel < 3
+        ? combinedEvents.filter((e) => e.category !== 'SECRETARIES_COUNCIL')
+        : combinedEvents;
+
+      const formattedEvents = visibleEvents.map(formatCalendarEvent);
 
       return res.status(200).json({
         success: true,
@@ -453,8 +492,8 @@ export class YearPlanController {
       const event = await prisma.calendarEvent.create({
         data: {
           yearPlanId,
-          stageId: stageId || null,
-          sectorId: sectorId || null,
+          stageId: isServantMeeting ? null : (stageId || null),
+          sectorId: isServantMeeting ? null : (sectorId || null),
           title,
           description: resolvedDescription,
           category: category as any,
@@ -606,6 +645,8 @@ export class YearPlanController {
           title: title !== undefined ? title : event.title,
           description: resolvedDescription,
           category: updatedCategory as any,
+          stageId: (updatedCategory === 'SERVICE_MEETING' || updatedCategory === 'SECRETARIES_COUNCIL') ? null : event.stageId,
+          sectorId: (updatedCategory === 'SERVICE_MEETING' || updatedCategory === 'SECRETARIES_COUNCIL') ? null : event.sectorId,
           startDate: startDate ? new Date(startDate) : event.startDate,
           endDate: endDate ? new Date(endDate) : (startDate ? new Date(startDate) : event.endDate),
           location: location !== undefined ? location : event.location,

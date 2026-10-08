@@ -798,5 +798,41 @@ describe('Phase 7 — Announcements, Polls & Notifications Comprehensive Test Su
       assert.ok(logs.length >= 1);
       assert.strictEqual(logs[0].title, 'تذكير بتحضير الدرس');
     });
+
+    test('3.4 Stage Secretary dispatches preparation notification reminder via API', async () => {
+      const secToken = makeToken({
+        userId: 'user-sec-1',
+        roleLevel: 3,
+        roleCode: 'STAGE_SECRETARY',
+        stageIds: ['stage-prep-boys'],
+        sectorIds: ['sector-youth'],
+      });
+
+      const res = await fetch(`${baseUrl}/api/v1/preparations/remind/user-servant-a`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${secToken}`,
+        },
+        body: JSON.stringify({
+          eventId: 'evt-lesson-1',
+          lessonTitle: 'مثل الابن الضال',
+        }),
+      });
+
+      const body = await res.json();
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(body.success, true);
+      assert.ok(body.message.includes('تذكير'));
+
+      // Verify notification log created with PREP_DEADLINE
+      const logs = await mockDb.notificationLog.findMany({
+        where: { userId: 'user-servant-a', type: NotificationType.PREP_DEADLINE },
+      });
+      assert.ok(logs.length >= 2);
+    });
+
   });
 });
+
+

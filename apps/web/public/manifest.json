@@ -1,0 +1,26 @@
+{
+  "name": "نظام خدمة الأنبا شنودة - إدارة الخدمة الكنسية",
+  "short_name": "شنودة",
+  "description": "نظام إدارة الخدمة الكنسية ومتابعة التحضيرات والافتقاد",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F8FAFC",
+  "theme_color": "#0D3B66",
+  "orientation": "portrait-primary",
+  "dir": "rtl",
+  "lang": "ar",
+  "icons": [
+    {
+      "src": "/logo.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ]
+}
