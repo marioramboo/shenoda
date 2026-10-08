@@ -10,6 +10,7 @@ router.use(requireAuth);
 router.post('/', AnnouncementController.createAnnouncement);
 router.get('/', AnnouncementController.listAnnouncements);
 router.patch('/:id/read', AnnouncementController.markAsRead);
+router.delete('/:id', AnnouncementController.deleteAnnouncement);
 
 export default router;
 export { router as announcementRouter };

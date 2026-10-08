@@ -1118,9 +1118,27 @@ export function createMockPrisma() {
       findMany: async (args?: any) => {
         const where = args?.where || {};
         const filtered = scopeAssignments.filter((sa) => {
-          if (where.stageId && sa.stageId !== where.stageId) return false;
-          if (where.sectorId && sa.sectorId !== where.sectorId) return false;
-          if (where.userId && sa.userId !== where.userId) return false;
+          if (where.stageId) {
+            if (typeof where.stageId === 'object' && Array.isArray(where.stageId.in)) {
+              if (!where.stageId.in.includes(sa.stageId)) return false;
+            } else if (sa.stageId !== where.stageId) {
+              return false;
+            }
+          }
+          if (where.sectorId) {
+            if (typeof where.sectorId === 'object' && Array.isArray(where.sectorId.in)) {
+              if (!where.sectorId.in.includes(sa.sectorId)) return false;
+            } else if (sa.sectorId !== where.sectorId) {
+              return false;
+            }
+          }
+          if (where.userId) {
+            if (typeof where.userId === 'object' && Array.isArray(where.userId.in)) {
+              if (!where.userId.in.includes(sa.userId)) return false;
+            } else if (sa.userId !== where.userId) {
+              return false;
+            }
+          }
           return true;
         });
 
@@ -2395,6 +2413,19 @@ export function createMockPrisma() {
           targetStage: stage ? { id: stage.id, name: stage.name } : null,
         };
       },
+
+      delete: async (args: any) => {
+        const where = args?.where || {};
+        const idx = announcements.findIndex((a) => a.id === where.id);
+        if (idx === -1) throw new Error('Announcement not found');
+        const removed = announcements.splice(idx, 1)[0];
+        for (let i = announcementRecipients.length - 1; i >= 0; i--) {
+          if (announcementRecipients[i].announcementId === where.id) {
+            announcementRecipients.splice(i, 1);
+          }
+        }
+        return removed;
+      },
     },
 
     announcementRecipient: {
@@ -2473,6 +2504,18 @@ export function createMockPrisma() {
           if (typeof where.isRead === 'boolean' && r.isRead !== where.isRead) return false;
           return true;
         });
+      },
+
+      deleteMany: async (args: any) => {
+        const where = args?.where || {};
+        let count = 0;
+        for (let i = announcementRecipients.length - 1; i >= 0; i--) {
+          if (!where.announcementId || announcementRecipients[i].announcementId === where.announcementId) {
+            announcementRecipients.splice(i, 1);
+            count++;
+          }
+        }
+        return { count };
       },
     },
 
@@ -2586,6 +2629,20 @@ export function createMockPrisma() {
         polls[index] = { ...polls[index], ...data, updatedAt: new Date() };
         return polls[index];
       },
+
+      delete: async (args: any) => {
+        const where = args?.where || {};
+        const idx = polls.findIndex((p) => p.id === where.id);
+        if (idx === -1) throw new Error('Poll not found');
+        const removed = polls.splice(idx, 1)[0];
+        for (let i = pollVotes.length - 1; i >= 0; i--) {
+          if (pollVotes[i].pollId === where.id) pollVotes.splice(i, 1);
+        }
+        for (let i = pollOptions.length - 1; i >= 0; i--) {
+          if (pollOptions[i].pollId === where.id) pollOptions.splice(i, 1);
+        }
+        return removed;
+      },
     },
 
     pollOption: {
@@ -2596,6 +2653,17 @@ export function createMockPrisma() {
       findMany: async (args?: any) => {
         const where = args?.where || {};
         return pollOptions.filter((o) => !where.pollId || o.pollId === where.pollId);
+      },
+      deleteMany: async (args?: any) => {
+        const where = args?.where || {};
+        let count = 0;
+        for (let i = pollOptions.length - 1; i >= 0; i--) {
+          if (!where.pollId || pollOptions[i].pollId === where.pollId) {
+            pollOptions.splice(i, 1);
+            count++;
+          }
+        }
+        return { count };
       },
     },
 
@@ -2634,6 +2702,18 @@ export function createMockPrisma() {
           );
         }
         return pollVotes.find((v) => v.id === where.id) || null;
+      },
+
+      deleteMany: async (args?: any) => {
+        const where = args?.where || {};
+        let count = 0;
+        for (let i = pollVotes.length - 1; i >= 0; i--) {
+          if (!where.pollId || pollVotes[i].pollId === where.pollId) {
+            pollVotes.splice(i, 1);
+            count++;
+          }
+        }
+        return { count };
       },
     },
 

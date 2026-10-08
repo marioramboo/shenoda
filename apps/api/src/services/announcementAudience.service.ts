@@ -4,6 +4,7 @@ import { TargetScopeLevel, UserContext } from '@shenoda/shared';
 export interface ResolveAudienceInput {
   targetScopeType: TargetScopeLevel;
   targetStageId?: string;
+  targetStageIds?: string[];
   targetSectorId?: string;
   specificUserIds?: string[];
 }
@@ -50,28 +51,55 @@ export class AnnouncementAudienceService {
         throw err;
       }
     }
-    // Case B: Stage-wide Targeting (STAGE_ALL / STAGE_SUBSET)
-    else if (input.targetScopeType === TargetScopeLevel.STAGE_ALL || input.targetStageId) {
-      const stageId = input.targetStageId || author.stageIds[0];
+    // Case B: Stage Targeting (Single or Multiple Stages)
+    else if (
+      (input.targetStageIds && input.targetStageIds.length > 0) ||
+      input.targetScopeType === TargetScopeLevel.STAGE_ALL ||
+      input.targetStageId
+    ) {
+      const stageIds = input.targetStageIds && input.targetStageIds.length > 0
+        ? input.targetStageIds
+        : [input.targetStageId || author.stageIds[0]].filter(Boolean);
 
-      if (!stageId) {
-        const err: any = new Error('targetStageId is required for stage targeting');
+      if (stageIds.length === 0) {
+        const err: any = new Error('targetStageId or targetStageIds is required for stage targeting');
         err.code = 'ERR_VALIDATION';
         err.status = 400;
         throw err;
       }
 
       // Level 3 Stage Secretary can target ONLY his own stage
-      if (author.roleLevel === 3 && !author.stageIds.includes(stageId)) {
-        const err: any = new Error('لا يمكنك توجيه إعلانات لمرحلة أخرى غير مسندة إليك');
-        err.code = 'ERR_SCOPE_MISMATCH';
-        err.status = 403;
-        throw err;
+      if (author.roleLevel === 3) {
+        for (const sid of stageIds) {
+          if (!author.stageIds.includes(sid)) {
+            const err: any = new Error('لا يمكنك توجيه إعلانات لمرحلة أخرى غير مسندة إليك');
+            err.code = 'ERR_SCOPE_MISMATCH';
+            err.status = 403;
+            throw err;
+          }
+        }
       }
 
-      // Fetch users assigned to stage
+      // Level 4 Sector Secretary can target stages belonging to his sector
+      if (author.roleLevel === 4) {
+        const stagesInSector = await prisma.stage.findMany({
+          where: { sectorId: { in: author.sectorIds } },
+          select: { id: true },
+        });
+        const validSectorStageIds = stagesInSector.map((st: any) => st.id);
+        for (const sid of stageIds) {
+          if (validSectorStageIds.length > 0 && !validSectorStageIds.includes(sid)) {
+            const err: any = new Error('لا يمكنك توجيه إعلانات لمرحلة خارج نطاق قطاعك');
+            err.code = 'ERR_SCOPE_MISMATCH';
+            err.status = 403;
+            throw err;
+          }
+        }
+      }
+
+      // Fetch users assigned to any of the target stages
       const scopes = await prisma.scopeAssignment.findMany({
-        where: { stageId },
+        where: { stageId: { in: stageIds } },
         include: {
           user: {
             include: { role: { select: { level: true } } },
@@ -81,8 +109,8 @@ export class AnnouncementAudienceService {
 
       // Filter: Strictly at or below author's tier
       candidateUsers = scopes
-        .filter((s) => s.user && s.user.role.level <= author.roleLevel)
-        .map((s) => ({
+        .filter((s: any) => s.user && s.user.role.level <= author.roleLevel)
+        .map((s: any) => ({
           id: s.user.id,
           roleLevel: s.user.role.level,
         }));

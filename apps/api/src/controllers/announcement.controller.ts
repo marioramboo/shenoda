@@ -26,6 +26,7 @@ export class AnnouncementController {
         content,
         targetScopeType = TargetScopeLevel.STAGE_ALL,
         targetStageId,
+        targetStageIds,
         targetSectorId,
         specificUserIds,
         isPinned = false,
@@ -46,20 +47,25 @@ export class AnnouncementController {
         {
           targetScopeType,
           targetStageId,
+          targetStageIds,
           targetSectorId,
           specificUserIds,
         }
       );
 
       // 2. Create the Announcement record
+      const resolvedStageId = (targetStageIds && targetStageIds.length === 1)
+        ? targetStageIds[0]
+        : (targetStageId || null);
+
       const announcement = await prisma.announcement.create({
         data: {
           authorUserId: user.userId,
           title,
           content,
           targetScopeType: targetScopeType as PrismaTargetScopeLevel,
-          targetStageId: targetStageId || null,
-          targetSectorId: targetSectorId || null,
+          targetStageId: resolvedStageId,
+          targetSectorId: targetSectorId || (user.sectorIds ? user.sectorIds[0] : null) || null,
           isPinned: isPinned ?? false,
           expiresAt: expiresAt ? new Date(expiresAt) : null,
         },
@@ -239,6 +245,80 @@ export class AnnouncementController {
       });
     } catch (err: any) {
       console.error('Error marking announcement as read:', err);
+      return res.status(500).json({
+        success: false,
+        error: { code: 'INTERNAL_SERVER_ERROR', message: err.message },
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
+  /**
+   * DELETE /api/v1/announcements/:id
+   * Deletes an announcement (author, Sector Secretary in scope, or General Secretary).
+   */
+  static async deleteAnnouncement(req: Request, res: Response) {
+    try {
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          error: { code: 'AUTH_REQUIRED', message: 'Authentication required' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const { id } = req.params;
+      const announcement = await prisma.announcement.findUnique({
+        where: { id },
+      });
+
+      if (!announcement) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'الإعلان غير موجود' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const isAuthor = announcement.authorUserId === user.userId;
+      const isGeneralSecretary = user.roleLevel >= 5;
+      const isSectorSecInScope =
+        user.roleLevel === 4 &&
+        Boolean(
+          (announcement.targetSectorId && user.sectorIds?.includes(announcement.targetSectorId)) ||
+          isAuthor
+        );
+      const isStageSecInScope =
+        user.roleLevel === 3 &&
+        Boolean(
+          (announcement.targetStageId && user.stageIds?.includes(announcement.targetStageId)) ||
+          isAuthor
+        );
+
+      if (!isAuthor && !isGeneralSecretary && !isSectorSecInScope && !isStageSecInScope) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'لا تملك صلاحية حذف هذا الإعلان' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      await prisma.announcementRecipient.deleteMany({
+        where: { announcementId: id },
+      });
+
+      await prisma.announcement.delete({
+        where: { id },
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: 'تم حذف الإعلان بنجاح',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      console.error('Error deleting announcement:', err);
       return res.status(500).json({
         success: false,
         error: { code: 'INTERNAL_SERVER_ERROR', message: err.message },
