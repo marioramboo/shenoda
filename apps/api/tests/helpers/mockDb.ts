@@ -432,7 +432,7 @@ export function createMockPrisma() {
     const userMemberAssignments = memberServantAssignments
       .filter((a) => a.servantUserId === u.id)
       .map((a) => {
-        const member = members.find((m) => m.id === a.memberId);
+        const member = servedMembers.find((m) => m.id === a.memberId);
         return {
           ...a,
           member: member
