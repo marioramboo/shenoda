@@ -60,7 +60,7 @@ const EVENT_CATEGORY_ARABIC: Record<EventCategory, string> = {
   [EventCategory.LITURGY_FEAST]: 'قداس / مناسبة كنسية',
   [EventCategory.SPIRITUAL_LESSON]: 'درس روحي / موضوع دراسي',
   [EventCategory.SERVICE_MEETING]: 'اجتماع الخدمة الأسبوعي',
-  [EventCategory.SECRETARIES_COUNCIL]: 'اجتماع مجلس الأمناء',
+  [EventCategory.SECRETARIES_COUNCIL]: 'اجتماع الأمناء (مجلس الأمناء)',
   [EventCategory.TRIP_OR_OUTING]: 'رحلة ترفيهية / روحية',
   [EventCategory.CONFERENCE_RETREAT]: 'مؤتمر روحي',
   [EventCategory.COMMUNITY_ACTIVITY]: 'نشاط اجتماعي / رياضي',
@@ -318,6 +318,25 @@ export default function StagePlanPage() {
     });
   };
 
+  // Standalone church-wide meetings cache to guarantee meetings show across all stages
+  const [churchMeetings, setChurchMeetings] = useState<CalendarEvent[]>([]);
+
+  const fetchChurchMeetings = async () => {
+    try {
+      const res = await api.get('/api/v1/calendar');
+      if (res.data?.success && Array.isArray(res.data.data)) {
+        const meetings = res.data.data.filter(
+          (e: CalendarEvent) =>
+            e.category === EventCategory.SERVICE_MEETING ||
+            e.category === EventCategory.SECRETARIES_COUNCIL
+        );
+        setChurchMeetings(meetings);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
   // Fetch Year Plans
   const fetchPlans = async (targetStageId?: string) => {
     try {
@@ -335,7 +354,7 @@ export default function StagePlanPage() {
         setPlans([]);
         setSelectedPlan(null);
       }
-      await fetchUserPreparations();
+      await Promise.all([fetchUserPreparations(), fetchChurchMeetings()]);
     } catch (err) {
       console.error('Failed to load year plans:', err);
     } finally {
@@ -367,7 +386,7 @@ export default function StagePlanPage() {
     let overview = evt.overview;
     let bibleVerse = evt.bibleVerse;
     let references = evt.references;
-    let requiresAllServants = Boolean(evt.requiresAllServants);
+    let requiresAllServants: boolean | undefined = evt.requiresAllServants;
 
     if (evt.description && typeof evt.description === 'string' && evt.description.trim().startsWith('{')) {
       try {
@@ -383,6 +402,17 @@ export default function StagePlanPage() {
       }
     } else if (!overview && evt.description) {
       overview = evt.description;
+    }
+
+    if (requiresAllServants === undefined) {
+      if (
+        evt.category === EventCategory.SERVICE_MEETING ||
+        evt.category === EventCategory.SECRETARIES_COUNCIL
+      ) {
+        requiresAllServants = !evt.maxVolunteers;
+      } else {
+        requiresAllServants = false;
+      }
     }
 
     return {
@@ -410,19 +440,45 @@ export default function StagePlanPage() {
     return evt.description;
   };
 
+  // Helper to determine whether attendance in a تدبير is mandatory (not optional)
+  const isAttendanceMandatory = (evt: CalendarEvent): boolean => {
+    if (evt.requiresAllServants === true) return true;
+    if (evt.requiresAllServants === false) return false;
+    if (
+      evt.category === EventCategory.SERVICE_MEETING ||
+      evt.category === EventCategory.SECRETARIES_COUNCIL
+    ) {
+      return !evt.maxVolunteers;
+    }
+    return !evt.maxVolunteers;
+  };
+
   // Filter events into the 3 distinct parts (cleanly sanitized)
+  // Combines stage-specific plan events with church-wide meetings
   const allEvents = useMemo(() => {
-    return (selectedPlan?.events || []).map(sanitizeEvent);
-  }, [selectedPlan]);
+    const planEvts = (selectedPlan?.events || []).map(sanitizeEvent);
+    const planEvtIds = new Set(planEvts.map((e) => e.id));
+    const extraMeetings = churchMeetings
+      .filter((m) => !planEvtIds.has(m.id))
+      .map(sanitizeEvent);
+    return [...planEvts, ...extraMeetings];
+  }, [selectedPlan, churchMeetings]);
 
   // 1. تدبير اجتماع خدام: SERVICE_MEETING & SECRETARIES_COUNCIL
+  // Business Rule:
+  // - SERVICE_MEETING (اجتماع الخدمة): shows to ALL stages and ALL servants
+  // - SECRETARIES_COUNCIL (اجتماع الأمناء): shows to Stage Secretary and above (level >= 3), HIDDEN from regular servants
   const meetingEvents = useMemo(() => {
-    return allEvents.filter(
-      (e) =>
-        e.category === EventCategory.SERVICE_MEETING ||
-        e.category === EventCategory.SECRETARIES_COUNCIL
-    );
-  }, [allEvents]);
+    return allEvents.filter((e) => {
+      if (e.category === EventCategory.SERVICE_MEETING) {
+        return true;
+      }
+      if (e.category === EventCategory.SECRETARIES_COUNCIL) {
+        return Boolean(user && user.role && user.role.level >= 3);
+      }
+      return false;
+    });
+  }, [allEvents, user]);
 
   // 2. تدبير الخدمة: LITURGY_FEAST, TRIP_OR_OUTING, CONFERENCE_RETREAT, COMMUNITY_ACTIVITY
   const serviceEvents = useMemo(() => {
@@ -634,6 +690,7 @@ export default function StagePlanPage() {
       if (res.data?.success) {
         setActionMessage({ type: 'success', text: 'تم حذف موعد الاجتماع بنجاح' });
         await loadPlanDetail(planId);
+        await fetchChurchMeetings();
         setTimeout(() => setActionMessage(null), 4000);
       }
     } catch (err: any) {
@@ -742,6 +799,7 @@ export default function StagePlanPage() {
           setEditingEvent(null);
           setActionMessage({ type: 'success', text: 'تم تحديث التدبير بنجاح!' });
           await loadPlanDetail(planId);
+          await fetchChurchMeetings();
           setTimeout(() => setActionMessage(null), 4000);
         }
       } catch (err: any) {
@@ -777,6 +835,7 @@ export default function StagePlanPage() {
         setIsAddEventOpen(false);
         setActionMessage({ type: 'success', text: 'تمت إضافة التدبير بنجاح إلى الخطة!' });
         await loadPlanDetail(planId);
+        await fetchChurchMeetings();
         setTimeout(() => setActionMessage(null), 4000);
       }
     } catch (err: any) {
@@ -1219,32 +1278,38 @@ export default function StagePlanPage() {
                           )}
                         </div>
 
-                        {/* Actions (Photo 3): تسجيل حضور + كشف الخدام */}
+                        {/* Actions (Photo 3): تسجيل حضور أو الحضور الزامي + كشف الخدام */}
                         <div className="flex items-center justify-between pt-2.5 border-t border-border-default flex-wrap gap-2">
-                          <Button
-                            variant={isVolunteered ? 'outline' : 'primary'}
-                            size="sm"
-                            isLoading={volunteerActionLoading === evt.id}
-                            onClick={() => handleVolunteerToggle(evt)}
-                            className={cn(
-                              'h-8 px-3 text-caption font-bold gap-1.5',
-                              isVolunteered
-                                ? 'text-status-success border-status-success/40 bg-status-success-soft hover:bg-status-success-soft/80'
-                                : 'bg-brand-primary text-white hover:bg-brand-primary/90'
-                            )}
-                          >
-                            {isVolunteered ? (
-                              <>
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                <span>تم تسجيل حضورك بنجاح</span>
-                              </>
-                            ) : (
-                              <>
-                                <Check className="w-3.5 h-3.5" />
-                                <span>تسجيل حضور</span>
-                              </>
-                            )}
-                          </Button>
+                          {isAttendanceMandatory(evt) ? (
+                            <span className="text-red-800 dark:text-red-500 font-bold text-caption select-none py-1 px-1">
+                              الحضور الزامي
+                            </span>
+                          ) : (
+                            <Button
+                              variant={isVolunteered ? 'outline' : 'primary'}
+                              size="sm"
+                              isLoading={volunteerActionLoading === evt.id}
+                              onClick={() => handleVolunteerToggle(evt)}
+                              className={cn(
+                                'h-8 px-3 text-caption font-bold gap-1.5',
+                                isVolunteered
+                                  ? 'text-status-success border-status-success/40 bg-status-success-soft hover:bg-status-success-soft/80'
+                                  : 'bg-brand-primary text-white hover:bg-brand-primary/90'
+                              )}
+                            >
+                              {isVolunteered ? (
+                                <>
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  <span>تم تسجيل حضورك بنجاح</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>تسجيل حضور</span>
+                                </>
+                              )}
+                            </Button>
+                          )}
 
                           <div className="flex items-center gap-1.5">
                             <Button
@@ -1409,32 +1474,38 @@ export default function StagePlanPage() {
                           )}
                         </div>
 
-                        {/* Actions (Photo 3): تسجيل حضور + كشف المتطوعين */}
+                        {/* Actions (Photo 3): تسجيل حضور أو الحضور الزامي + كشف المتطوعين */}
                         <div className="flex items-center justify-between pt-2.5 border-t border-border-default flex-wrap gap-2">
-                          <Button
-                            variant={isVolunteered ? 'outline' : 'primary'}
-                            size="sm"
-                            isLoading={volunteerActionLoading === evt.id}
-                            onClick={() => handleVolunteerToggle(evt)}
-                            className={cn(
-                              'h-8 px-3 text-caption font-bold gap-1.5',
-                              isVolunteered
-                                ? 'text-status-success border-status-success/40 bg-status-success-soft hover:bg-status-success-soft/80'
-                                : 'bg-brand-primary text-white hover:bg-brand-primary/90'
-                            )}
-                          >
-                            {isVolunteered ? (
-                              <>
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                <span>تم تسجيل حضورك بنجاح</span>
-                              </>
-                            ) : (
-                              <>
-                                <Check className="w-3.5 h-3.5" />
-                                <span>تسجيل حضور</span>
-                              </>
-                            )}
-                          </Button>
+                          {isAttendanceMandatory(evt) ? (
+                            <span className="text-red-800 dark:text-red-500 font-bold text-caption select-none py-1 px-1">
+                              الحضور الزامي
+                            </span>
+                          ) : (
+                            <Button
+                              variant={isVolunteered ? 'outline' : 'primary'}
+                              size="sm"
+                              isLoading={volunteerActionLoading === evt.id}
+                              onClick={() => handleVolunteerToggle(evt)}
+                              className={cn(
+                                'h-8 px-3 text-caption font-bold gap-1.5',
+                                isVolunteered
+                                  ? 'text-status-success border-status-success/40 bg-status-success-soft hover:bg-status-success-soft/80'
+                                  : 'bg-brand-primary text-white hover:bg-brand-primary/90'
+                              )}
+                            >
+                              {isVolunteered ? (
+                                <>
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  <span>تم تسجيل حضورك بنجاح</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>تسجيل حضور</span>
+                                </>
+                              )}
+                            </Button>
+                          )}
 
                           <div className="flex items-center gap-1.5">
                             <Button
@@ -1655,25 +1726,31 @@ export default function StagePlanPage() {
                           type="button"
                           onClick={() => setEventCategory(EventCategory.SERVICE_MEETING)}
                           className={cn(
-                            'p-2 text-caption font-semibold rounded-card border transition-all text-center',
+                            'p-2.5 text-caption font-semibold rounded-card border transition-all text-center flex flex-col items-center justify-center gap-1',
                             eventCategory === EventCategory.SERVICE_MEETING
                               ? 'bg-brand-primary text-white border-brand-primary shadow-sm'
                               : 'bg-bg-muted border-border-default text-text-secondary hover:text-text-primary'
                           )}
                         >
-                          اجتماع الخدمة الأسبوعي
+                          <span className="font-bold">اجتماع الخدمة</span>
+                          <span className={cn('text-[10px] leading-tight', eventCategory === EventCategory.SERVICE_MEETING ? 'text-white/85' : 'text-text-tertiary')}>
+                            يظهر لجميع المراحل وكافة الخدام
+                          </span>
                         </button>
                         <button
                           type="button"
                           onClick={() => setEventCategory(EventCategory.SECRETARIES_COUNCIL)}
                           className={cn(
-                            'p-2 text-caption font-semibold rounded-card border transition-all text-center',
+                            'p-2.5 text-caption font-semibold rounded-card border transition-all text-center flex flex-col items-center justify-center gap-1',
                             eventCategory === EventCategory.SECRETARIES_COUNCIL
                               ? 'bg-brand-primary text-white border-brand-primary shadow-sm'
                               : 'bg-bg-muted border-border-default text-text-secondary hover:text-text-primary'
                           )}
                         >
-                          مجلس أمناء المرحلة
+                          <span className="font-bold">اجتماع الأمناء</span>
+                          <span className={cn('text-[10px] leading-tight', eventCategory === EventCategory.SECRETARIES_COUNCIL ? 'text-white/85' : 'text-text-tertiary')}>
+                            يظهر لأمين الخدمة فما فوق فقط
+                          </span>
                         </button>
                       </div>
                     </div>

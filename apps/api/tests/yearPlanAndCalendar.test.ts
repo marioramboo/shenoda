@@ -435,6 +435,176 @@ describe('Phase 6 — Year Plan (تدبير السنة) & Calendar Module Compre
       });
       assert.strictEqual(genDelRes.status, 200);
     });
+
+    test('1.11 SERVICE_MEETING is visible across all stages and all servants (Level 1 & above)', async () => {
+      // Stage Prep Boys Plan
+      const planBoys = await mockDb.yearPlan.create({
+        data: {
+          organizationId: 'org-1',
+          title: 'خطة إعدادي بنين',
+          academicYear: '2026-2027',
+          scopeType: 'STAGE',
+          stageId: 'stage-prep-boys',
+          publishedById: 'user-stagesec-boys',
+          isPublished: true,
+        },
+      });
+
+      // Stage Prep Girls Plan
+      const planGirls = await mockDb.yearPlan.create({
+        data: {
+          organizationId: 'org-1',
+          title: 'خطة إعدادي بنات',
+          academicYear: '2026-2027',
+          scopeType: 'STAGE',
+          stageId: 'stage-prep-girls',
+          publishedById: 'user-stagesec-boys',
+          isPublished: true,
+        },
+      });
+
+      const genSecToken = makeToken({
+        userId: 'user-generalsec',
+        roleLevel: 5,
+        roleCode: 'GENERAL_SECRETARY',
+        stageIds: [],
+        sectorIds: [],
+      });
+
+      // General Secretary creates SERVICE_MEETING
+      const createRes = await fetch(`${baseUrl}/api/v1/year-plans/${planBoys.id}/events`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${genSecToken}`,
+        },
+        body: JSON.stringify({
+          title: 'اجتماع الخدمة العام لجميع الخدام',
+          category: 'SERVICE_MEETING',
+          startDate: '2026-10-15T19:00:00.000Z',
+          requiresAllServants: true,
+        }),
+      });
+      assert.strictEqual(createRes.status, 201);
+
+      // Servant in Prep Boys (Level 1) checks Boys plan -> Sees meeting
+      const servantBoysToken = makeToken({
+        userId: 'user-servant-a',
+        roleLevel: 1,
+        roleCode: 'SERVANT',
+        stageIds: ['stage-prep-boys'],
+        sectorIds: ['sector-youth'],
+      });
+      const getBoysRes = await fetch(`${baseUrl}/api/v1/year-plans/${planBoys.id}`, {
+        headers: { Authorization: `Bearer ${servantBoysToken}` },
+      });
+      const getBoysData = await getBoysRes.json();
+      assert.strictEqual(getBoysRes.status, 200);
+      const hasInBoys = getBoysData.data.events.some((e: any) => e.title === 'اجتماع الخدمة العام لجميع الخدام');
+      assert.strictEqual(hasInBoys, true);
+
+      // Servant in Prep Girls (Level 1) checks Girls plan -> Also sees meeting across stages
+      const servantGirlsToken = makeToken({
+        userId: 'user-servant-c',
+        roleLevel: 1,
+        roleCode: 'SERVANT',
+        stageIds: ['stage-prep-girls'],
+        sectorIds: ['sector-youth'],
+      });
+      const getGirlsRes = await fetch(`${baseUrl}/api/v1/year-plans/${planGirls.id}`, {
+        headers: { Authorization: `Bearer ${servantGirlsToken}` },
+      });
+      const getGirlsData = await getGirlsRes.json();
+      assert.strictEqual(getGirlsRes.status, 200);
+      const hasInGirls = getGirlsData.data.events.some((e: any) => e.title === 'اجتماع الخدمة العام لجميع الخدام');
+      assert.strictEqual(hasInGirls, true);
+    });
+
+    test('1.12 SECRETARIES_COUNCIL is visible to Stage Secretary (Level 3+) but strictly HIDDEN from Level 1 servants', async () => {
+      const planBoys = await mockDb.yearPlan.create({
+        data: {
+          organizationId: 'org-1',
+          title: 'خطة إعدادي بنين',
+          academicYear: '2026-2027',
+          scopeType: 'STAGE',
+          stageId: 'stage-prep-boys',
+          publishedById: 'user-stagesec-boys',
+          isPublished: true,
+        },
+      });
+
+      const genSecToken = makeToken({
+        userId: 'user-generalsec',
+        roleLevel: 5,
+        roleCode: 'GENERAL_SECRETARY',
+        stageIds: [],
+        sectorIds: [],
+      });
+
+      // General Secretary creates SECRETARIES_COUNCIL
+      const createRes = await fetch(`${baseUrl}/api/v1/year-plans/${planBoys.id}/events`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${genSecToken}`,
+        },
+        body: JSON.stringify({
+          title: 'اجتماع مجلس الأمناء السري للمشرفين',
+          category: 'SECRETARIES_COUNCIL',
+          startDate: '2026-10-20T19:00:00.000Z',
+          requiresAllServants: true,
+        }),
+      });
+      assert.strictEqual(createRes.status, 201);
+      const councilEvent = (await createRes.json()).data;
+
+      // 1. Stage Secretary (Level 3) queries plan -> CAN see SECRETARIES_COUNCIL
+      const stageSecToken = makeToken({
+        userId: 'user-stagesec-boys',
+        roleLevel: 3,
+        roleCode: 'STAGE_SECRETARY',
+        stageIds: ['stage-prep-boys'],
+        sectorIds: ['sector-youth'],
+      });
+      const stageSecRes = await fetch(`${baseUrl}/api/v1/year-plans/${planBoys.id}`, {
+        headers: { Authorization: `Bearer ${stageSecToken}` },
+      });
+      const stageSecData = await stageSecRes.json();
+      assert.strictEqual(stageSecRes.status, 200);
+      const secSeesCouncil = stageSecData.data.events.some((e: any) => e.category === 'SECRETARIES_COUNCIL');
+      assert.strictEqual(secSeesCouncil, true);
+
+      // 2. Normal Servant (Level 1) queries plan -> CANNOT see SECRETARIES_COUNCIL
+      const servantToken = makeToken({
+        userId: 'user-servant-a',
+        roleLevel: 1,
+        roleCode: 'SERVANT',
+        stageIds: ['stage-prep-boys'],
+        sectorIds: ['sector-youth'],
+      });
+      const servantRes = await fetch(`${baseUrl}/api/v1/year-plans/${planBoys.id}`, {
+        headers: { Authorization: `Bearer ${servantToken}` },
+      });
+      const servantData = await servantRes.json();
+      assert.strictEqual(servantRes.status, 200);
+      const servantSeesCouncil = servantData.data.events.some((e: any) => e.category === 'SECRETARIES_COUNCIL');
+      assert.strictEqual(servantSeesCouncil, false);
+
+      // 3. Normal Servant (Level 1) queries /api/v1/calendar -> CANNOT see SECRETARIES_COUNCIL
+      const calRes = await fetch(`${baseUrl}/api/v1/calendar`, {
+        headers: { Authorization: `Bearer ${servantToken}` },
+      });
+      const calData = await calRes.json();
+      assert.strictEqual(calRes.status, 200);
+      const calSeesCouncil = calData.data.some((e: any) => e.category === 'SECRETARIES_COUNCIL');
+      assert.strictEqual(calSeesCouncil, false);
+
+      // 4. Normal Servant (Level 1) directly querying event detail by ID receives 403 FORBIDDEN
+      const directRes = await fetch(`${baseUrl}/api/v1/events/${councilEvent.id}`, {
+        headers: { Authorization: `Bearer ${servantToken}` },
+      });
+      assert.strictEqual(directRes.status, 403);
+    });
   });
 
   // ------------------------------------------------------------------------

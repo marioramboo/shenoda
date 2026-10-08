@@ -36,8 +36,17 @@ export class CalendarController {
         }
       }
 
-      // Category filter
-      if (category) {
+      // Category filter & Secretary Council firewall (level >= 3 only)
+      if (user.roleLevel < 3) {
+        if (category === 'SECRETARIES_COUNCIL') {
+          return res.status(200).json({
+            success: true,
+            data: [],
+            timestamp: new Date().toISOString(),
+          });
+        }
+        whereClause.category = category ? (category as PrismaEventCategory) : { not: 'SECRETARIES_COUNCIL' };
+      } else if (category) {
         whereClause.category = category as PrismaEventCategory;
       }
 
@@ -97,9 +106,13 @@ export class CalendarController {
         orderBy: { startDate: 'asc' },
       });
 
+      const visibleEvents = user.roleLevel < 3
+        ? events.filter((e) => e.category !== 'SECRETARIES_COUNCIL')
+        : events;
+
       return res.status(200).json({
         success: true,
-        data: events.map(formatCalendarEvent),
+        data: visibleEvents.map(formatCalendarEvent),
         timestamp: new Date().toISOString(),
       });
     } catch (err: any) {
@@ -158,6 +171,14 @@ export class CalendarController {
         return res.status(404).json({
           success: false,
           error: { code: 'NOT_FOUND', message: 'Event not found' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      if (event.category === 'SECRETARIES_COUNCIL' && user.roleLevel < 3) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'عفواً، تفاصيل اجتماع الأمناء مقتصرة حصرياً على أمناء الخدمة فما فوق' },
           timestamp: new Date().toISOString(),
         });
       }

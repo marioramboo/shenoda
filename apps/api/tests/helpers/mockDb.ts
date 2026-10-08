@@ -1973,7 +1973,11 @@ export function createMockPrisma() {
         const where = args?.where || {};
         let list = calendarEvents.filter((e) => {
           if (where.yearPlanId && e.yearPlanId !== where.yearPlanId) return false;
-          if (where.category && e.category !== where.category) return false;
+          if (where.category) {
+            if (typeof where.category === 'string' && e.category !== where.category) return false;
+            if (where.category.in && !where.category.in.includes(e.category)) return false;
+            if (where.category.not && e.category === where.category.not) return false;
+          }
           if (where.stageId && e.stageId !== where.stageId) return false;
           if (where.startDate) {
             const st = new Date(e.startDate).getTime();
