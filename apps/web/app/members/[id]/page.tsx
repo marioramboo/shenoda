@@ -152,13 +152,17 @@ export default function MemberProfilePage() {
       member?.servantAssignments?.[0]?.servant?.id ||
       '';
     setSelectedServantId(currentId);
-    if (member?.stageId) {
+    const targetStageId = member?.stageId || member?.stage?.id;
+    if (targetStageId) {
       try {
         setLoadingServants(true);
-        const res = await api.get(`/api/v1/attendance/servants/list?stageId=${member.stageId}`);
-        if (res.data?.success && Array.isArray(res.data.servants)) {
-          setStageServants(res.data.servants);
-        }
+        const res = await api.get(`/api/v1/attendance/servants/list?stageId=${targetStageId}`);
+        const servantsList = Array.isArray(res.data?.servants)
+          ? res.data.servants
+          : Array.isArray(res.data?.data)
+          ? res.data.data
+          : [];
+        setStageServants(servantsList);
       } catch {
         setAssignError('تعذر تحميل قائمة خدام المرحلة');
       } finally {

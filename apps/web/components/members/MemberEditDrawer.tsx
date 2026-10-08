@@ -85,17 +85,23 @@ export const MemberEditDrawer: React.FC<MemberEditDrawerProps> = ({
   }, [member]);
 
   useEffect(() => {
-    if (isOpen && member?.stageId && !isServantOnly) {
+    const targetStageId = member?.stageId || member?.stage?.id;
+    if (isOpen && targetStageId && !isServantOnly) {
       api
-        .get(`/api/v1/attendance/servants/list?stageId=${member.stageId}`)
+        .get(`/api/v1/attendance/servants/list?stageId=${targetStageId}`)
         .then((res) => {
-          if (res.data?.success && Array.isArray(res.data.servants)) {
-            setStageServants(res.data.servants);
+          const servantsList = Array.isArray(res.data?.servants)
+            ? res.data.servants
+            : Array.isArray(res.data?.data)
+            ? res.data.data
+            : [];
+          if (res.data?.success && servantsList.length >= 0) {
+            setStageServants(servantsList);
           }
         })
         .catch(() => {});
     }
-  }, [isOpen, member?.stageId, isServantOnly]);
+  }, [isOpen, member?.stageId, member?.stage?.id, isServantOnly]);
 
   if (!isOpen || !member) return null;
 

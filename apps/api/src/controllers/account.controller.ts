@@ -1078,51 +1078,54 @@ export class AccountController {
         orderBy: [{ status: 'asc' }, { fullName: 'asc' }],
       });
 
+      const mappedServants = servants.map((s) => ({
+        id: s.id,
+        fullName: s.fullName,
+        phoneNumber: s.phoneNumber,
+        email: s.email,
+        status: s.status,
+        fatherConfessor: s.fatherConfessor || null,
+        dateOfBirth: s.dateOfBirth,
+        address: s.address || null,
+        maritalStatus: s.maritalStatus || null,
+        spouseName: s.spouseName || null,
+        educationOrCareer: s.educationOrCareer || null,
+        childrenInfo: s.childrenInfo || [],
+        whatsappPhone: s.whatsappPhone || s.phoneNumber,
+        whatsappPhoneRaw: s.whatsappPhone || null,
+        facebookUrl: s.facebookUrl || null,
+        instagramUrl: s.instagramUrl || null,
+        talents: s.talents || [],
+        siblingsInfo: s.siblingsInfo || [],
+        activities: s.activities || [],
+        isDeacon: s.isDeacon || false,
+        deaconName: s.deaconName || null,
+        deaconRank: s.deaconRank || null,
+        profilePicture: s.profilePicture || null,
+        role: {
+          id: s.role.id,
+          name: s.role.name,
+          code: s.role.code,
+          level: s.role.level,
+        },
+        currentStage: s.scopeAssignments.find((sa: any) => sa.stage)?.stage
+          ? {
+            id: s.scopeAssignments.find((sa: any) => sa.stage)!.stage!.id,
+            name: s.scopeAssignments.find((sa: any) => sa.stage)!.stage!.name,
+          }
+          : null,
+        currentSector: s.scopeAssignments.find((sa: any) => sa.sector)?.sector
+          ? {
+            id: s.scopeAssignments.find((sa: any) => sa.sector)!.sector!.id,
+            name: s.scopeAssignments.find((sa: any) => sa.sector)!.sector!.name,
+          }
+          : null,
+      }));
+
       return res.status(200).json({
         success: true,
-        servants: servants.map((s) => ({
-          id: s.id,
-          fullName: s.fullName,
-          phoneNumber: s.phoneNumber,
-          email: s.email,
-          status: s.status,
-          fatherConfessor: s.fatherConfessor || null,
-          dateOfBirth: s.dateOfBirth,
-          address: s.address || null,
-          maritalStatus: s.maritalStatus || null,
-          spouseName: s.spouseName || null,
-          educationOrCareer: s.educationOrCareer || null,
-          childrenInfo: s.childrenInfo || [],
-          whatsappPhone: s.whatsappPhone || s.phoneNumber,
-          whatsappPhoneRaw: s.whatsappPhone || null,
-          facebookUrl: s.facebookUrl || null,
-          instagramUrl: s.instagramUrl || null,
-          talents: s.talents || [],
-          siblingsInfo: s.siblingsInfo || [],
-          activities: s.activities || [],
-          isDeacon: s.isDeacon || false,
-          deaconName: s.deaconName || null,
-          deaconRank: s.deaconRank || null,
-          profilePicture: s.profilePicture || null,
-          role: {
-            id: s.role.id,
-            name: s.role.name,
-            code: s.role.code,
-            level: s.role.level,
-          },
-          currentStage: s.scopeAssignments.find((sa: any) => sa.stage)?.stage
-            ? {
-              id: s.scopeAssignments.find((sa: any) => sa.stage)!.stage!.id,
-              name: s.scopeAssignments.find((sa: any) => sa.stage)!.stage!.name,
-            }
-            : null,
-          currentSector: s.scopeAssignments.find((sa: any) => sa.sector)?.sector
-            ? {
-              id: s.scopeAssignments.find((sa: any) => sa.sector)!.sector!.id,
-              name: s.scopeAssignments.find((sa: any) => sa.sector)!.sector!.name,
-            }
-            : null,
-        })),
+        servants: mappedServants,
+        data: mappedServants,
       });
     } catch (err: any) {
       console.error('Failed to list servants:', err);

@@ -458,6 +458,7 @@ export class ServantAttendanceController {
     return res.status(200).json({
       success: true,
       data: enrichedServants,
+      servants: enrichedServants,
       timestamp: new Date().toISOString(),
     });
   }

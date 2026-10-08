@@ -71,8 +71,13 @@ export const ServantDirectoryModal: React.FC<ServantDirectoryModalProps> = ({
     try {
       setIsLoading(true);
       const res = await api.get('/api/v1/accounts/servants');
-      if (res.data?.success && Array.isArray(res.data.servants)) {
-        setServants(res.data.servants);
+      const list = Array.isArray(res.data?.servants)
+        ? res.data.servants
+        : Array.isArray(res.data?.data)
+        ? res.data.data
+        : [];
+      if (res.data?.success && list.length >= 0) {
+        setServants(list);
       }
     } catch (err) {
       console.error('Failed to load servants directory:', err);
