@@ -6,6 +6,7 @@ import {
   TokenService,
   REFRESH_COOKIE_NAME,
   getRefreshCookieOptions,
+  getClearCookieOptions,
 } from '../services/token.service';
 import {
   checkLoginRateLimit,
@@ -82,6 +83,45 @@ const updateProfileSchema = z.object({
   currentPassword: z.string().optional(),
   newPassword: z.string().min(8, 'كلمة المرور الجديدة يجب ألا تقل عن 8 أحرف').optional(),
 });
+
+export function formatAuthUser(user: any, stages: any[] = [], sectors: any[] = []) {
+  return {
+    id: user.id,
+    fullName: user.fullName,
+    phoneNumber: user.phoneNumber,
+    email: user.email,
+    status: user.status,
+    fatherConfessor: user.fatherConfessor || null,
+    fatherConfessorChurch: user.fatherConfessorChurch || null,
+    dateOfBirth: user.dateOfBirth,
+    address: user.address || null,
+    maritalStatus: user.maritalStatus || null,
+    spouseName: user.spouseName || null,
+    educationOrCareer: user.educationOrCareer || null,
+    jobTitle: user.educationOrCareer || null,
+    whatsappPhone: user.whatsappPhone || user.phoneNumber,
+    whatsappPhoneRaw: user.whatsappPhone || null,
+    facebookUrl: user.facebookUrl || null,
+    instagramUrl: user.instagramUrl || null,
+    talents: user.talents || [],
+    siblingsInfo: user.siblingsInfo || [],
+    activities: user.activities || [],
+    isDeacon: user.isDeacon || false,
+    deaconName: user.deaconName || null,
+    deaconRank: user.deaconRank || null,
+    profilePicture: user.profilePicture || null,
+    role: {
+      id: user.role.id,
+      code: user.role.code,
+      name: user.role.name,
+      level: user.role.level,
+    },
+    scopes: {
+      stages,
+      sectors,
+    },
+  };
+}
 
 
 /**
@@ -246,30 +286,7 @@ export class AuthController {
       success: true,
       accessToken,
       refreshToken,
-      user: {
-        id: user.id,
-        fullName: user.fullName,
-        phoneNumber: user.phoneNumber,
-        email: user.email,
-        status: user.status,
-        fatherConfessor: user.fatherConfessor,
-        fatherConfessorChurch: user.fatherConfessorChurch,
-        dateOfBirth: user.dateOfBirth,
-        address: user.address,
-        maritalStatus: user.maritalStatus,
-        spouseName: user.spouseName,
-        educationOrCareer: user.educationOrCareer,
-        role: {
-          id: user.role.id,
-          code: user.role.code,
-          name: user.role.name,
-          level: user.role.level,
-        },
-        scopes: {
-          stages,
-          sectors,
-        },
-      },
+      user: formatAuthUser(user, stages, sectors),
     });
   }
 
@@ -297,7 +314,7 @@ export class AuthController {
       });
 
       if (!rotationResult) {
-        res.clearCookie(REFRESH_COOKIE_NAME, getRefreshCookieOptions());
+        res.clearCookie(REFRESH_COOKIE_NAME, getClearCookieOptions());
         return res.status(401).json({
           success: false,
           error: {
@@ -319,7 +336,7 @@ export class AuthController {
       });
 
       if (!user || user.status === 'SUSPENDED') {
-        res.clearCookie(REFRESH_COOKIE_NAME, getRefreshCookieOptions());
+        res.clearCookie(REFRESH_COOKIE_NAME, getClearCookieOptions());
         return res.status(403).json({
           success: false,
           error: {
@@ -351,30 +368,7 @@ export class AuthController {
         success: true,
         accessToken,
         refreshToken: rotationResult.newRefreshToken,
-        user: {
-          id: user.id,
-          fullName: user.fullName,
-          phoneNumber: user.phoneNumber,
-          email: user.email,
-          status: user.status,
-          fatherConfessor: user.fatherConfessor,
-          fatherConfessorChurch: user.fatherConfessorChurch,
-          dateOfBirth: user.dateOfBirth,
-          address: user.address,
-          maritalStatus: user.maritalStatus,
-          spouseName: user.spouseName,
-          educationOrCareer: user.educationOrCareer,
-          role: {
-            id: user.role.id,
-            code: user.role.code,
-            name: user.role.name,
-            level: user.role.level,
-          },
-          scopes: {
-            stages,
-            sectors,
-          },
-        },
+        user: formatAuthUser(user, stages, sectors),
       });
     } catch (err: any) {
       console.error('AuthController.refresh unexpected error:', err);
@@ -399,7 +393,7 @@ export class AuthController {
       await TokenService.revokeRefreshToken(rawToken);
     }
 
-    res.clearCookie(REFRESH_COOKIE_NAME, getRefreshCookieOptions());
+    res.clearCookie(REFRESH_COOKIE_NAME, getClearCookieOptions());
 
     return res.status(200).json({
       success: true,
@@ -571,41 +565,7 @@ export class AuthController {
 
     return res.status(200).json({
       success: true,
-      user: {
-        id: user.id,
-        fullName: user.fullName,
-        phoneNumber: user.phoneNumber,
-        email: user.email,
-        status: user.status,
-        fatherConfessor: user.fatherConfessor,
-        fatherConfessorChurch: user.fatherConfessorChurch,
-        dateOfBirth: user.dateOfBirth,
-        address: user.address,
-        maritalStatus: user.maritalStatus,
-        spouseName: user.spouseName,
-        educationOrCareer: user.educationOrCareer,
-        whatsappPhone: user.whatsappPhone || user.phoneNumber,
-        whatsappPhoneRaw: user.whatsappPhone || null,
-        facebookUrl: user.facebookUrl || null,
-        instagramUrl: user.instagramUrl || null,
-        talents: user.talents || [],
-        siblingsInfo: user.siblingsInfo || [],
-        activities: user.activities || [],
-        isDeacon: user.isDeacon || false,
-        deaconName: user.deaconName || null,
-        deaconRank: user.deaconRank || null,
-        profilePicture: user.profilePicture || null,
-        role: {
-          id: user.role.id,
-          code: user.role.code,
-          name: user.role.name,
-          level: user.role.level,
-        },
-        scopes: {
-          stages,
-          sectors,
-        },
-      },
+      user: formatAuthUser(user, stages, sectors),
     });
   }
 
@@ -807,42 +767,7 @@ export class AuthController {
     return res.status(200).json({
       success: true,
       message: 'تم تحديث بيانات الحساب الشخصي بنجاح',
-      user: {
-        id: updatedUser.id,
-        fullName: updatedUser.fullName,
-        phoneNumber: updatedUser.phoneNumber,
-        email: updatedUser.email,
-        status: updatedUser.status,
-        fatherConfessor: updatedUser.fatherConfessor,
-        fatherConfessorChurch: updatedUser.fatherConfessorChurch,
-        dateOfBirth: updatedUser.dateOfBirth,
-        address: updatedUser.address,
-        maritalStatus: updatedUser.maritalStatus,
-        spouseName: updatedUser.spouseName,
-        educationOrCareer: updatedUser.educationOrCareer,
-        jobTitle: updatedUser.educationOrCareer,
-        whatsappPhone: updatedUser.whatsappPhone || updatedUser.phoneNumber,
-        whatsappPhoneRaw: updatedUser.whatsappPhone || null,
-        facebookUrl: updatedUser.facebookUrl || null,
-        instagramUrl: updatedUser.instagramUrl || null,
-        talents: updatedUser.talents || [],
-        siblingsInfo: updatedUser.siblingsInfo || [],
-        activities: updatedUser.activities || [],
-        isDeacon: updatedUser.isDeacon || false,
-        deaconName: updatedUser.deaconName || null,
-        deaconRank: updatedUser.deaconRank || null,
-        profilePicture: updatedUser.profilePicture || null,
-        role: {
-          id: updatedUser.role.id,
-          code: updatedUser.role.code,
-          name: updatedUser.role.name,
-          level: updatedUser.role.level,
-        },
-        scopes: {
-          stages,
-          sectors,
-        },
-      },
+      user: formatAuthUser(updatedUser, stages, sectors),
     });
   }
 }

@@ -27,6 +27,7 @@ export const ar = {
     notes: 'ملاحظات',
   },
   roles: {
+    ADMIN: 'مدير النظام',
     SERVANT: 'خادم',
     ASSISTANT_SECRETARY: 'مساعد أمين الخدمة',
     STAGE_SECRETARY: 'أمين الخدمة',

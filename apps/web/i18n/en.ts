@@ -25,6 +25,7 @@ export const en: TranslationDictionary = {
     notes: 'Notes',
   },
   roles: {
+    ADMIN: 'System Administrator',
     SERVANT: 'Servant',
     ASSISTANT_SECRETARY: 'Assistant Secretary',
     STAGE_SECRETARY: 'Stage Secretary',

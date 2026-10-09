@@ -22,6 +22,13 @@ export const getRefreshCookieOptions = () => ({
   path: '/',
 });
 
+export const getClearCookieOptions = () => ({
+  httpOnly: true,
+  secure: true,
+  sameSite: 'none' as const,
+  path: '/',
+});
+
 export class TokenService {
   /**
    * Generates a short-lived signed JWT access token (15 mins).

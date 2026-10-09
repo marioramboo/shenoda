@@ -91,6 +91,7 @@ export class AccountController {
       const roles = await prisma.role.findMany({
         where: {
           level: { lt: callerLevel },
+          ...(callerLevel < 6 ? { code: { not: 'ADMIN' } } : {}),
         },
         orderBy: { level: 'asc' },
       });
@@ -535,6 +536,13 @@ export class AccountController {
       });
     }
 
+    if ((targetUser.role?.level >= 6 || targetUser.role?.code === 'ADMIN') && operator.roleLevel < 6) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'USER_NOT_FOUND', message: 'المستخدم المستهدف غير موجود' },
+      });
+    }
+
     const previousStatus = targetUser.status;
     const stageScope = targetUser.scopeAssignments.find((sa: any) => sa.stageId);
     const previousStageId = stageScope?.stageId || targetUser.scopeAssignments[0]?.stageId || null;
@@ -744,6 +752,16 @@ export class AccountController {
     });
 
     if (!targetUser) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'USER_NOT_FOUND',
+          message: 'حساب الخادم غير موجود',
+        },
+      });
+    }
+
+    if ((targetUser.role?.level >= 6 || targetUser.role?.code === 'ADMIN') && operator.roleLevel < 6) {
       return res.status(404).json({
         success: false,
         error: {
@@ -1033,6 +1051,14 @@ export class AccountController {
 
       const where: any = {};
 
+      // Stealth filter: If operator is not Admin (Level < 6), strictly exclude Admin accounts
+      if (operator.roleLevel < 6) {
+        where.role = {
+          code: { not: 'ADMIN' },
+          level: { lt: 6 },
+        };
+      }
+
       if (status && (status === 'ACTIVE' || status === 'SUSPENDED' || status === 'TRANSFERRED')) {
         where.status = status;
       }
@@ -1186,6 +1212,14 @@ export class AccountController {
       });
 
       if (!user) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'USER_NOT_FOUND', message: 'الخادم غير موجود' },
+        });
+      }
+
+      // Stealth filter: If target user is an Admin and operator is not an Admin, return 404
+      if ((user.role?.level >= 6 || user.role?.code === 'ADMIN') && operator.roleLevel < 6) {
         return res.status(404).json({
           success: false,
           error: { code: 'USER_NOT_FOUND', message: 'الخادم غير موجود' },

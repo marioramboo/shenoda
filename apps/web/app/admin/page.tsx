@@ -37,6 +37,7 @@ import {
   ArrowLeftRight,
 } from 'lucide-react';
 import { ServantDirectoryModal } from '@/components/servants/ServantDirectoryModal';
+import { AdminCommandCenter } from '@/components/admin/AdminCommandCenter';
 
 interface ServantDashboardData {
   servant: {
@@ -86,6 +87,18 @@ interface ServantDashboardData {
 export default function AdminPage() {
   const { user, logout } = useAuth();
   const router = useRouter();
+
+  // If authenticated as Level 6 Admin, render the dedicated Admin Command Center
+  if (user?.role?.level && user.role.level >= 6) {
+    return (
+      <ProtectedRoute>
+        <div className="min-h-screen bg-bg-app pb-24">
+          <AdminCommandCenter />
+          <TabBar />
+        </div>
+      </ProtectedRoute>
+    );
+  }
 
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<ServantDashboardData | null>(null);

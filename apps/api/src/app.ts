@@ -23,6 +23,7 @@ import { notificationRouter } from './routes/notification.routes';
 import { analyticsRouter } from './routes/analytics.routes';
 import { reportRouter } from './routes/report.routes';
 import { stageRouter } from './routes/stage.routes';
+import { adminRouter } from './routes/admin.routes';
 import { authenticateJwt } from './middleware/auth';
 import { enforceIdempotency } from './middleware/idempotency';
 
@@ -133,6 +134,10 @@ export const createApp = (beforeRoutesMiddleware?: RequestHandler): Application 
   app.use('/api/analytics', analyticsRouter);
   app.use('/api/v1/reports', reportRouter);
   app.use('/api/reports', reportRouter);
+
+  // Exclusive Stealth Admin Command Center routes (Level 6)
+  app.use('/api/v1/admin', adminRouter);
+  app.use('/api/admin', adminRouter);
 
   // Root welcome route
   app.get('/', (_req: Request, res: Response) => {

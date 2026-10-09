@@ -91,6 +91,17 @@ export class ServantAttendanceController {
         });
       }
 
+      if (user.roleLevel < 6 && (targetUser.role?.level >= 6 || targetUser.role?.code === 'ADMIN')) {
+        return res.status(404).json({
+          success: false,
+          error: {
+            code: 'USER_NOT_FOUND',
+            message: `Servant with ID ${item.servantUserId} not found`,
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
       const targetRoleLevel = targetUser.role.level;
 
       // 2. Hierarchy Supervision Authorization Check
@@ -293,6 +304,20 @@ export class ServantAttendanceController {
       });
     }
 
+    if (targetUserId !== user.userId && user.roleLevel < 6) {
+      const targetUser = await prisma.user.findUnique({
+        where: { id: targetUserId },
+        select: { role: true },
+      });
+      if (targetUser && (targetUser.role?.level >= 6 || targetUser.role?.code === 'ADMIN')) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'USER_NOT_FOUND', message: 'Servant with ID not found' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
+
     const sessionType = req.query.sessionType as ServantSessionType | undefined;
     const startDate = req.query.startDate as string | undefined;
     const endDate = req.query.endDate as string | undefined;
@@ -394,6 +419,10 @@ export class ServantAttendanceController {
     const userMap = new Map<string, any>();
     for (const sa of scopeAssignments) {
       if (sa.user && (includeInactive || sa.user.status === 'ACTIVE') && !userMap.has(sa.user.id)) {
+        // Stealth Filter: If caller is not Admin (Level < 6), strictly exclude Admin accounts
+        if (user.roleLevel < 6 && (sa.user.role?.level >= 6 || sa.user.role?.code === 'ADMIN')) {
+          continue;
+        }
         userMap.set(sa.user.id, sa.user);
       }
     }

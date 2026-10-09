@@ -567,12 +567,42 @@ export function createMockPrisma() {
             });
           });
         }
+        if (where.role) {
+          result = result.filter((u) => {
+            const role = roles.find((r) => r.id === u.roleId);
+            if (!role) return false;
+            if (where.role.code) {
+              if (typeof where.role.code === 'string' && role.code !== where.role.code) return false;
+              if (where.role.code.not && role.code === where.role.code.not) return false;
+            }
+            if (where.role.level) {
+              if (typeof where.role.level === 'number' && role.level !== where.role.level) return false;
+              if (where.role.level.lt && role.level >= where.role.level.lt) return false;
+            }
+            return true;
+          });
+        }
         if (where.scopeAssignments?.some?.stageId) {
           const targetStageId = where.scopeAssignments.some.stageId;
           const assignedUserIds = scopeAssignments.filter((sa) => sa.stageId === targetStageId).map((sa) => sa.userId);
           result = result.filter((u) => assignedUserIds.includes(u.id));
         }
         return result.map((u) => attachRelationsToUser(u));
+      },
+
+      count: async (args?: any) => {
+        const where = args?.where || {};
+        let result = users;
+        if (where.status) {
+          result = result.filter((u) => u.status === where.status);
+        }
+        if (where.role?.code) {
+          result = result.filter((u) => {
+            const role = roles.find((r) => r.id === u.roleId);
+            return role && role.code === where.role.code;
+          });
+        }
+        return result.length;
       },
 
       create: async (args: any) => {
@@ -694,6 +724,7 @@ export function createMockPrisma() {
         });
         return result.sort((a, b) => ((a as any).orderIndex || 0) - ((b as any).orderIndex || 0));
       },
+      count: async () => stages.length,
     },
 
     sector: {
@@ -708,6 +739,7 @@ export function createMockPrisma() {
         }
         return sectors;
       },
+      count: async () => sectors.length,
     },
 
     refreshToken: {
@@ -854,9 +886,11 @@ export function createMockPrisma() {
           .filter((l) => !where.targetUserId || l.targetUserId === where.targetUserId)
           .map((l) => {
             const changedBy = users.find((u) => u.id === l.changedById);
-            return { ...l, changedBy };
+            const targetUser = users.find((u) => u.id === l.targetUserId);
+            return { ...l, changedBy, targetUser };
           });
       },
+      count: async () => accountStatusLogs.length,
     },
 
     // -------------------------------------------------------------
@@ -1192,13 +1226,20 @@ export function createMockPrisma() {
 
       findMany: async (args?: any) => {
         const where = args?.where || {};
-        return sensitiveAccessLogs.filter((l) => {
-          if (where.userId && l.userId !== where.userId) return false;
-          if (where.memberId && l.memberId !== where.memberId) return false;
-          if (where.field && l.field !== where.field) return false;
-          return true;
-        });
+        return sensitiveAccessLogs
+          .filter((l) => {
+            if (where.userId && l.userId !== where.userId) return false;
+            if (where.memberId && l.memberId !== where.memberId) return false;
+            if (where.field && l.field !== where.field) return false;
+            return true;
+          })
+          .map((l) => {
+            const user = users.find((u) => u.id === l.userId);
+            const member = servedMembers.find((m) => m.id === l.memberId);
+            return { ...l, user, member };
+          });
       },
+      count: async () => sensitiveAccessLogs.length,
     },
 
     memberAuditLog: {
@@ -1219,11 +1260,18 @@ export function createMockPrisma() {
 
       findMany: async (args?: any) => {
         const where = args?.where || {};
-        return memberAuditLogs.filter((l) => {
-          if (where.memberId && l.memberId !== where.memberId) return false;
-          return true;
-        });
+        return memberAuditLogs
+          .filter((l) => {
+            if (where.memberId && l.memberId !== where.memberId) return false;
+            return true;
+          })
+          .map((l) => {
+            const changedBy = users.find((u) => u.id === l.changedById);
+            const member = servedMembers.find((m) => m.id === l.memberId);
+            return { ...l, changedBy, member };
+          });
       },
+      count: async () => memberAuditLogs.length,
     },
 
     supervisoryNote: {

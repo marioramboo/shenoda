@@ -49,8 +49,8 @@ export async function resolveUserContext(userId: string): Promise<HydratedUserSc
   let reachableStageIds: string[] = [];
   let reachableSectorIds: string[] = [];
 
-  // Level 5 (General Secretary / أمين عام): Organization-wide
-  if (roleLevel === 5) {
+  // Level 5+ (General Secretary Level 5 & Admin Level 6): Organization-wide
+  if (roleLevel >= 5) {
     reachableStageIds = allStages.map((s) => s.id);
     const allSectors = await prisma.sector.findMany({
       where: { organizationId: user.organizationId },

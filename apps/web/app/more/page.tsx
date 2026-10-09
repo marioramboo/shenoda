@@ -13,6 +13,7 @@ import {
   CalendarDays,
   ClipboardList,
   Shield,
+  ShieldAlert,
   UserCircle,
   LogOut,
   ChevronLeft,
@@ -30,6 +31,7 @@ interface MoreItem {
 }
 
 const ITEMS: MoreItem[] = [
+  { id: 'admin-center', title: '⚡ لوحة تحكم مدير النظام', hint: 'الرقابة الشاملة، سجل التغييرات الحية، وإدارة النظام', href: '/admin', icon: ShieldAlert, minLevel: 6, tint: 'bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold' },
   { id: 'profile', title: 'حسابي', hint: 'بياناتي الشخصية وإعدادات الحساب', href: '/profile', icon: UserCircle, tint: 'bg-brand-primary-soft text-brand-primary' },
   { id: 'spiritual', title: 'المفكرة الروحية', hint: 'الصلاة، الكتاب المقدس، الصوم والاعتراف (خاصة)', href: '/spiritual', icon: BookHeart, tint: 'bg-brand-accent-soft text-brand-accent' },
   { id: 'analytics', title: 'التحليلات والتقارير', hint: 'مؤشرات الحضور وتصدير PDF/Excel', href: '/analytics', icon: BarChart3, minLevel: 3, tint: 'bg-brand-primary-soft text-brand-primary' },

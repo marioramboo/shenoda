@@ -1,4 +1,5 @@
 export enum RoleKey {
+  ADMIN = 'ADMIN',
   GENERAL_SECRETARY = 'GENERAL_SECRETARY',
   SECTOR_SECRETARY = 'SECTOR_SECRETARY',
   STAGE_SECRETARY = 'STAGE_SECRETARY',
@@ -11,11 +12,18 @@ export interface RoleMetadata {
   key: RoleKey;
   arabicName: string;
   englishName: string;
-  hierarchyTier: number; // 1 = highest organizational level (General Secretary)
+  hierarchyTier: number; // 0 = System Administrator, 1 = General Secretary
   description: string;
 }
 
 export const ROLES: Record<RoleKey, RoleMetadata> = {
+  [RoleKey.ADMIN]: {
+    key: RoleKey.ADMIN,
+    arabicName: 'مدير النظام',
+    englishName: 'System Administrator',
+    hierarchyTier: 0,
+    description: 'مدير النظام والصلاحيات الكاملة فوق كافة الأدوار والرتب',
+  },
   [RoleKey.GENERAL_SECRETARY]: {
     key: RoleKey.GENERAL_SECRETARY,
     arabicName: 'أمين عام',
