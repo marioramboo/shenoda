@@ -225,27 +225,38 @@ export class AccountController {
         });
       }
 
-      // 2. Validate hierarchical creation authority (Assumption A7)
-      // Adding/creating a new servant is strictly restricted to General Secretary (الامين العام - Level 5)
+      // 2. Validate hierarchical creation authority
+      // Adding/creating a new servant is permitted for Stage Secretary (أمين الخدمة - Level 3) and above
       const creatorLevel = creator.roleLevel;
 
-      if (creatorLevel < 5) {
+      if (creatorLevel < 3) {
         return res.status(403).json({
           success: false,
           error: {
             code: 'ACCESS_DENIED_MIN_LEVEL',
-            message: 'إنشاء وإضافة خادم جديد مقتصر حصرياً على الأمين العام',
+            message: 'إنشاء وإضافة خادم جديد مقتصر على أمين الخدمة فما فوق',
           },
         });
       }
 
-      // Cannot create role at or above Level 5
-      if (targetRole.level >= 5) {
+      // Cannot create role at or above creator's level
+      if (targetRole.level >= creatorLevel) {
         return res.status(403).json({
           success: false,
           error: {
             code: 'ACCESS_DENIED_ROLE_HIERARCHY',
             message: `لا يمكن إنشاء حساب برتبة مساوية أو أعلى من رتبتك الحالية (${creator.roleCode})`,
+          },
+        });
+      }
+
+      // Appointing Stage Secretaries (Level 3) or above is reserved for General Secretary (Level 5)
+      if (targetRole.level >= 3 && creatorLevel < 5) {
+        return res.status(403).json({
+          success: false,
+          error: {
+            code: 'ACCESS_DENIED_MIN_LEVEL',
+            message: 'تعيين أمناء الخدمة والقطاعات مقتصر حصرياً على الأمين العام',
           },
         });
       }
@@ -284,6 +295,37 @@ export class AccountController {
             success: false,
             error: { code: 'STAGE_NOT_FOUND', message: 'المرحلة المحددة غير موجودة' },
           });
+        }
+
+        // Scope validation for Level 3 (Stage Secretary)
+        if (creatorLevel === 3) {
+          const creatorStages = creator.stageIds || [];
+          if (!creatorStages.includes(assignedStageId)) {
+            return res.status(403).json({
+              success: false,
+              error: {
+                code: 'ACCESS_DENIED_STAGE_SCOPE',
+                message: 'لا يمكنك إضافة خادم في مرحلة خارج نطاق إشرافك',
+              },
+            });
+          }
+        }
+
+        // Scope validation for Level 4 (Sector Secretary)
+        if (creatorLevel === 4) {
+          const creatorStages = creator.stageIds || [];
+          const creatorSectors = creator.sectorIds || [];
+          const isDirectStage = creatorStages.includes(assignedStageId);
+          const isSectorStage = stage.sectorId && creatorSectors.includes(stage.sectorId);
+          if (!isDirectStage && !isSectorStage) {
+            return res.status(403).json({
+              success: false,
+              error: {
+                code: 'ACCESS_DENIED_SECTOR_SCOPE',
+                message: 'لا يمكنك إضافة خادم في مرحلة خارج نطاق قطاعك',
+              },
+            });
+          }
         }
 
         assignedSectorId = stage.sectorId;

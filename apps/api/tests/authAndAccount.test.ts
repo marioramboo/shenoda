@@ -414,7 +414,7 @@ describe('Phase 2 — Authentication & Account Management Comprehensive Test Sui
     assert.strictEqual(res.status, 403);
   });
 
-  test('3.4 Level 3 Stage Secretary CANNOT create an account -> 403 Forbidden', async () => {
+  test('3.4 Level 3 Stage Secretary CAN create a Servant (Level 1) within own stage -> 201 Created', async () => {
     const stageSecToken = TokenService.generateAccessToken({
       userId: 'user-stage-sec',
       roleLevel: 3,
@@ -434,6 +434,65 @@ describe('Phase 2 — Authentication & Account Management Comprehensive Test Sui
         fullName: 'مريم جرجس',
         phoneNumber: '01033334444',
         roleId: 'role-servant',
+        stageId: 'stage-prep-boys',
+        temporaryPassword: 'TempPassword123!',
+      }),
+    });
+
+    assert.strictEqual(res.status, 201);
+    const body = await res.json();
+    assert.strictEqual(body.success, true);
+    assert.strictEqual(body.user.role.level, 1);
+  });
+
+  test('3.4b Level 3 Stage Secretary CANNOT create a servant in another stage -> 403 Forbidden', async () => {
+    const stageSecToken = TokenService.generateAccessToken({
+      userId: 'user-stage-sec',
+      roleLevel: 3,
+      roleCode: 'STAGE_SECRETARY',
+      orgId: 'org-1',
+      stageIds: ['stage-prep-boys'],
+      sectorIds: ['sector-youth'],
+    });
+
+    const res = await fetch(`${baseUrl}/api/v1/accounts/create`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${stageSecToken}`,
+      },
+      body: JSON.stringify({
+        fullName: 'بيتر عزيز',
+        phoneNumber: '01033334445',
+        roleId: 'role-servant',
+        stageId: 'stage-primary-12',
+        temporaryPassword: 'TempPassword123!',
+      }),
+    });
+
+    assert.strictEqual(res.status, 403);
+  });
+
+  test('3.4c Level 3 Stage Secretary CANNOT create an account at or above Level 3 -> 403 Forbidden', async () => {
+    const stageSecToken = TokenService.generateAccessToken({
+      userId: 'user-stage-sec',
+      roleLevel: 3,
+      roleCode: 'STAGE_SECRETARY',
+      orgId: 'org-1',
+      stageIds: ['stage-prep-boys'],
+      sectorIds: ['sector-youth'],
+    });
+
+    const res = await fetch(`${baseUrl}/api/v1/accounts/create`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${stageSecToken}`,
+      },
+      body: JSON.stringify({
+        fullName: 'أمجد توفيق',
+        phoneNumber: '01033334446',
+        roleId: 'role-stagesec',
         stageId: 'stage-prep-boys',
         temporaryPassword: 'TempPassword123!',
       }),

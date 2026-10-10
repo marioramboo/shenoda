@@ -16,10 +16,10 @@ accountRouter.get('/roles', AccountController.listRoles);
 // Servant directory query & search (organization-wide for General Secretary, scoped for supervisors)
 accountRouter.get('/servants', AccountController.listServants);
 
-// General Secretary exclusive servant account creation (FR-1.2, Assumption A7)
+// Scoped servant account creation (FR-1.2, MANAGE_SERVANT_ACCOUNTS - Level 3+ Stage Secretary and above)
 accountRouter.post(
   '/create',
-  requirePermission(PermissionAction.TRANSFER_SUSPEND_SERVANT),
+  requirePermission(PermissionAction.MANAGE_SERVANT_ACCOUNTS),
   AccountController.createAccount
 );
 

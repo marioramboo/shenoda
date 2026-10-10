@@ -154,8 +154,9 @@ export default function MembersListPage() {
 
   const isSupervisor = (user?.role?.level ?? 1) >= 3;
   const isGeneralSecretary = (user?.role?.level ?? 1) >= 5 || user?.role?.code === 'GENERAL_SECRETARY';
+  const canAddServant = (user?.role?.level ?? 1) >= 3 || user?.role?.code === 'STAGE_SECRETARY' || isGeneralSecretary;
 
-  // Add Servant Form (Exclusive to General Secretary / الأمين العام)
+  // Add Servant Form (Stage Secretary & General Secretary)
   const [isAddServantModalOpen, setIsAddServantModalOpen] = useState(false);
   const [servantFullName, setServantFullName] = useState('');
   const [servantPhone, setServantPhone] = useState('');
@@ -561,16 +562,24 @@ export default function MembersListPage() {
   }, []);
 
   const availableServantRoles = useMemo(() => {
+    const callerLevel = user?.role?.level ?? 5;
+    const maxTargetLevel = isGeneralSecretary ? 5 : Math.min(callerLevel, 3);
     if (rolesList.length > 0) {
-      return rolesList.filter((r) => r.level < 5);
+      return rolesList.filter((r) => r.level < maxTargetLevel);
     }
     return [
       { code: 'SERVANT', name: 'خادم مرحلة', level: 1 },
       { code: 'ASSISTANT_SECRETARY', name: 'مساعد أمين الخدمة', level: 2 },
       { code: 'STAGE_SECRETARY', name: 'أمين الخدمة', level: 3 },
       { code: 'SECTOR_SECRETARY', name: 'أمين قطاع', level: 4 },
-    ];
-  }, [rolesList]);
+    ].filter((r) => r.level < maxTargetLevel);
+  }, [rolesList, user, isGeneralSecretary]);
+
+  useEffect(() => {
+    if (availableServantRoles.length > 0 && !availableServantRoles.some((r) => r.code === servantRoleCode)) {
+      setServantRoleCode(availableServantRoles[0].code);
+    }
+  }, [availableServantRoles, servantRoleCode]);
 
   const handleAddServant = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -903,7 +912,7 @@ export default function MembersListPage() {
               </div>
             )
           ) : (
-            isGeneralSecretary && (
+            canAddServant && (
               <div className="fixed bottom-20 left-4 z-30 sm:static sm:mt-2">
                 <Button
                   id="btn-add-servant"
@@ -1157,7 +1166,7 @@ export default function MembersListPage() {
             </div>
           )}
 
-          {/* Modal 3: Add New Servant (Exclusive to General Secretary / الأمين العام) */}
+          {/* Modal 3: Add New Servant */}
           {isAddServantModalOpen && (
             <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
               <div
@@ -1175,7 +1184,7 @@ export default function MembersListPage() {
                 <div className="mb-4">
                   <h2 className="text-h2 font-bold text-brand-primary">إضافة خادم جديد</h2>
                   <p className="text-caption text-text-secondary mt-0.5">
-                    إنشاء حساب مصرح وإسناده لمرحلة الخدمة (صلاحية حصرية للأمين العام)
+                    إنشاء حساب مصرح وإسناده لمرحلة الخدمة
                   </p>
                 </div>
 
