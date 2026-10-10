@@ -168,6 +168,15 @@ export default function MembersListPage() {
   const [servantAddError, setServantAddError] = useState<string | null>(null);
   const [rolesList, setRolesList] = useState<{ id?: string; code: string; name: string; level: number }[]>([]);
 
+  // Bulk Servant Import Form (Level 3+)
+  const [isServantBulkModalOpen, setIsServantBulkModalOpen] = useState(false);
+  const [servantBulkStageId, setServantBulkStageId] = useState('');
+  const [servantCsvContent, setServantCsvContent] = useState('');
+  const [isServantImporting, setIsServantImporting] = useState(false);
+  const [servantBulkError, setServantBulkError] = useState<string | null>(null);
+  const [servantBulkSuccess, setServantBulkSuccess] = useState<string | null>(null);
+  const [servantBulkErrorsList, setServantBulkErrorsList] = useState<Array<{ row: number; message: string }>>([]);
+
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3500);
@@ -380,12 +389,13 @@ export default function MembersListPage() {
     if (availableStages.length > 0) {
       if (!newStageId) setNewStageId(availableStages[0].id);
       if (!bulkStageId) setBulkStageId(availableStages[0].id);
+      if (!servantBulkStageId) setServantBulkStageId(availableStages[0].id);
 
       if (!selectedStageId) {
         setSelectedStageId(availableStages[0].id);
       }
     }
-  }, [availableStages, selectedStageId, newStageId, bulkStageId]);
+  }, [availableStages, selectedStageId, newStageId, bulkStageId, servantBulkStageId]);
 
   // Fetch members
   const fetchMembers = useCallback(async () => {
@@ -543,6 +553,51 @@ export default function MembersListPage() {
     }
   };
 
+  const handleServantBulkImport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setServantBulkError(null);
+    setServantBulkSuccess(null);
+    setServantBulkErrorsList([]);
+
+    const targetStage = servantBulkStageId || selectedStageId || availableStages[0]?.id;
+    if (!targetStage) {
+      setServantBulkError('يرجى اختيار المرحلة المستهدفة للاستيراد');
+      return;
+    }
+
+    if (!servantCsvContent.trim()) {
+      setServantBulkError('يرجى إدخال محتوى CSV للاستيراد');
+      return;
+    }
+
+    try {
+      setIsServantImporting(true);
+      const res = await api.post('/api/v1/accounts/bulk-import', {
+        stageId: targetStage,
+        csvContent: servantCsvContent,
+      });
+
+      if (res.data?.success) {
+        setServantBulkSuccess(res.data.message || 'تم استيراد الخدام بنجاح');
+        if (Array.isArray(res.data.errors) && res.data.errors.length > 0) {
+          setServantBulkErrorsList(res.data.errors);
+        }
+        setServantCsvContent('');
+        showToast(res.data.message || 'تم استيراد الخدام بنجاح');
+        fetchServants();
+      }
+    } catch (err: any) {
+      setServantBulkError(
+        err.response?.data?.error?.message || 'حدث خطأ أثناء استيراد الخدام'
+      );
+      if (Array.isArray(err.response?.data?.errors)) {
+        setServantBulkErrorsList(err.response.data.errors);
+      }
+    } finally {
+      setIsServantImporting(false);
+    }
+  };
+
   useEffect(() => {
     let isMounted = true;
     const fetchRoles = async () => {
@@ -644,7 +699,25 @@ export default function MembersListPage() {
                   id="members-bulk-import"
                   type="button"
                   onClick={() => setIsBulkModalOpen(true)}
-                  aria-label="استيراد جماعي"
+                  aria-label="استيراد جماعي للمخدومين"
+                  className="w-9 h-9 rounded-button flex items-center justify-center hover:bg-white/10 transition-colors"
+                >
+                  <UploadCloud className="w-5 h-5" />
+                </button>
+              )}
+              {isSupervisor && viewTab === 'servants' && (
+                <button
+                  id="servants-bulk-import"
+                  type="button"
+                  onClick={() => {
+                    setServantBulkError(null);
+                    setServantBulkSuccess(null);
+                    setServantBulkErrorsList([]);
+                    setServantBulkStageId(selectedStageId || availableStages[0]?.id || '');
+                    setIsServantBulkModalOpen(true);
+                  }}
+                  aria-label="استيراد جماعي للخدام"
+                  title="استيراد جماعي للخدام (CSV)"
                   className="w-9 h-9 rounded-button flex items-center justify-center hover:bg-white/10 transition-colors"
                 >
                   <UploadCloud className="w-5 h-5" />
@@ -913,7 +986,23 @@ export default function MembersListPage() {
             )
           ) : (
             canAddServant && (
-              <div className="fixed bottom-20 left-4 z-30 sm:static sm:mt-2">
+              <div className="fixed bottom-20 left-4 z-30 sm:static sm:mt-2 flex items-center gap-2">
+                <Button
+                  id="btn-servant-bulk-import"
+                  variant="outline"
+                  onClick={() => {
+                    setServantBulkError(null);
+                    setServantBulkSuccess(null);
+                    setServantBulkErrorsList([]);
+                    setServantBulkStageId(selectedStageId || availableStages[0]?.id || '');
+                    setIsServantBulkModalOpen(true);
+                  }}
+                  className="shadow-elevated rounded-pill px-4 h-[48px] gap-2 font-bold bg-bg-surface border-brand-accent text-brand-primary hover:bg-bg-muted"
+                  title="استيراد جماعي للخدام عبر CSV"
+                >
+                  <UploadCloud className="w-5 h-5 text-brand-accent" />
+                  <span className="text-body-small">استيراد CSV</span>
+                </Button>
                 <Button
                   id="btn-add-servant"
                   variant="accent"
@@ -1182,7 +1271,24 @@ export default function MembersListPage() {
                 </button>
 
                 <div className="mb-4">
-                  <h2 className="text-h2 font-bold text-brand-primary">إضافة خادم جديد</h2>
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-h2 font-bold text-brand-primary">إضافة خادم جديد</h2>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddServantModalOpen(false);
+                        setServantBulkError(null);
+                        setServantBulkSuccess(null);
+                        setServantBulkErrorsList([]);
+                        setServantBulkStageId(selectedStageId || availableStages[0]?.id || '');
+                        setIsServantBulkModalOpen(true);
+                      }}
+                      className="text-caption text-brand-accent hover:underline font-bold inline-flex items-center gap-1"
+                    >
+                      <UploadCloud className="w-3.5 h-3.5" />
+                      <span>استيراد CSV</span>
+                    </button>
+                  </div>
                   <p className="text-caption text-text-secondary mt-0.5">
                     إنشاء حساب مصرح وإسناده لمرحلة الخدمة
                   </p>
@@ -1279,6 +1385,139 @@ export default function MembersListPage() {
                       type="button"
                       variant="outline"
                       onClick={() => setIsAddServantModalOpen(false)}
+                      className="h-[46px]"
+                    >
+                      إلغاء
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Modal 4: Bulk CSV Import for Servants (Level 3+) */}
+          {isServantBulkModalOpen && (
+            <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+              <div
+                dir="rtl"
+                className="w-full max-w-[480px] bg-bg-surface border border-border-default rounded-card shadow-elevated p-6 text-right relative max-h-[90vh] overflow-y-auto"
+              >
+                <button
+                  type="button"
+                  onClick={() => setIsServantBulkModalOpen(false)}
+                  className="absolute top-4 left-4 text-text-secondary hover:text-text-primary p-1"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+
+                <div className="mb-4">
+                  <h2 className="text-h2 font-bold text-brand-primary">استيراد جماعي للخدام</h2>
+                  <p className="text-caption text-text-secondary mt-0.5">
+                    تحميل قائمة خدام بصيغة CSV إلى المرحلة المحددة
+                  </p>
+                </div>
+
+                {servantBulkError && (
+                  <div className="mb-4 p-3 bg-status-danger-soft border border-[#F5C2BE] rounded-lg text-caption text-status-danger">
+                    {servantBulkError}
+                  </div>
+                )}
+
+                {servantBulkSuccess && (
+                  <div className="mb-4 p-3 bg-status-success-soft border border-[#BDE5D0] rounded-lg text-caption text-status-success">
+                    {servantBulkSuccess}
+                  </div>
+                )}
+
+                {servantBulkErrorsList.length > 0 && (
+                  <div className="mb-4 p-3 bg-status-warning-soft border border-[#F6E05E] rounded-lg text-caption text-text-primary max-h-36 overflow-y-auto">
+                    <p className="font-bold mb-1 text-status-warning">ملاحظات على بعض السجلات:</p>
+                    <ul className="list-disc list-inside space-y-0.5 text-[11px] text-text-secondary">
+                      {servantBulkErrorsList.map((err, i) => (
+                        <li key={i}>
+                          صف {err.row}: {err.message}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <form onSubmit={handleServantBulkImport} className="flex flex-col gap-3.5">
+                  <div className="p-3 bg-bg-muted/60 rounded-lg text-caption text-text-secondary leading-relaxed">
+                    <strong>الترويسات المقبولة:</strong> الاسم بالكامل (إلزامي)، رقم الهاتف (إلزامي)، البريد الإلكتروني، الدور (خادم مرحلة / مساعد أمين الخدمة)، كلمة المرور.
+                  </div>
+
+                  {/* Stage Selection */}
+                  <div className="flex flex-col gap-1.5 text-right">
+                    <label className="text-body-small font-medium text-text-primary">
+                      المرحلة المستهدفة للاستيراد *
+                    </label>
+                    <select
+                      value={servantBulkStageId || selectedStageId || availableStages[0]?.id || ''}
+                      onChange={(e) => setServantBulkStageId(e.target.value)}
+                      className="w-full h-[46px] bg-bg-surface text-text-primary font-cairo text-body-default rounded-input border border-border-default px-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                    >
+                      {availableStages.map((stg: any) => (
+                        <option key={stg.id} value={stg.id}>
+                          {stg.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* File Upload Option */}
+                  <div className="flex flex-col gap-1.5 text-right">
+                    <label className="text-body-small font-medium text-text-primary flex items-center justify-between">
+                      <span>تحميل ملف CSV</span>
+                      <span className="text-[11px] text-text-secondary">(اختياري أو الصق المحتوى بالأسفل)</span>
+                    </label>
+                    <input
+                      type="file"
+                      accept=".csv,text/csv"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            const text = event.target?.result as string;
+                            if (text) setServantCsvContent(text);
+                          };
+                          reader.readAsText(file);
+                        }
+                      }}
+                      className="block w-full text-caption text-text-secondary file:mr-0 file:ml-3 file:py-2 file:px-4 file:rounded-button file:border-0 file:text-caption file:font-semibold file:bg-brand-primary/10 file:text-brand-primary hover:file:bg-brand-primary/20 cursor-pointer"
+                    />
+                  </div>
+
+                  {/* CSV Content Textarea */}
+                  <div className="flex flex-col gap-1.5 text-right">
+                    <label className="text-body-small font-medium text-text-primary">
+                      محتوى CSV *
+                    </label>
+                    <textarea
+                      rows={6}
+                      value={servantCsvContent}
+                      onChange={(e) => setServantCsvContent(e.target.value)}
+                      placeholder={`الاسم بالكامل,رقم الهاتف,البريد الإلكتروني,الدور\nمينا عادل رمزي,01012345678,mina@church.com,خادم مرحلة\nبيتر سمير حنا,01234567890,peter@church.com,خادم مرحلة`}
+                      className="w-full bg-bg-surface text-text-primary font-mono text-body-small rounded-input border border-border-default p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary resize-none"
+                      required
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border-default">
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      fullWidth
+                      isLoading={isServantImporting}
+                      className="h-[46px]"
+                    >
+                      بدء استيراد الخدام
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setIsServantBulkModalOpen(false)}
                       className="h-[46px]"
                     >
                       إلغاء

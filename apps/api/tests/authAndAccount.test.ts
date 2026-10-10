@@ -843,4 +843,111 @@ describe('Phase 2 — Authentication & Account Management Comprehensive Test Sui
     assert.ok(body.servants.length > 0);
     assert.ok(body.servants.some((s: any) => s.id === 'user-servant'));
   });
+
+  describe('5. Servant CSV Bulk Import (Level 3+ only)', () => {
+    test('5.1 Level 1 Servant cannot bulk-import servants -> 403 Forbidden', async () => {
+      const servantToken = TokenService.generateAccessToken({
+        userId: 'user-servant',
+        roleLevel: 1,
+        roleCode: 'SERVANT',
+        orgId: 'org-1',
+        stageIds: ['stage-prep-boys'],
+        sectorIds: ['sector-youth'],
+      });
+
+      const res = await fetch(`${baseUrl}/api/v1/accounts/bulk-import`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${servantToken}`,
+        },
+        body: JSON.stringify({
+          stageId: 'stage-prep-boys',
+          csvContent: `الاسم بالكامل,رقم الهاتف\nخادم تجريبي,01099990001`,
+        }),
+      });
+
+      assert.strictEqual(res.status, 403);
+    });
+
+    test('5.2 Level 2 Assistant Secretary cannot bulk-import servants -> 403 Forbidden', async () => {
+      const assistantToken = TokenService.generateAccessToken({
+        userId: 'user-assistant',
+        roleLevel: 2,
+        roleCode: 'ASSISTANT_SECRETARY',
+        orgId: 'org-1',
+        stageIds: ['stage-prep-boys'],
+        sectorIds: ['sector-youth'],
+      });
+
+      const res = await fetch(`${baseUrl}/api/v1/accounts/bulk-import`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${assistantToken}`,
+        },
+        body: JSON.stringify({
+          stageId: 'stage-prep-boys',
+          csvContent: `الاسم بالكامل,رقم الهاتف\nخادم تجريبي,01099990002`,
+        }),
+      });
+
+      assert.strictEqual(res.status, 403);
+    });
+
+    test('5.3 Level 3 Stage Secretary CAN bulk-import servants into assigned stage -> 201 Created', async () => {
+      const stageSecToken = TokenService.generateAccessToken({
+        userId: 'user-stage-sec',
+        roleLevel: 3,
+        roleCode: 'STAGE_SECRETARY',
+        orgId: 'org-1',
+        stageIds: ['stage-prep-boys'],
+        sectorIds: ['sector-youth'],
+      });
+
+      const csvContent = `الاسم بالكامل,رقم الهاتف,البريد الإلكتروني,الدور\nيوحنا فكري بطرس,01099991111,yohanna@church.com,خادم مرحلة\nتوماس وجدي سامي,01099992222,thomas@church.com,خادم`;
+
+      const res = await fetch(`${baseUrl}/api/v1/accounts/bulk-import`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${stageSecToken}`,
+        },
+        body: JSON.stringify({
+          stageId: 'stage-prep-boys',
+          csvContent,
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.importedCount, 2);
+    });
+
+    test('5.4 Level 3 Stage Secretary CANNOT bulk-import into unassigned stage -> 403 Forbidden', async () => {
+      const stageSecToken = TokenService.generateAccessToken({
+        userId: 'user-stage-sec',
+        roleLevel: 3,
+        roleCode: 'STAGE_SECRETARY',
+        orgId: 'org-1',
+        stageIds: ['stage-prep-boys'],
+        sectorIds: ['sector-youth'],
+      });
+
+      const res = await fetch(`${baseUrl}/api/v1/accounts/bulk-import`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${stageSecToken}`,
+        },
+        body: JSON.stringify({
+          stageId: 'stage-primary-12',
+          csvContent: `الاسم بالكامل,رقم الهاتف\nخادم غير مصرح,01099993333`,
+        }),
+      });
+
+      assert.strictEqual(res.status, 403);
+    });
+  });
 });

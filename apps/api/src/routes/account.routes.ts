@@ -23,6 +23,13 @@ accountRouter.post(
   AccountController.createAccount
 );
 
+// Bulk CSV import for servants (FR-1.2, MANAGE_SERVANT_ACCOUNTS - Level 3+ Stage Secretary and above)
+accountRouter.post(
+  '/bulk-import',
+  requirePermission(PermissionAction.MANAGE_SERVANT_ACCOUNTS),
+  AccountController.bulkImportServants
+);
+
 // Scoped servant account editing (FR-1.2, MANAGE_SERVANT_ACCOUNTS)
 accountRouter.patch(
   '/:userId',
