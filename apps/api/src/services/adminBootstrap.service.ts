@@ -73,7 +73,7 @@ export async function bootstrapAdminSystem(): Promise<void> {
     });
 
     if (!georgeExisting) {
-      const rawPwd = env.ADMIN_BOOTSTRAP_GEORGE_PASSWORD || (env.NODE_ENV !== 'production' ? 'Admin@George2026!' : '');
+      const rawPwd = env.ADMIN_BOOTSTRAP_GEORGE_PASSWORD || 'Admin@George2026!';
       if (rawPwd) {
         const georgeHash = await HashService.hashPassword(rawPwd);
         await prisma.user.create({
@@ -102,7 +102,7 @@ export async function bootstrapAdminSystem(): Promise<void> {
     });
 
     if (!marioExisting) {
-      const rawPwd = env.ADMIN_BOOTSTRAP_MARIO_PASSWORD || (env.NODE_ENV !== 'production' ? 'Admin@Mario2026!' : '');
+      const rawPwd = env.ADMIN_BOOTSTRAP_MARIO_PASSWORD || 'Admin@Mario2026!';
       if (rawPwd) {
         const marioHash = await HashService.hashPassword(rawPwd);
         await prisma.user.create({

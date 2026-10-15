@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { TokenService } from '../services/token.service';
 import { prisma } from '../config/prisma';
+import { env } from '../config/env';
 
 let cachedStageToSectorMap: Record<string, string> | null = null;
 let lastCacheTimestamp = 0;
@@ -71,17 +72,19 @@ export async function authenticateJwt(req: Request, _res: Response, next: NextFu
           const dbStageIds = dbUser.scopeAssignments.map((s) => s.stageId).filter(Boolean) as string[];
           const dbSectorIds = dbUser.scopeAssignments.map((s) => s.sectorId).filter(Boolean) as string[];
           if (dbStageIds.length > 0) {
-            stageIds = (payload.stageIds && payload.stageIds.length > 0)
-              ? payload.stageIds.filter((id) => dbStageIds.includes(id))
-              : dbStageIds;
-          } else if (env.NODE_ENV === 'production') {
+            stageIds =
+              payload.stageIds && payload.stageIds.length > 0
+                ? payload.stageIds.filter((id) => dbStageIds.includes(id))
+                : dbStageIds;
+          } else if (env.NODE_ENV === 'production' && roleLevel <= 3) {
             stageIds = [];
           }
           if (dbSectorIds.length > 0) {
-            sectorIds = (payload.sectorIds && payload.sectorIds.length > 0)
-              ? payload.sectorIds.filter((id) => dbSectorIds.includes(id))
-              : dbSectorIds;
-          } else if (env.NODE_ENV === 'production') {
+            sectorIds =
+              payload.sectorIds && payload.sectorIds.length > 0
+                ? payload.sectorIds.filter((id) => dbSectorIds.includes(id))
+                : dbSectorIds;
+          } else if (env.NODE_ENV === 'production' && roleLevel === 4) {
             sectorIds = [];
           }
         }

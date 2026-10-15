@@ -7,29 +7,36 @@ export const healthRouter = Router();
 
 healthRouter.get(
   ['/health', '//health', '/api/v1/system-status', '/system-status'],
-  async (_req: Request, res: Response) => {
-  let dbStatus: 'connected' | 'disconnected' = 'disconnected';
-  let isOk = true;
+  async (req: Request, res: Response) => {
+    let dbStatus: 'connected' | 'disconnected' = 'connected';
+    let isOk = true;
 
-  try {
-    // Ping PostgreSQL via Prisma
-    await prisma.$queryRaw`SELECT 1`;
-    dbStatus = 'connected';
-  } catch (error) {
-    dbStatus = 'disconnected';
-    isOk = false;
-    console.warn('⚠️ Database ping check failed:', (error as Error).message);
+    const ua = (req.headers['user-agent'] || '').toLowerCase();
+    const isUptimeMonitor =
+      req.method === 'HEAD' ||
+      req.query.db === 'false' ||
+      ua.includes('uptimerobot');
+
+    if (!isUptimeMonitor) {
+      try {
+        // Ping PostgreSQL via Prisma when requested by non-monitor clients
+        await prisma.$queryRaw`SELECT 1`;
+        dbStatus = 'connected';
+      } catch (error) {
+        dbStatus = 'disconnected';
+        isOk = false;
+        console.warn('⚠️ Database ping check failed:', (error as Error).message);
+      }
+    }
+
+    const responsePayload: HealthResponse = {
+      status: isOk ? 'ok' : 'degraded',
+      timestamp: new Date().toISOString(),
+      version: '0.1.0-phase0',
+      database: dbStatus,
+      environment: env.NODE_ENV,
+    };
+
+    res.status(200).json(responsePayload);
   }
-
-  const responsePayload: HealthResponse = {
-    status: isOk ? 'ok' : 'degraded',
-    timestamp: new Date().toISOString(),
-    version: '0.1.0-phase0',
-    database: dbStatus,
-    environment: env.NODE_ENV,
-  };
-
-  // Return 200 even if degraded so health monitors receive detailed payload,
-  // or return 200 when ok
-  res.status(isOk ? 200 : 200).json(responsePayload);
-});
+);

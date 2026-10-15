@@ -36,23 +36,24 @@ export const createApp = (beforeRoutesMiddleware?: RequestHandler): Application 
 
   const allowedOrigins = (env.CORS_ORIGIN || '')
     .split(',')
-    .map((o) => o.trim())
+    .map((o) => o.trim().replace(/\/+$/, ''))
     .filter(Boolean);
 
   app.use(
     cors({
       origin: (origin, callback) => {
         if (!origin) return callback(null, true);
+        const cleanOrigin = origin.trim().replace(/\/+$/, '');
         if (
           allowedOrigins.includes('*') ||
-          allowedOrigins.includes(origin) ||
-          (env.NODE_ENV !== 'production' &&
-            (origin.startsWith('http://localhost:') ||
-              origin.startsWith('http://127.0.0.1:')))
+          allowedOrigins.includes(cleanOrigin) ||
+          /^https:\/\/shenoda(-[a-z0-9-]+)?\.vercel\.app$/i.test(cleanOrigin) ||
+          cleanOrigin.startsWith('http://localhost:') ||
+          cleanOrigin.startsWith('http://127.0.0.1:')
         ) {
           return callback(null, true);
         }
-        return callback(new Error('Origin not allowed by CORS'));
+        return callback(null, false);
       },
       credentials: true,
     })
