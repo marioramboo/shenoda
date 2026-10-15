@@ -61,18 +61,35 @@ export async function authenticateJwt(req: Request, _res: Response, next: NextFu
           scopeAssignments: { select: { stageId: true, sectorId: true } },
         },
       });
-      if (dbUser && dbUser.status === 'ACTIVE' && dbUser.role) {
+      if (dbUser) {
+        if (dbUser.status !== 'ACTIVE' || !dbUser.role) {
+          return next();
+        }
         roleLevel = dbUser.role.level;
         roleCode = dbUser.role.code;
-        if (dbUser.scopeAssignments && dbUser.scopeAssignments.length > 0) {
+        if (Array.isArray(dbUser.scopeAssignments)) {
           const dbStageIds = dbUser.scopeAssignments.map((s) => s.stageId).filter(Boolean) as string[];
           const dbSectorIds = dbUser.scopeAssignments.map((s) => s.sectorId).filter(Boolean) as string[];
-          if (dbStageIds.length > 0) stageIds = dbStageIds;
-          if (dbSectorIds.length > 0) sectorIds = dbSectorIds;
+          if (dbStageIds.length > 0) {
+            stageIds = (payload.stageIds && payload.stageIds.length > 0)
+              ? payload.stageIds.filter((id) => dbStageIds.includes(id))
+              : dbStageIds;
+          } else if (env.NODE_ENV === 'production') {
+            stageIds = [];
+          }
+          if (dbSectorIds.length > 0) {
+            sectorIds = (payload.sectorIds && payload.sectorIds.length > 0)
+              ? payload.sectorIds.filter((id) => dbSectorIds.includes(id))
+              : dbSectorIds;
+          } else if (env.NODE_ENV === 'production') {
+            sectorIds = [];
+          }
         }
+      } else if (env.NODE_ENV === 'production') {
+        return next();
       }
     } catch {
-      // fallback to token payload
+      // fallback to token payload only in unit tests with mocked DB
     }
 
     req.user = {

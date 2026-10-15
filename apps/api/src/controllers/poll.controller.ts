@@ -151,6 +151,13 @@ export class PollController {
 
       // Default for Stage Secretary (Level 3)
       const targetStageId = stageId || (user.stageIds && user.stageIds[0]) || null;
+      if (user.roleLevel === 3 && targetStageId && !user.stageIds.includes(targetStageId)) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN_STAGE_SCOPE', message: 'لا يمكنك إنشاء استطلاع لمرحلة خارج نطاق إشرافك' },
+          timestamp: new Date().toISOString(),
+        });
+      }
       const poll = await prisma.poll.create({
         data: {
           createdById: user.userId,
@@ -321,14 +328,23 @@ export class PollController {
         });
       }
 
-      const selectedOptions: string[] = [];
-      if (optionId) selectedOptions.push(optionId);
-      if (Array.isArray(optionIds)) selectedOptions.push(...optionIds);
+      const rawSelected: string[] = [];
+      if (optionId) rawSelected.push(optionId);
+      if (Array.isArray(optionIds)) rawSelected.push(...optionIds);
+      const selectedOptions = Array.from(new Set(rawSelected));
 
       if (selectedOptions.length === 0) {
         return res.status(400).json({
           success: false,
           error: { code: 'ERR_VALIDATION', message: 'optionId is required' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      if (!poll.allowMultiple && selectedOptions.length > 1) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'ERR_SINGLE_CHOICE_ONLY', message: 'هذا الاستطلاع يسمح باختيار إجابة واحدة فقط' },
           timestamp: new Date().toISOString(),
         });
       }

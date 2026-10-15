@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { requirePermission } from '../middleware/authorize';
+import { requireAuth } from '../middleware/auth';
 import { PermissionAction, PERMISSION_MATRIX } from '@shenoda/shared';
 import { canEvaluate, getEvaluatorForUser } from '../services/evaluationHierarchy.service';
 import { resolveUserContext } from '../services/scopeResolver.service';
@@ -85,6 +86,7 @@ permissionsRouter.post(
 // Route checking who evaluates a given user (Assumptions A1 & A3)
 permissionsRouter.get(
   '/users/:userId/evaluator',
+  requireAuth,
   async (req: Request, res: Response) => {
     try {
       const result = await getEvaluatorForUser(req.params.userId);
@@ -109,8 +111,9 @@ permissionsRouter.get(
 // Route to submit servant evaluation
 permissionsRouter.put(
   '/users/:userId/evaluation',
+  requireAuth,
   async (req: Request, res: Response) => {
-    const evaluatorId = req.user?.userId || (req.headers['x-evaluator-id'] as string);
+    const evaluatorId = req.user?.userId;
 
     if (!evaluatorId) {
       return res.status(401).json({

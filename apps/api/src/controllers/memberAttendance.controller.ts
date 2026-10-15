@@ -232,7 +232,7 @@ export class MemberAttendanceController {
     }
 
     // Scope check
-    if (stageId && user.roleLevel >= 2 && user.roleLevel <= 3 && !user.stageIds.includes(stageId)) {
+    if (stageId && user.roleLevel <= 3 && !user.stageIds.includes(stageId)) {
       return res.status(403).json({
         success: false,
         error: { code: 'STAGE_SCOPE_MISMATCH', message: 'Forbidden' },
@@ -301,6 +301,14 @@ export class MemberAttendanceController {
       return res.status(404).json({
         success: false,
         error: { code: 'MEMBER_NOT_FOUND', message: 'Member not found' },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (user.roleLevel <= 3 && !user.stageIds.includes(member.stageId)) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'STAGE_SCOPE_MISMATCH', message: 'Forbidden' },
         timestamp: new Date().toISOString(),
       });
     }

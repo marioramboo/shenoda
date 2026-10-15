@@ -48,7 +48,7 @@ PGPASSWORD="${DB_PASSWORD:-postgrespassword}" pg_restore \
   -U "$DB_USER" \
   -d "$DB_NAME" \
   --clean --if-exists -v \
-  "$DECRYPTED_FILE" || true
+  "$DECRYPTED_FILE"
 
 # 4. Securely remove decrypted plaintext file
 echo "🧹 Step 4: Securely purging temporary decrypted file..."

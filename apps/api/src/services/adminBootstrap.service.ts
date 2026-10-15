@@ -2,6 +2,7 @@ import { prisma } from '../config/prisma';
 import { HashService } from './hash.service';
 import { PermissionAction, ScopeRule } from '@prisma/client';
 import { PERMISSION_MATRIX } from '@shenoda/shared';
+import { env } from '../config/env';
 
 /**
  * Idempotently seeds the Level 6 ADMIN role and the two Stealth Admin accounts (George & Mario).
@@ -72,26 +73,21 @@ export async function bootstrapAdminSystem(): Promise<void> {
     });
 
     if (!georgeExisting) {
-      const georgeHash = await HashService.hashPassword('Admin@George2026!');
-      await prisma.user.create({
-        data: {
-          fullName: 'جورج',
-          phoneNumber: '01000000000',
-          email: 'george.admin@shenoda.church',
-          passwordHash: georgeHash,
-          roleId: adminRole.id,
-          organizationId: org.id,
-          status: 'ACTIVE',
-        },
-      });
-      console.log('✅ [AdminBootstrap] Created Admin account for George (01000000000)');
-    } else {
-      if (georgeExisting.roleId !== adminRole.id || georgeExisting.status !== 'ACTIVE') {
-        await prisma.user.update({
-          where: { id: georgeExisting.id },
-          data: { roleId: adminRole.id, status: 'ACTIVE' },
+      const rawPwd = env.ADMIN_BOOTSTRAP_GEORGE_PASSWORD || (env.NODE_ENV !== 'production' ? 'Admin@George2026!' : '');
+      if (rawPwd) {
+        const georgeHash = await HashService.hashPassword(rawPwd);
+        await prisma.user.create({
+          data: {
+            fullName: 'جورج',
+            phoneNumber: '01000000000',
+            email: 'george.admin@shenoda.church',
+            passwordHash: georgeHash,
+            roleId: adminRole.id,
+            organizationId: org.id,
+            status: 'ACTIVE',
+          },
         });
-        console.log('✅ [AdminBootstrap] Updated George to ADMIN (Level 6)');
+        console.log('✅ [AdminBootstrap] Created Admin account for George (01000000000)');
       }
     }
 
@@ -106,26 +102,21 @@ export async function bootstrapAdminSystem(): Promise<void> {
     });
 
     if (!marioExisting) {
-      const marioHash = await HashService.hashPassword('Admin@Mario2026!');
-      await prisma.user.create({
-        data: {
-          fullName: 'ماريو',
-          phoneNumber: '01100000000',
-          email: 'mario.admin@shenoda.church',
-          passwordHash: marioHash,
-          roleId: adminRole.id,
-          organizationId: org.id,
-          status: 'ACTIVE',
-        },
-      });
-      console.log('✅ [AdminBootstrap] Created Admin account for Mario (01100000000)');
-    } else {
-      if (marioExisting.roleId !== adminRole.id || marioExisting.status !== 'ACTIVE') {
-        await prisma.user.update({
-          where: { id: marioExisting.id },
-          data: { roleId: adminRole.id, status: 'ACTIVE' },
+      const rawPwd = env.ADMIN_BOOTSTRAP_MARIO_PASSWORD || (env.NODE_ENV !== 'production' ? 'Admin@Mario2026!' : '');
+      if (rawPwd) {
+        const marioHash = await HashService.hashPassword(rawPwd);
+        await prisma.user.create({
+          data: {
+            fullName: 'ماريو',
+            phoneNumber: '01100000000',
+            email: 'mario.admin@shenoda.church',
+            passwordHash: marioHash,
+            roleId: adminRole.id,
+            organizationId: org.id,
+            status: 'ACTIVE',
+          },
         });
-        console.log('✅ [AdminBootstrap] Updated Mario to ADMIN (Level 6)');
+        console.log('✅ [AdminBootstrap] Created Admin account for Mario (01100000000)');
       }
     }
 

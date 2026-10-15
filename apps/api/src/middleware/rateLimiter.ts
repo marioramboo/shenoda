@@ -128,12 +128,19 @@ export function loginBruteForceLimiter(req: Request, res: Response, next: NextFu
  * Middleware enforcing global IP rate limiting across authentication routes (100 req/min).
  */
 export function globalAuthRateLimiter(req: Request, res: Response, next: NextFunction) {
-  const ip =
-    (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ||
-    req.socket.remoteAddress ||
-    'unknown-ip';
+  const ip = req.ip || req.socket.remoteAddress || 'unknown-ip';
 
   const now = Date.now();
+  if (ipRequests.size > 5000) {
+    for (const [k, v] of ipRequests.entries()) {
+      if (now - v.windowStart > IP_WINDOW_MS) ipRequests.delete(k);
+    }
+  }
+  if (identityAttempts.size > 5000) {
+    for (const [k, v] of identityAttempts.entries()) {
+      if (now - v.firstAttemptAt > ATTEMPT_WINDOW_MS) identityAttempts.delete(k);
+    }
+  }
   let ipRecord = ipRequests.get(ip);
 
   if (!ipRecord || now - ipRecord.windowStart > IP_WINDOW_MS) {

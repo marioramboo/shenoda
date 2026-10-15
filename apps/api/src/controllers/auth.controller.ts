@@ -473,9 +473,22 @@ export class AuthController {
     }
 
     const { identifier, otpCode, newPassword } = parseResult.data;
+    const otpRateKey = `otp:${identifier.trim().toLowerCase()}`;
+    const rateStatus = checkLoginRateLimit(otpRateKey);
+    if (!rateStatus.allowed) {
+      return res.status(429).json({
+        success: false,
+        error: {
+          code: 'ERR_RATE_LIMITED',
+          message: 'تم تجاوز عدد محاولات إدخال الكود. يرجى المحاولة لاحقاً.',
+        },
+      });
+    }
+
     const user = await findUserByIdentifier(identifier);
 
     if (!user) {
+      recordFailedLoginAttempt(otpRateKey);
       return res.status(400).json({
         success: false,
         error: {
@@ -496,6 +509,7 @@ export class AuthController {
     });
 
     if (!resetRecord) {
+      recordFailedLoginAttempt(otpRateKey);
       return res.status(400).json({
         success: false,
         error: {
@@ -505,6 +519,7 @@ export class AuthController {
       });
     }
 
+    clearLoginRateLimit(otpRateKey);
     // Mark OTP token as used
     await prisma.passwordResetToken.update({
       where: { id: resetRecord.id },

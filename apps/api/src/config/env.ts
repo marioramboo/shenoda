@@ -19,6 +19,8 @@ const envSchema = z.object({
   REFRESH_TOKEN_EXPIRES_IN_DAYS: z.coerce.number().default(7),
   COOKIE_SECRET: z.string().default('shenoda-dev-cookie-secret-2026'),
   REDIS_URL: z.string().optional(),
+  ADMIN_BOOTSTRAP_GEORGE_PASSWORD: z.string().optional(),
+  ADMIN_BOOTSTRAP_MARIO_PASSWORD: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -26,6 +28,22 @@ const parsed = envSchema.safeParse(process.env);
 if (!parsed.success) {
   console.error('❌ Invalid environment configuration:', parsed.error.format());
   process.exit(1);
+}
+
+if (parsed.data.NODE_ENV === 'production') {
+  const insecureDefaults = [
+    'shenoda-dev-access-secret-390px-2026-coptic',
+    'shenoda-dev-refresh-secret-390px-2026-coptic',
+    'shenoda-dev-cookie-secret-2026',
+  ];
+  if (
+    insecureDefaults.includes(parsed.data.JWT_ACCESS_SECRET) ||
+    insecureDefaults.includes(parsed.data.JWT_REFRESH_SECRET) ||
+    insecureDefaults.includes(parsed.data.COOKIE_SECRET)
+  ) {
+    console.error('❌ CRITICAL: Production environment cannot use default development JWT/Cookie secrets.');
+    process.exit(1);
+  }
 }
 
 export const env = parsed.data;

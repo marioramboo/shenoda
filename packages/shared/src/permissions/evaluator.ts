@@ -27,8 +27,8 @@ export function hasPermission(
     return false;
   }
 
-  // 4. Level 5 (General Secretary / أمين عام) has organization-wide authority
-  if (user.roleLevel === 5) {
+  // 4. Level 5+ (General Secretary & System Admin) has organization-wide authority
+  if (user.roleLevel >= 5) {
     return true;
   }
 
@@ -73,6 +73,9 @@ export function hasPermission(
     // Target stage must be within user's assigned stages
     if (targetScope.stageId) {
       return user.stageIds.includes(targetScope.stageId);
+    }
+    if (rule.defaultScope === ScopeRule.STAGE) {
+      return Array.isArray(user.stageIds) && user.stageIds.length > 0;
     }
     // If action is within user's stage scope
     return true;

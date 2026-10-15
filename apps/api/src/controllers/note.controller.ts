@@ -52,7 +52,7 @@ export class NoteController {
 
     const targetUser = await prisma.user.findUnique({
       where: { id: targetUserId },
-      include: { role: true },
+      include: { role: true, scopeAssignments: true },
     });
 
     if (!targetUser) {
@@ -80,6 +80,20 @@ export class NoteController {
         error: {
           code: 'ACCESS_DENIED_SCOPE',
           message: 'المرحلة المحددة خارج نطاق إشرافك',
+        },
+      });
+    }
+    if (
+      author.roleLevel === 3 &&
+      Array.isArray(targetUser.scopeAssignments) &&
+      targetUser.scopeAssignments.length > 0 &&
+      !targetUser.scopeAssignments.some((sa) => sa.stageId === stageId)
+    ) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'ACCESS_DENIED_SCOPE',
+          message: 'الخادم المستهدف لا ينتمي لهذه المرحلة',
         },
       });
     }

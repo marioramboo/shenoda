@@ -158,6 +158,14 @@ export class NotificationController {
       }
 
       const { servantUserId, memberName, consecutiveCount } = req.body;
+
+      if (user.roleLevel < 2 && user.userId !== servantUserId) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'إرسال تنبيهات الافتقاد مقتصر على المشرفين والأمناء' },
+          timestamp: new Date().toISOString(),
+        });
+      }
       if (!servantUserId || !memberName || !consecutiveCount) {
         return res.status(400).json({
           success: false,

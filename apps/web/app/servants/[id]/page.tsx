@@ -102,6 +102,7 @@ export default function ServantProfilePage() {
   const isSupervisor = level >= 3 || user?.role?.code === 'GENERAL_SECRETARY';
   const isSelf = user?.id === servant.id;
   const canEdit = isSupervisor || isSelf;
+  const canViewEvaluation = !isSelf && isSupervisor && level > (servant.role?.level || 1);
 
   const rawPhone = (servant.whatsappPhone || servant.whatsappPhoneRaw || servant.phoneNumber || '').replace(/\D/g, '');
   const waPhone = rawPhone.startsWith('01') ? '2' + rawPhone : rawPhone;
@@ -270,54 +271,56 @@ export default function ServantProfilePage() {
               </div>
             </section>
 
-            {/* Supervisory Evaluation Section */}
-            <section className="bg-bg-surface border border-border-default rounded-card p-5 shadow-card text-right flex flex-col gap-3">
-              <div className="flex items-center gap-2 pb-2.5 border-b border-border-default">
-                <Shield className="w-5 h-5 text-brand-accent" />
-                <h3 className="text-h2 font-semibold text-text-primary">تقييم الخادم</h3>
-              </div>
-              {[
-                [
-                  'الحالة المادية',
-                  servant.evaluation?.financialStatus,
-                  'لم يتم تسجيل الحالة المادية بعد',
-                ],
-                [
-                  'السلوك مع المخدومين',
-                  servant.evaluation?.behaviorWithMembers,
-                  'لا توجد ملاحظات حول السلوك مع المخدومين',
-                ],
-                [
-                  'السلوك مع الزملاء الخدام',
-                  servant.evaluation?.behaviorWithServants,
-                  'لا توجد ملاحظات حول السلوك مع الزملاء الخدام',
-                ],
-                [
-                  'التعاون والعمل الجماعي',
-                  servant.evaluation?.cooperation,
-                  'لا توجد ملاحظات حول التعاون',
-                ],
-                [
-                  'العمل الفردي والمبادرة',
-                  servant.evaluation?.individualInitiative,
-                  'لا توجد ملاحظات حول المبادرة',
-                ],
-                [
-                  'ملاحظات إضافية',
-                  servant.evaluation?.notes,
-                  'لا توجد ملاحظات إضافية',
-                ],
-              ].map(([label, value, empty]) => (
-                <div key={label as string}>
-                  <span className="text-caption text-text-secondary block font-semibold mb-0.5">
-                    {label}:
-                  </span>
-                  <p className="text-body-small text-text-primary bg-bg-muted/40 p-2.5 rounded-lg border border-border-default leading-relaxed">
-                    {(value as string) || (empty as string)}
-                  </p>
+            {/* Supervisory Evaluation Section (Strictly hidden from self and peers) */}
+            {canViewEvaluation && (
+              <section className="bg-bg-surface border border-border-default rounded-card p-5 shadow-card text-right flex flex-col gap-3">
+                <div className="flex items-center gap-2 pb-2.5 border-b border-border-default">
+                  <Shield className="w-5 h-5 text-brand-accent" />
+                  <h3 className="text-h2 font-semibold text-text-primary">تقييم الخادم</h3>
                 </div>
-              ))}
-            </section>
+                {[
+                  [
+                    'الحالة المادية',
+                    servant.evaluation?.financialStatus,
+                    'لم يتم تسجيل الحالة المادية بعد',
+                  ],
+                  [
+                    'السلوك مع المخدومين',
+                    servant.evaluation?.behaviorWithMembers,
+                    'لا توجد ملاحظات حول السلوك مع المخدومين',
+                  ],
+                  [
+                    'السلوك مع الزملاء الخدام',
+                    servant.evaluation?.behaviorWithServants,
+                    'لا توجد ملاحظات حول السلوك مع الزملاء الخدام',
+                  ],
+                  [
+                    'التعاون والعمل الجماعي',
+                    servant.evaluation?.cooperation,
+                    'لا توجد ملاحظات حول التعاون',
+                  ],
+                  [
+                    'العمل الفردي والمبادرة',
+                    servant.evaluation?.individualInitiative,
+                    'لا توجد ملاحظات حول المبادرة',
+                  ],
+                  [
+                    'ملاحظات إضافية',
+                    servant.evaluation?.notes,
+                    'لا توجد ملاحظات إضافية',
+                  ],
+                ].map(([label, value, empty]) => (
+                  <div key={label as string}>
+                    <span className="text-caption text-text-secondary block font-semibold mb-0.5">
+                      {label}:
+                    </span>
+                    <p className="text-body-small text-text-primary bg-bg-muted/40 p-2.5 rounded-lg border border-border-default leading-relaxed">
+                      {(value as string) || (empty as string)}
+                    </p>
+                  </div>
+                ))}
+              </section>
+            )}
 
             {/* Personal and Ministry Details */}
             <section className="bg-bg-surface border border-border-default rounded-card p-5 shadow-card text-right flex flex-col gap-3">

@@ -150,6 +150,14 @@ export class ReportController {
         });
       }
 
+      if (user.roleLevel < 3) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'تصدير التقارير مقتصر على أمين الخدمة فما فوق (Level 3+)' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
       const { stageId = user.stageIds[0] } = req.body;
 
       // Verify scope
@@ -212,6 +220,14 @@ export class ReportController {
         return res.status(401).json({
           success: false,
           error: { code: 'AUTH_REQUIRED', message: 'Authentication required' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      if (user.roleLevel < 3) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'تصدير التقارير مقتصر على أمين الخدمة فما فوق (Level 3+)' },
           timestamp: new Date().toISOString(),
         });
       }
@@ -317,6 +333,14 @@ export class ReportController {
         return res.status(401).json({
           success: false,
           error: { code: 'AUTH_REQUIRED', message: 'Authentication required' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      if (user.roleLevel < 2) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'تصدير كشف المخدومين مقتصر على مساعد الأمين فما فوق (Level 2+)' },
           timestamp: new Date().toISOString(),
         });
       }

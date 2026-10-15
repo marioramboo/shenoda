@@ -538,14 +538,14 @@ export function createMockPrisma() {
         });
 
         if (!found) return null;
-        return args?.include ? attachRelationsToUser(found) : { ...found };
+        return (args?.include || args?.select) ? attachRelationsToUser(found) : { ...found };
       },
 
       findUnique: async (args: any) => {
         const where = args?.where || {};
         const found = users.find((u) => u.id === where.id || u.phoneNumber === where.phoneNumber);
         if (!found) return null;
-        return args?.include ? attachRelationsToUser(found) : { ...found };
+        return (args?.include || args?.select) ? attachRelationsToUser(found) : { ...found };
       },
 
       findMany: async (args?: any) => {

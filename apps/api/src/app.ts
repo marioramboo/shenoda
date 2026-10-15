@@ -29,24 +29,30 @@ import { enforceIdempotency } from './middleware/idempotency';
 
 export const createApp = (beforeRoutesMiddleware?: RequestHandler): Application => {
   const app = express();
+  app.set('trust proxy', 1);
 
   // Security & standard middlewares
   app.use(helmet());
+
+  const allowedOrigins = (env.CORS_ORIGIN || '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+
   app.use(
     cors({
       origin: (origin, callback) => {
         if (!origin) return callback(null, true);
         if (
-          !env.CORS_ORIGIN ||
-          env.CORS_ORIGIN === '*' ||
-          origin === env.CORS_ORIGIN ||
-          origin.endsWith('.vercel.app') ||
-          origin.includes('localhost') ||
-          origin.includes('127.0.0.1')
+          allowedOrigins.includes('*') ||
+          allowedOrigins.includes(origin) ||
+          (env.NODE_ENV !== 'production' &&
+            (origin.startsWith('http://localhost:') ||
+              origin.startsWith('http://127.0.0.1:')))
         ) {
           return callback(null, true);
         }
-        return callback(null, true);
+        return callback(new Error('Origin not allowed by CORS'));
       },
       credentials: true,
     })

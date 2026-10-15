@@ -246,8 +246,24 @@ export class ServantAttendanceController {
     const sessionType = req.query.sessionType as ServantSessionType | undefined;
     const sessionDate = req.query.sessionDate as string | undefined;
 
+    if (user.roleLevel < 3) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN_SCOPE', message: 'Only supervisors can view stage servant attendance' },
+        timestamp: new Date().toISOString(),
+      });
+    }
+    if (user.roleLevel === 3 && stageId && !user.stageIds.includes(stageId)) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'STAGE_SCOPE_MISMATCH', message: 'Forbidden' },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     const whereClause: any = {};
     if (stageId) whereClause.stageId = stageId;
+    else if (user.roleLevel === 3) whereClause.stageId = { in: user.stageIds };
     if (sessionType) whereClause.sessionType = sessionType;
 
     if (sessionDate) {
@@ -393,6 +409,14 @@ export class ServantAttendanceController {
     const { stageId } = req.query;
     const targetStageId = (stageId as string) || (user.stageIds && user.stageIds[0]);
 
+    if (user.roleLevel <= 3 && targetStageId && !user.stageIds.includes(targetStageId)) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'STAGE_SCOPE_MISMATCH', message: 'Forbidden' },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     if (!targetStageId && user.roleLevel < 4) {
       return res.status(400).json({
         success: false,
@@ -433,7 +457,11 @@ export class ServantAttendanceController {
     const enrichedServants = await Promise.all(
       servants.map(async (s) => {
         const stats = await calculateServantAttendanceRate(s.id, 8);
-        const evalItem = s.evaluationsReceived && s.evaluationsReceived.length > 0 ? s.evaluationsReceived[0] : null;
+        const canSeeEval =
+          user.userId !== s.id &&
+          user.roleLevel >= 3 &&
+          user.roleLevel > (s.role?.level || 1);
+        const evalItem = canSeeEval && s.evaluationsReceived && s.evaluationsReceived.length > 0 ? s.evaluationsReceived[0] : null;
 
         return {
           id: s.id,

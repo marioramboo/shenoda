@@ -37,6 +37,8 @@ const createMemberSchema = z.object({
   peerIntegration: z.string().optional().nullable(),
 });
 
+const updateMemberAllowedSchema = createMemberSchema.omit({ stageId: true }).partial();
+
 export class MemberController {
   /**
    * GET /api/v1/members
@@ -93,6 +95,8 @@ export class MemberController {
     const whereClause: any = {};
     if (permittedStageIds.length > 0) {
       whereClause.stageId = { in: permittedStageIds };
+    } else if (user.roleLevel < 5) {
+      whereClause.stageId = { in: ['__NONE__'] };
     }
 
     if (search && typeof search === 'string') {
@@ -363,6 +367,18 @@ export class MemberController {
           },
         });
       }
+    } else {
+      const parsedUpdate = updateMemberAllowedSchema.safeParse(payload);
+      if (!parsedUpdate.success) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: parsedUpdate.error.errors[0]?.message || 'بيانات التحديث غير صالحة',
+          },
+        });
+      }
+      Object.assign(payload, parsedUpdate.data);
     }
 
     // Build update data and audit log entries

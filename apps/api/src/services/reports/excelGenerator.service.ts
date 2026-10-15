@@ -1,6 +1,12 @@
 import ExcelJS from 'exceljs';
 import { assertNoSpiritualDataInPayload } from '../analytics/securityAssert';
 
+function sanitizeExcelCell(val: string | null | undefined): string {
+  if (!val) return '—';
+  const trimmed = String(val);
+  return /^[=+\-@]/.test(trimmed) ? `'${trimmed}` : trimmed;
+}
+
 export interface ExcelMemberAttendanceExportOptions {
   stageName: string;
   members: Array<{
@@ -97,7 +103,7 @@ export class ExcelGeneratorService {
 
     options.members.forEach((m, idx) => {
       let presentCount = 0;
-      const rowValues: any[] = [idx + 1, m.fullName, m.educationalGrade || '—'];
+      const rowValues: any[] = [idx + 1, sanitizeExcelCell(m.fullName), sanitizeExcelCell(m.educationalGrade)];
 
       options.sessionDates.forEach((d) => {
         const status = attendanceLookup.get(`${m.id}_${d}`);
@@ -188,15 +194,15 @@ export class ExcelGeneratorService {
     options.members.forEach((m, idx) => {
       const rowValues: any[] = [
         idx + 1,
-        m.fullName,
-        m.educationalGrade || '—',
-        m.fatherName || '—',
-        m.motherName || '—',
-        m.address || '—',
+        sanitizeExcelCell(m.fullName),
+        sanitizeExcelCell(m.educationalGrade),
+        sanitizeExcelCell(m.fatherName),
+        sanitizeExcelCell(m.motherName),
+        sanitizeExcelCell(m.address),
       ];
 
       if (options.includeSensitive) {
-        rowValues.push(m.phoneNumber || '—', m.financialStatus || '—');
+        rowValues.push(sanitizeExcelCell(m.phoneNumber), sanitizeExcelCell(m.financialStatus));
       }
 
       worksheet.addRow(rowValues);

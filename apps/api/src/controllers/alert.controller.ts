@@ -123,6 +123,14 @@ export class AlertController {
       });
     }
 
+    if (user.roleLevel <= 3 && !user.stageIds.includes(alert.stageId)) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN_SCOPE', message: 'Alert belongs to another stage' },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     const updated = await prisma.absenceAlert.update({
       where: { id: alertId },
       data: {
@@ -167,6 +175,14 @@ export class AlertController {
       return res.status(404).json({
         success: false,
         error: { code: 'ALERT_NOT_FOUND', message: 'Absence alert not found' },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (user.roleLevel < 2 || (user.roleLevel <= 3 && !user.stageIds.includes(alert.stageId))) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN_SCOPE', message: 'Only stage supervisors can dismiss alerts' },
         timestamp: new Date().toISOString(),
       });
     }

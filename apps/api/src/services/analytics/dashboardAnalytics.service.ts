@@ -134,9 +134,14 @@ export class DashboardAnalyticsService {
     const activeMembersCount = activeMembers.length;
 
     // 3. Aggregate Member Attendance Rate
+    const sessionDateFilter: any = {};
+    if (options.startDate) sessionDateFilter.gte = new Date(options.startDate);
+    if (options.endDate) sessionDateFilter.lte = new Date(options.endDate);
+
     const attendanceRecords = await prisma.memberAttendance.findMany({
       where: {
         stageId: { in: targetStageIds },
+        ...(Object.keys(sessionDateFilter).length > 0 ? { sessionDate: sessionDateFilter } : {}),
       },
       select: {
         id: true,

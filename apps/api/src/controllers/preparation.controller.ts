@@ -519,6 +519,13 @@ export class PreparationController {
       }
 
       const stageId = event.stageId || (user.stageIds && user.stageIds[0]);
+      if (user.roleLevel === 3 && stageId && !user.stageIds.includes(stageId)) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN_STAGE_SCOPE', message: 'لا يمكنك فحص تحضيرات مرحلة خارج نطاق إشرافك' },
+          timestamp: new Date().toISOString(),
+        });
+      }
 
       // Retrieve all stage servants
       const scopeAssignments = await prisma.scopeAssignment.findMany({
@@ -719,6 +726,13 @@ export class PreparationController {
       return res.status(403).json({
         success: false,
         error: { code: 'FORBIDDEN', message: 'Cannot delete another servant preparation' },
+        timestamp: new Date().toISOString(),
+      });
+    }
+    if (prep.authorUserId !== user.userId && user.roleLevel === 3 && !user.stageIds.includes(prep.stageId)) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN_STAGE_SCOPE', message: 'Cannot delete preparation from another stage' },
         timestamp: new Date().toISOString(),
       });
     }

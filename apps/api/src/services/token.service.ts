@@ -16,16 +16,16 @@ export const REFRESH_COOKIE_NAME = 'refreshToken';
 
 export const getRefreshCookieOptions = () => ({
   httpOnly: true,
-  secure: true,
-  sameSite: 'none' as const,
+  secure: env.NODE_ENV === 'production',
+  sameSite: (env.NODE_ENV === 'production' ? 'none' : 'lax') as 'none' | 'lax',
   maxAge: env.REFRESH_TOKEN_EXPIRES_IN_DAYS * 24 * 60 * 60 * 1000,
   path: '/',
 });
 
 export const getClearCookieOptions = () => ({
   httpOnly: true,
-  secure: true,
-  sameSite: 'none' as const,
+  secure: env.NODE_ENV === 'production',
+  sameSite: (env.NODE_ENV === 'production' ? 'none' : 'lax') as 'none' | 'lax',
   path: '/',
 });
 

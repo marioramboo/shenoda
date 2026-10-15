@@ -13,11 +13,17 @@ export function enforceIdempotency(ttlSeconds: number = 300) {
       return next();
     }
 
+    // Never cache authentication or token lifecycle endpoints
+    if (req.originalUrl.includes('/auth/')) {
+      return next();
+    }
+
     const key = req.header('X-Idempotency-Key') || req.header('Idempotency-Key');
     if (!key) return next();
 
-    const userId = (req as any).user?.userId || (req as any).user?.id || 'anonymous';
-    const cacheKey = `idempotency:${userId}:${key}`;
+    const userId = (req as any).user?.userId || (req as any).user?.id;
+    if (!userId) return next();
+    const cacheKey = `idempotency:${userId}:${req.method}:${req.originalUrl}:${key}`;
 
     try {
       const cachedResponse = await redisClient.get(cacheKey);

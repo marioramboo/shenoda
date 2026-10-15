@@ -692,6 +692,13 @@ export class AccountController {
    * Audit log history for a servant's status changes and transfers.
    */
   public static async getAccountHistory(req: Request, res: Response) {
+    const operator = req.user;
+    if (!operator || operator.roleLevel < 3) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'ACCESS_DENIED', message: 'الاطلاع على سجل الحالات مقتصر على المشرفين والأمناء' },
+      });
+    }
     const { userId } = req.params;
 
     const logs = await prisma.accountStatusLog.findMany({
@@ -816,8 +823,8 @@ export class AccountController {
     // 2. Validate hierarchical authority
     const targetLevel = targetUser.role?.level || 1;
 
-    // Operator cannot edit peers or superiors unless General Secretary (Level 5)
-    if (operator.roleLevel < 5 && targetLevel >= operator.roleLevel) {
+    // Operator cannot edit peers or superiors (and Level 5 cannot edit Level 6 Admin)
+    if (operator.roleLevel < 6 && (targetLevel > operator.roleLevel || (operator.roleLevel < 5 && targetLevel >= operator.roleLevel))) {
       return res.status(403).json({
         success: false,
         error: {
@@ -876,8 +883,8 @@ export class AccountController {
         });
       }
 
-      // Cannot assign role at or above operator's own level
-      if (operator.roleLevel < 5 && foundRole.level >= operator.roleLevel) {
+      // Cannot assign role above operator's level (and only Level 6 can assign ADMIN)
+      if (operator.roleLevel < 6 && (foundRole.level >= 6 || foundRole.code === 'ADMIN' || (operator.roleLevel < 5 && foundRole.level >= operator.roleLevel))) {
         return res.status(403).json({
           success: false,
           error: {
@@ -1274,6 +1281,12 @@ export class AccountController {
       // Stage Secretary (Level 3): user in stage
       // Servant / Assistant (Level 1, 2): user in same stage or self
       if (operator.roleLevel < 5 && operator.userId !== userId) {
+        if (user.role.level > operator.roleLevel) {
+          return res.status(403).json({
+            success: false,
+            error: { code: 'ACCESS_DENIED_SCOPE', message: 'لا يمكنك الاطلاع على ملف رتبة إدارية أعلى' },
+          });
+        }
         const userStageIds = user.scopeAssignments
           .map((sa: any) => sa.stageId)
           .filter(Boolean) as string[];
@@ -1285,7 +1298,7 @@ export class AccountController {
           const hasCommonSector = userSectorIds.some((sid) =>
             operator.sectorIds?.includes(sid)
           );
-          if (!hasCommonSector && userSectorIds.length > 0) {
+          if (!hasCommonSector) {
             return res.status(403).json({
               success: false,
               error: { code: 'ACCESS_DENIED_SCOPE', message: 'الخادم خارج نطاق إشراف قطاعك' },
@@ -1295,7 +1308,7 @@ export class AccountController {
           const hasCommonStage = userStageIds.some((sid) =>
             operator.stageIds?.includes(sid)
           );
-          if (!hasCommonStage && userStageIds.length > 0) {
+          if (!hasCommonStage) {
             return res.status(403).json({
               success: false,
               error: { code: 'ACCESS_DENIED_SCOPE', message: 'الخادم خارج نطاق إشراف مرحلتك' },
@@ -1305,7 +1318,11 @@ export class AccountController {
       }
 
       const stats = await calculateServantAttendanceRate(user.id, 8);
-      const evalItem = user.evaluationsReceived && user.evaluationsReceived.length > 0
+      const canViewConfidentialEval =
+        operator.userId !== user.id &&
+        operator.roleLevel >= 3 &&
+        operator.roleLevel > (user.role?.level || 1);
+      const evalItem = canViewConfidentialEval && user.evaluationsReceived && user.evaluationsReceived.length > 0
         ? user.evaluationsReceived[0]
         : null;
 

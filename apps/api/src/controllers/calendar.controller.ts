@@ -304,13 +304,13 @@ export class CalendarController {
         });
       }
 
-      // Check secretary authority: roleLevel >= 2
-      if (user.roleLevel < 2) {
+      // Check supervising secretary authority: roleLevel >= 3 (FR-4.1)
+      if (user.roleLevel < 3) {
         return res.status(403).json({
           success: false,
           error: {
             code: 'FORBIDDEN',
-            message: 'تأكيد الحضور مقتصر على مساعدي وأمناء الخدمة (Level 2+)',
+            message: 'تأكيد حضور الخدام مقتصر على أمناء الخدمة والمشرفين (Level 3+)',
           },
           timestamp: new Date().toISOString(),
         });
@@ -329,6 +329,17 @@ export class CalendarController {
           error: {
             code: 'ERR_VALIDATION',
             message: 'servantUserId or servantUserIds array is required',
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      if (userIdsToConfirm.includes(user.userId)) {
+        return res.status(403).json({
+          success: false,
+          error: {
+            code: 'ERR_CANNOT_SELF_RECORD_ATTENDANCE',
+            message: 'لا يمكن للخادم أو الأمين تأكيد حضوره لنفسه',
           },
           timestamp: new Date().toISOString(),
         });
